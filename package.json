@@ -15,6 +15,8 @@
     "flask:stop": "./scripts/stop-flask-app.sh",
     "desktop": "./scripts/install-desktop-app.sh",
     "iphone": "./scripts/install-iphone-app.sh",
+    "iphone:native": "./scripts/build-and-install-iphone-app.sh",
+    "iphone:native:test": "./scripts/test-iphone-app.sh",
     "iphone:pair": "./scripts/generate-health-pairing-code.sh",
     "remote": "./scripts/start-remote-app.sh",
     "iphone:vinext": "./scripts/start-iphone-app.sh",

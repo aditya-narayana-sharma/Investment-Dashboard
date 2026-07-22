@@ -62,12 +62,21 @@ You can change the address during onboarding or in Connection & Health settings.
 
 ## Install on a physical iPhone
 
-1. Open `apple-app/InvestmentDashboard.xcodeproj`.
-2. Select the `InvestmentDashboard` target.
-3. Choose your Apple development team.
-4. Confirm the HealthKit entitlement and privacy manifest are present.
-5. Select the physical iPhone and Run.
-6. Complete onboarding:
+First open `apple-app/InvestmentDashboard.xcodeproj`, select the
+`InvestmentDashboard` target, and choose your Apple development team. Then
+connect and trust the iPhone, obtain its identifier from
+`xcrun devicectl list devices`, and run:
+
+```bash
+PORTFOLIO_IOS_DEVICE_ID="<device-id>" npm run iphone:native
+```
+
+The script creates a signed Release build, installs it with `devicectl`, and
+prints the onboarding steps. You can also select the physical iPhone in Xcode
+and press Run.
+
+After installation, complete onboarding:
+
    - verify the Mac Tailscale URL,
    - generate a HealthKit pairing code on the Mac,
    - enter the code on iPhone,
