@@ -12,6 +12,7 @@ const PODCAST_DB = `${process.env.HOME}/Library/Group Containers/243LU875E5.grou
 const REMINDERS_STORE_DIR = `${process.env.HOME}/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores`;
 const CONTENT_SNAPSHOT_PATH = process.env.CONTENT_SNAPSHOT_PATH ?? fileURLToPath(new URL("../artifacts/private/content-snapshot.json", import.meta.url));
 const CONTENT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const FORCE_REFRESH_BUDGET_MS = 90_000;
 const NEWSLETTER_DIGEST_LIMIT = 500;
 function istDateKey(daysAgo) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
@@ -216,23 +217,30 @@ function concise(value, limit = 360) {
 
 function latestHealthNoteEntry(value) {
   const text = cleanText(value);
-  const marker = /\b([0-3]?\d)\.?\s+(?:Jul|July|Juli)\s+(\d{4})\s*\|\s*Health Stats\b/gi;
+  const marker = /\b([0-3]?\d)\.?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y|i)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})\s*\|\s*Health Stats\b/gi;
+  const monthIndex = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4,
+    jun: 5, june: 5, jul: 6, july: 6, juli: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+  };
   const entries = [];
   let match;
   while ((match = marker.exec(text)) !== null) {
-    entries.push({ index: match.index, day: Number(match[1]), year: Number(match[2]) });
+    const month = monthIndex[match[2].toLowerCase()];
+    if (month === undefined) continue;
+    entries.push({ index: match.index, day: Number(match[1]), month, year: Number(match[3]) });
   }
   if (!entries.length) return { summary: concise(text, 700), observedDate: null };
 
   const latest = entries.reduce((best, entry) => {
-    const timestamp = Date.UTC(entry.year, 6, entry.day);
+    const timestamp = Date.UTC(entry.year, entry.month, entry.day);
     return !best || timestamp > best.timestamp ? { ...entry, timestamp } : best;
   }, null);
   const next = entries.find((entry) => entry.index > latest.index);
   const section = text.slice(latest.index, next?.index ?? text.length);
   return {
     summary: concise(section, 700),
-    observedDate: `${latest.year}-07-${String(latest.day).padStart(2, "0")}`,
+    observedDate: `${latest.year}-${String(latest.month + 1).padStart(2, "0")}-${String(latest.day).padStart(2, "0")}`,
   };
 }
 
@@ -268,7 +276,7 @@ function mailItem(message, axis = false, includeDate = false) {
 }
 
 async function readNewsletters() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterMailScript], { timeout: 180000, maxBuffer: 32 * 1024 * 1024 });
+  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterMailScript], { timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
   const parsed = JSON.parse(stdout);
   return {
     total: parsed.totalCount,
@@ -541,11 +549,6 @@ async function refresh() {
 
 let refreshInFlight = null;
 let lastSnapshot = null;
-try {
-  lastSnapshot = JSON.parse(readFileSync(CONTENT_SNAPSHOT_PATH, "utf8"));
-} catch {
-  lastSnapshot = null;
-}
 
 function snapshotAge(snapshot) {
   const observed = Date.parse(snapshot?.refreshedAt ?? snapshot?.asOf ?? "");
@@ -560,6 +563,14 @@ function cachedSnapshot(snapshot, message) {
     message: value.message ? `${value.message} ${message}` : message,
   }]));
   return { ...snapshot, status: "partial", sources };
+}
+
+try {
+  const restored = JSON.parse(readFileSync(CONTENT_SNAPSHOT_PATH, "utf8"));
+  // Disk restore is retention only — never treat as a fresh live Apple read.
+  lastSnapshot = cachedSnapshot(restored, "Restored from local cache at process start; awaiting a forced Apple-source refresh.");
+} catch {
+  lastSnapshot = null;
 }
 
 function initializingSnapshot() {
@@ -688,7 +699,19 @@ createServer(async (request, response) => {
       response.end(JSON.stringify(pending));
       return;
     }
-    const snapshot = await refreshPromise;
+    // force=1: wait up to FORCE_REFRESH_BUDGET_MS, then return retained snapshot rather than hanging Mail/Calendar audits.
+    const snapshot = await Promise.race([
+      refreshPromise,
+      new Promise((resolve) => {
+        setTimeout(() => {
+          if (lastSnapshot) {
+            resolve(cachedSnapshot(lastSnapshot, `Forced Apple-source refresh exceeded ${FORCE_REFRESH_BUDGET_MS / 1000}s; retaining the last validated digest.`));
+          } else {
+            resolve(initializingSnapshot());
+          }
+        }, FORCE_REFRESH_BUDGET_MS);
+      }),
+    ]);
     response.writeHead(snapshot.status === "unavailable" ? 503 : 200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     response.end(JSON.stringify(snapshot));
   } catch (error) {

@@ -71,10 +71,20 @@ for _ in {1..30}; do
 done
 
 if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/" >/dev/null 2>&1; then
+  set +e
   DASHBOARD_PUBLIC_URL="http://127.0.0.1:$FLASK_PORT" \
-    "$ROOT_DIR/scripts/refresh-dashboard-data.sh" >"$LOG_DIR/startup-refresh.log" 2>&1 || true
+    "$ROOT_DIR/scripts/refresh-dashboard-data.sh" >"$LOG_DIR/startup-refresh.log" 2>&1
+  AUDIT_EXIT=$?
+  set -e
+  if [[ "$AUDIT_EXIT" -ne 0 ]]; then
+    printf 'Startup refresh audit FAILED (exit %s). Dashboard remains up; UI will show the audit banner. See %s/startup-refresh.log\n' "$AUDIT_EXIT" "$LOG_DIR" | tee -a "$LOG_DIR/service.log"
+  else
+    printf 'Startup refresh audit passed.\n' | tee -a "$LOG_DIR/service.log"
+  fi
 else
   printf 'Flask gateway did not become ready for the startup refresh audit.\n' >"$LOG_DIR/startup-refresh.log"
+  mkdir -p "$ROOT_DIR/artifacts/private"
+  printf '%s\n' '{"status":"failed","failures":1,"finishedAt":"","message":"Flask gateway did not become ready for the startup refresh audit."}' >"$ROOT_DIR/artifacts/private/startup-audit.json"
 fi
 
 while kill -0 "$FLASK_PID" 2>/dev/null; do

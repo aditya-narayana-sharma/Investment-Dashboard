@@ -221,9 +221,15 @@ function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
 }
 
 export function restoreKiteSession(sessionId?: string, replaceExisting = false) {
-  // The portfolio route normally owns the active session. Read-only sibling routes
-  // may explicitly replace their isolated runtime state with that authoritative cookie.
-  if (sessionId && (!state.sessionId || (replaceExisting && state.sessionId !== sessionId))) {
+  // Prefer the in-memory MCP session. Only adopt a cookie when no session exists,
+  // or when a caller explicitly opts into replacement (avoid multi-tab clobber).
+  if (!sessionId) return;
+  if (!state.sessionId) {
+    state.sessionId = sessionId;
+    clearAuthUrl();
+    return;
+  }
+  if (replaceExisting && state.sessionId !== sessionId) {
     state.sessionId = sessionId;
     clearAuthUrl();
   }
@@ -274,10 +280,10 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const margins = marginsRaw as JsonObject;
     const equity = (margins.equity ?? {}) as JsonObject;
     const snapshot: KiteSnapshot = {
-      status: "live",
+      status: unavailable.length ? "partial" : "live",
       asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
       message: unavailable.length
-        ? `Live holdings from Zerodha Kite Connect; ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
+        ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
         : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Auto-refreshes every five minutes.",
       unavailableSections: unavailable,
       portfolio: {

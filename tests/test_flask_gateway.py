@@ -67,7 +67,7 @@ class FlaskGatewayTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["gateway"], "flask")
 
-    def test_persists_and_returns_normalized_health_snapshot(self):
+    def test_rejects_health_snapshot_without_token(self):
         snapshot = {
             "schemaVersion": 1,
             "status": "live",
@@ -85,6 +85,30 @@ class FlaskGatewayTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as directory, patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", Path(directory) / "health.json"):
             stored = self.client.post("/_health/snapshot", json=snapshot)
+        self.assertEqual(stored.status_code, 401)
+
+    def test_persists_and_returns_normalized_health_snapshot(self):
+        snapshot = {
+            "schemaVersion": 1,
+            "status": "live",
+            "source": "Apple Health",
+            "dataDate": "2026-07-18",
+            "capturedAt": "2026-07-19T08:00:00Z",
+            "message": "Latest completed-day HealthKit aggregates.",
+            "categories": [{
+                "name": "Activity",
+                "note": "Apple Health · 18 Jul",
+                "tone": "green",
+                "metrics": [{"label": "Steps", "value": "10,000", "averages": {} }],
+            }],
+            "sources": [{"source": "Apple Health / HealthKit", "status": "Synced", "detail": "Completed day", "tone": "green"}],
+        }
+        with tempfile.TemporaryDirectory() as directory, patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", Path(directory) / "health.json"):
+            stored = self.client.post(
+                "/_health/snapshot",
+                json=snapshot,
+                headers={"Authorization": "Bearer portfolio-local-health-token"},
+            )
             loaded = self.client.get("/_health/snapshot")
 
         self.assertEqual(stored.status_code, 201)

@@ -52,7 +52,7 @@ export type LiveGtt = {
 };
 
 export type KiteSnapshot = {
-  status: "live" | "snapshot" | "auth_required" | "unavailable";
+  status: "live" | "partial" | "snapshot" | "auth_required" | "unavailable";
   asOf: string;
   message: string;
   authUrl?: string;

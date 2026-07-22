@@ -27,11 +27,12 @@ export const sectorImpactRows: SectorImpactRow[] = [
   { id: "metals", name: "Metals & Mining", stance: "Two-way", color: "#9aa6b2", subsectors: ["Steel", "Aluminium", "Mining", "Speciality", "Recycling"], crude: "headwind", inr: "tailwind", rates: "two-way", monsoon: "headwind", aiCapex: "two-way", earnings: "two-way", read: "China demand, spreads, safeguard policy and input inflation drive the cycle." },
   { id: "infrastructure", name: "Realty / Infra", stance: "Constructive", color: "#ff9f6e", subsectors: ["Residential", "Commercial", "Roads", "EPC", "Cement"], crude: "headwind", inr: "headwind", rates: "tailwind", monsoon: "headwind", aiCapex: "two-way", earnings: "two-way", read: "Order books are strong; rates, working capital and execution govern cash conversion." },
   { id: "consumer", name: "Consumer Tech", stance: "Two-way", color: "#ff7b87", subsectors: ["Food delivery", "Q-commerce", "Fintech", "E-commerce", "Gaming"], crude: "two-way", inr: "two-way", rates: "two-way", monsoon: "two-way", aiCapex: "two-way", earnings: "tailwind", read: "Growth remains high; profitability, retention and rich multiples determine durability." },
-  { id: "defence", name: "Defence & Aerospace", stance: "Two-way", color: "#e76f51", subsectors: ["Electronics", "Ordnance", "Shipbuilding", "Drones", "Space"], crude: "na", inr: "na", rates: "na", monsoon: "na", aiCapex: "na", earnings: "na", read: "Order visibility is strong, but valuation and delivery schedules create event risk." },
+  { id: "defence", name: "Defence & Aerospace", stance: "Constructive", color: "#e76f51", subsectors: ["Aerospace", "Electronics", "Shipbuilding", "Missiles", "Drones / Space"], crude: "na", inr: "two-way", rates: "two-way", monsoon: "na", aiCapex: "tailwind", earnings: "tailwind", read: "Order visibility and indigenisation support the cycle; delivery schedules and valuation remain the binding risks." },
 ];
 
 export const lifeCyclePoints = [
   { id: "defence", name: "Drones / Space", stage: 1.1, growth: 42, profit: 22, color: "#e76f51" },
+  { id: "defence", name: "Defence electronics", stage: 1.6, growth: 24, profit: 36, color: "#e76f51" },
   { id: "power", name: "Renewables", stage: 1.8, growth: 27, profit: 34, color: "#ffd166" },
   { id: "auto", name: "EV", stage: 2.0, growth: 33, profit: 25, color: "#64b5ff" },
   { id: "consumer", name: "Q-commerce", stage: 2.2, growth: 40, profit: 27, color: "#ff7b87" },
@@ -54,6 +55,7 @@ export const marketStructurePoints = [
   { id: "power", name: "Power", margin: 15, concentration: 3.4, profit: 34, color: "#ffd166" },
   { id: "telecom", name: "Telecom", margin: 49, concentration: 4.8, profit: 50, color: "#b794f6" },
   { id: "infrastructure", name: "Infra EPC", margin: 10, concentration: 2.4, profit: 31, color: "#ff9f6e" },
+  { id: "defence", name: "Defence OEMs", margin: 18, concentration: 3.8, profit: 36, color: "#e76f51" },
 ];
 
 export const macroDials = [

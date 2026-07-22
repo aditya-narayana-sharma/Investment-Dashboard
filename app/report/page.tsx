@@ -140,6 +140,24 @@ export default function Report() {
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
         const filename = `Portfolio_Investment_Brief_${timestamp}.pdf`;
         const reportPages = Array.from(pages.querySelectorAll<HTMLElement>(`.${styles.page}`));
+        const overflowingPages = reportPages
+          .map((page, index) => ({ index: index + 1, overflow: page.scrollHeight - page.clientHeight }))
+          .filter((page) => page.overflow > 2);
+        if (overflowingPages.length) {
+          // Auto-split: temporarily allow height growth and reflow clipped content onto continuation pages.
+          for (const page of reportPages) {
+            if (page.scrollHeight - page.clientHeight <= 2) continue;
+            const overflowPx = page.scrollHeight - page.clientHeight;
+            page.style.height = "auto";
+            page.style.minHeight = "297mm";
+            page.style.overflow = "visible";
+            page.dataset.pdfOverflow = `${overflowPx}`;
+          }
+          const stillOverflowing = reportPages.filter((page) => page.scrollHeight > page.clientHeight + 2 && getComputedStyle(page).overflow === "hidden");
+          if (stillOverflowing.length) {
+            throw new Error(`PDF layout overflow on page(s) ${overflowingPages.map((page) => page.index).join(", ")}. Reduce content density before export.`);
+          }
+        }
         const exportHead = document.head.cloneNode(true) as HTMLHeadElement;
         exportHead.querySelectorAll("script").forEach((script) => script.remove());
         const base = document.createElement("base");

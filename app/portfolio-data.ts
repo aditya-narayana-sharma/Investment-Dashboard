@@ -189,10 +189,20 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "EBITDA margin", value: "21.4%", change: "Calculated from reported revenue", tone: "green" },
     { label: "PAT", value: "₹3,226 Cr", change: "+46% YoY", tone: "green" },
   ], summary: "Record volumes, exports and realisations supported strong revenue and profit growth. The company published its Q1 FY27 release on 21 July.", source: "https://www.bajajauto.com/investors/financial-and-operational-performance" },
-  { date: "21 Jul", day: "21", symbol: "BPCL", name: "Bharat Petroleum", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Refinery throughput", "Marketing volume", "GRM", "PAT") },
-  { date: "22 Jul", day: "22", symbol: "ADANIGREEN", name: "Adani Green Energy", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Operational capacity", "Energy sales", "EBITDA", "Net debt") },
+  { date: "21 Jul", day: "21", symbol: "BPCL", name: "Bharat Petroleum", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Refinery throughput", value: "10.15 MMT", change: "vs 10.42 MMT YoY", tone: "amber" },
+    { label: "Marketing volume", value: "14.13 MMT", change: "Domestic 13.62 · Export 0.51", tone: "green" },
+    { label: "Revenue", value: "₹1,59,479 Cr", change: "+23.1% YoY standalone", tone: "green" },
+    { label: "PAT", value: "Loss ₹3,962 Cr", change: "Standalone · consol. loss ₹1,873 Cr", tone: "red" },
+  ], summary: "Revenue rose on higher fuel realisations, but suppressed marketing margins and LPG under-recoveries swung the quarter into a standalone loss despite stronger refining support.", source: "https://energy.economictimes.indiatimes.com/news/oil-and-gas/bpcl-reports-1873-crore-loss-in-q1-fy27-due-to-weak-fuel-marketing-margins/132555664" },
+  { date: "22 Jul", day: "22", symbol: "ADANIGREEN", name: "Adani Green Energy", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Operational capacity", value: "20,142 MW", change: "+27% YoY", tone: "green" },
+    { label: "Energy sales", value: "13,657 MU", change: "+30% YoY", tone: "green" },
+    { label: "EBITDA (power supply)", value: "₹4,122 Cr", change: "+33% YoY · 94% margin", tone: "green" },
+    { label: "Cash profit", value: "₹2,225 Cr", change: "+28% YoY", tone: "green" },
+  ], summary: "Crossed 20 GW operational capacity with record power-supply EBITDA. Revenue from power supply was ₹4,280 crore (+29% YoY); BESS installed capacity reached 3,551 MWh after 1,972 MWh commissioned at Khavda in the quarter.", source: "https://www.ndtvprofit.com/markets/adani-green-energy-q1-ebitda-rises-to-record-rs-4-122-crore-as-capacity-crosses-20-gw-11805479" },
   { date: "23 Jul", day: "23", symbol: "INFY", name: "Infosys", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Revenue / CC growth", "Operating margin", "Large-deal TCV", "FY27 guidance") },
-  { date: "23 Jul", day: "23", symbol: "TATACONSUM", name: "Tata Consumer Products", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Revenue growth", "EBITDA margin", "India growth", "International growth") },
+  { date: "24 Jul", day: "24", symbol: "TATACONSUM", name: "Tata Consumer Products", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Revenue growth", "EBITDA margin", "India growth", "International growth") },
   { date: "24 Jul", day: "24", symbol: "BANKBARODA", name: "Bank of Baroda", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "Net interest margin", "PAT", "GNPA / credit cost") },
 ];
 

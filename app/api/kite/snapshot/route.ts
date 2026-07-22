@@ -9,7 +9,8 @@ function readCookie(request: Request, name: string) {
 
 export async function GET(request: Request) {
   const storedSession = readCookie(request, "kite_dashboard_session");
-  if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), true);
+  // Adopt cookie only when the process has no MCP session yet (do not clobber live auth).
+  if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), false);
   const snapshot = await getKiteSnapshot();
   const sessionId = currentKiteSession();
   const headers: Record<string, string> = { "Cache-Control": "no-store, max-age=0" };

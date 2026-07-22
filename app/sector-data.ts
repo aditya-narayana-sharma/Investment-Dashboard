@@ -247,6 +247,27 @@ export const sectors: SectorView[] = [
     sourceLabel: "PPAC oil and gas data",
     sourceUrl: "https://ppac.gov.in/",
   },
+  {
+    id: "defence",
+    name: "Defence",
+    color: "#e76f51",
+    pulse: "Leadership",
+    stance: "Order visibility is strong; delivery and valuation set the ranking",
+    summary: "Capital modernisation, indigenisation and export ambition support multi-year aerospace, electronics and shipbuilding order books. Execution schedules, working capital and rich multiples remain the binding constraints.",
+    scores: { demand: 4.7, earnings: 4.3, policy: 4.9, cost: 3.6, valuation: 2.9 },
+    pestel: [4.9, 4.2, 3.8, 4.7, 3.2, 4.1],
+    porter: [3.2, 2.4, 3.5, 2.1, 2.6],
+    cage: [2.0, 4.6, 3.1, 3.8],
+    kpis: [
+      { label: "MoD budget", value: "₹7.85L Cr", context: "Union Budget 2026-27; +15.19% YoY BE" },
+      { label: "Capital outlay", value: "₹2.19L Cr", context: "Defence Forces capital head FY27" },
+      { label: "Domestic buy share", value: "₹1.39L Cr", context: "~75% of capital acquisition reserved for Indian industry" },
+    ],
+    mece: ["Platform, electronics and shipyard demand", "Order conversion and execution margins", "Indigenisation and capital acquisition policy", "Delivery risk and premium valuations"],
+    watch: "Order inflows, execution milestones, export clearances, receivable days, indigenisation content and valuation versus order-book duration.",
+    sourceLabel: "PIB · Defence in Union Budget 2026-27",
+    sourceUrl: "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2222601",
+  },
 ];
 
 export function sectorComposite(sector: SectorView) {
@@ -254,4 +275,4 @@ export function sectorComposite(sector: SectorView) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export const sectorSourceNote = "All ten tracked sector sections reviewed on 16 Jul 2026. Each KPI retains its stated official reporting period; live prices and return horizons refresh separately. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";
+export const sectorSourceNote = "All eleven tracked sector sections reviewed through Jul 2026. Each KPI retains its stated official reporting period; live prices and return horizons refresh separately. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";

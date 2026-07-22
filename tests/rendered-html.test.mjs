@@ -80,7 +80,16 @@ test("sector market route uses a source-labelled fallback without creating a Kit
 test("server-renders the print report and keeps controls interactive", async () => {
   const [response, page, reportPage, reportCss, reportDownloadRoute, reportDownloadServer, contentRoute, contentServer, healthData, healthKitSync, flaskGateway, liveServer, liveRoute, packageJson, layout, manifest, serviceWorker, serviceScript, iphoneScript, portfolioData, sectorRoute, sectorServer, sectorCompanies, sectorData, globalCss] = await Promise.all([
     render("/report"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    Promise.all([
+      readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+    ]).then((parts) => parts.join("\n")),
     readFile(new URL("../app/report/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/report/report.module.css", import.meta.url), "utf8"),
     readFile(new URL("../app/api/report-pdf/route.ts", import.meta.url), "utf8"),
@@ -118,8 +127,15 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /5 \* 60 \* 1000/);
   assert.match(page, /\/api\/kite\/snapshot/);
   assert.match(page, /\/api\/content\/refresh/);
+  assert.match(page, /force=1/);
   assert.match(page, /\/_health\/snapshot\?refresh=/);
   assert.match(page, /refreshAll/);
+  assert.match(page, /\/_startup\/audit/);
+  assert.match(page, /startup-audit-banner/);
+  assert.match(page, /DIGEST_PAGE_SIZE/);
+  assert.match(page, /isPartial/);
+  assert.match(page, /hasPortfolio = isLive \|\| isPartial \|\| isSnapshot/);
+  assert.match(page, /React\.lazy|lazy\(\(\) => import\("\.\/SectoralAnalytics"\)\)/);
   assert.match(page, /function DashboardTabs/);
   assert.match(page, /role="tablist"/);
   assert.match(page, /event\.key === "Home"/);
@@ -133,9 +149,9 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /visibilitychange/);
   assert.match(page, /addEventListener\("focus"/);
   assert.match(page, /addEventListener\("online"/);
-  assert.match(page, /newsletters\.map/);
-  assert.match(page, /axisResearch\.map/);
-  assert.match(page, /podcasts\.map/);
+  assert.match(page, /visibleNewsletters\.map|newsletters\.map/);
+  assert.match(page, /visibleAxis\.map|axisResearch\.map/);
+  assert.match(page, /visiblePodcasts\.map|podcasts\.map/);
   assert.match(page, /matchesSelectedSector/);
   assert.match(page, /data-sector-filter/);
   assert.match(page, /aria-pressed=/);
@@ -168,7 +184,9 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /function EarningsCalendarWorkbench/);
   assert.doesNotMatch(page, /function EarningsCalendarWorkbench\(\{ snapshot, content, selectedSectorId/);
   assert.doesNotMatch(page, /matchingEvents/);
-  assert.match(page, /function SectoralAnalytics/);
+  assert.match(page, /export default function SectoralAnalytics/);
+  assert.match(page, /Cross-industry breadth and common data/);
+  assert.doesNotMatch(page, /All industries are visible/);
   assert.match(page, /Porter competitive-pressure radar/);
   assert.match(page, /Top \{leaders\.length\} leaders/);
   assert.match(page, /Top \{laggards\.length\} laggards/);
@@ -194,23 +212,32 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /pestelAxes\.map/);
   assert.match(page, /porterAxes\.map/);
   assert.doesNotMatch(page, /cageAxes\.map/);
-  assert.match(page, /setSelectedSymbol/);
+  assert.match(page, /setSelectedKey/);
   assert.match(page, /selected\.kpis\.map/);
+  assert.match(page, /resolveEarningsIdentity/);
+  assert.doesNotMatch(page, /CAL-\$\{/);
+  assert.doesNotMatch(page, /`CAL-/);
   assert.match(page, /blank-value/);
   assert.match(page, /KPI fields are intentionally blank/);
-  assert.match(page, /Object\.keys\(sectorCompanies\)\.map/);
+  assert.match(page, /Object\.keys\(sectorCompanies\)/);
   assert.match(page, /refreshInFlightRef/);
   assert.match(page, /macro-event-tabs/);
   assert.match(page, /SELECTED \{event\.label\.toUpperCase\(\)\} RANGE/);
   assert.match(page, /mail\?\.items\?\.length/);
-  assert.match(reportPage, /Refresh & Export PDF/);
-  assert.match(reportPage, /new URLSearchParams\(window\.location\.search\)/);
-  assert.match(reportPage, /sectorResponses\.some/);
-  assert.match(reportPage, /Stale portfolio or Mail-backed investment pages are intentionally not rendered or printable/);
-  assert.match(reportPage, /fetch\(`\/api\/dashboard\/refresh\?report=\$\{Date\.now\(\)\}`/);
-  assert.match(reportPage, /snapshot\.status !== "live"/);
-  assert.match(reportPage, /setSnapshot\(latest\); setContent\(latestContent\)/);
-  assert.match(reportPage, /Current Axis Research and Newsletters mail must refresh/);
+  assert.match(reportPage, /overflowingPages/);
+  assert.match(reportPage, /pdfOverflow|scrollHeight - page\.clientHeight/);
+  assert.match(flaskGateway, /_authorized_health_post/);
+  assert.match(flaskGateway, /PORTFOLIO_HEALTH_TOKEN/);
+  assert.match(flaskGateway, /\/_startup\/audit/);
+  assert.match(healthKitSync, /Authorization/);
+  assert.match(healthKitSync, /X-Portfolio-Health-Token/);
+  assert.match(liveServer, /status: unavailable\.length \? "partial" : "live"/);
+  assert.match(page, /skip-link/);
+  assert.match(globalCss, /startup-audit-banner/);
+  assert.doesNotMatch(packageJson, /html2canvas/);
+  assert.doesNotMatch(packageJson, /html2pdf\.js/);
+  assert.doesNotMatch(packageJson, /"jspdf"/);
+  assert.doesNotMatch(globalCss, /@import "tailwindcss"/);
   assert.match(reportPage, /document\.head\.cloneNode\(true\)/);
   assert.match(reportPage, /querySelectorAll\("script"\)/);
   assert.match(reportPage, /JSON\.stringify\(\{ pages: pageDocuments \}\)/);
@@ -359,9 +386,17 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(sectorRoute, /getPublicSectorMarketSnapshot/);
   assert.match(sectorRoute, /Cache-Control.*no-store/);
   assert.match(sectorRoute, /readCookie\(request, "kite_dashboard_session"\)/);
-  assert.match(sectorRoute, /restoreKiteSession\(decodeURIComponent\(storedSession\), true\)/);
+  assert.match(sectorRoute, /restoreKiteSession\(decodeURIComponent\(storedSession\), false\)/);
   assert.doesNotMatch(sectorRoute, /Set-Cookie/);
-  assert.match(page, /Object\.keys\(sectorCompanies\)\.map\(\(sectorId\) => loadSectorMarket\(sectorId\)\)/);
+  assert.match(page, /await loadSectorMarket\(primaryId\)/);
+  assert.match(page, /Object\.keys\(sectorCompanies\)/);
+  assert.match(page, /filter\(\(sectorId\) => sectorId !== primaryId\)/);
+  assert.match(page, /toggleSector/);
+  assert.match(page, /selectedSectorIds/);
+  assert.match(page, /useState<string\[\]>\(\[\]\)/);
+  assert.match(page, /data-sector-filter=\{filterActive \? selectedIds\.join/);
+  assert.match(page, /ALL INDUSTRIES/);
+  assert.match(page, /click a selected industry again/);
   assert.match(sectorServer, /await callKiteTool\("get_profile"\)/);
   assert.match(sectorServer, /latest trading prices/);
   assert.match(sectorServer, /callKiteTool\("get_quotes"/);
@@ -376,12 +411,19 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(sectorServer, /status: "cached"/);
   assert.match(sectorCompanies, /NIFTY Pharma/);
   assert.match(sectorCompanies, /NIFTY 500 · Power industry/);
+  assert.match(sectorCompanies, /Defence & Aerospace research universe/);
   assert.match(sectorCompanies, /company\("SUNPHARMA"/);
   assert.match(sectorCompanies, /company\("ICICIBANK"/);
   assert.match(sectorCompanies, /company\("KPIL"/);
   assert.match(sectorCompanies, /company\("TMPV"/);
+  assert.match(sectorCompanies, /company\("HAL"/);
+  assert.match(sectorCompanies, /company\("BEL"/);
+  assert.match(sectorCompanies, /company\("MAZDOCK"/);
+  assert.match(sectorCompanies, /company\("DATAPATTNS"/);
   assert.doesNotMatch(sectorCompanies, /company\("KALPATPOWR"/);
   assert.doesNotMatch(sectorCompanies, /company\("TATAMOTORS"/);
+  assert.match(sectorData, /id: "defence"/);
+  assert.match(sectorData, /value: "₹7\.85L Cr"/);
   assert.match(sectorData, /value: "245,444 MW"/);
   assert.match(sectorData, /value: "1,294\.46m"/);
   assert.match(sectorData, /value: "5\.25%"/);

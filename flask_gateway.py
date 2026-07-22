@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -20,7 +22,14 @@ HEALTH_SNAPSHOT_PATH = Path(os.environ.get(
     "PORTFOLIO_HEALTH_SNAPSHOT_PATH",
     ROOT / "artifacts" / "private" / "health-snapshot.json",
 ))
+STARTUP_AUDIT_PATH = Path(os.environ.get(
+    "PORTFOLIO_STARTUP_AUDIT_PATH",
+    ROOT / "artifacts" / "private" / "startup-audit.json",
+))
+# Shared secret for HealthKit POST. Override via PORTFOLIO_HEALTH_TOKEN in production.
+HEALTH_TOKEN = os.environ.get("PORTFOLIO_HEALTH_TOKEN", "portfolio-local-health-token")
 MAX_HEALTH_SNAPSHOT_BYTES = 512 * 1024
+IST = timezone(timedelta(hours=5, minutes=30))
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -40,6 +49,19 @@ def _health_snapshot_response(payload: dict, status: int = 200) -> Response:
     response.headers["Cache-Control"] = "no-store, max-age=0"
     response.headers["X-Portfolio-Gateway"] = "Flask"
     return response
+
+
+def _authorized_health_post() -> bool:
+    provided = request.headers.get("X-Portfolio-Health-Token") or ""
+    auth = request.headers.get("Authorization") or ""
+    if auth.lower().startswith("bearer "):
+        provided = auth[7:].strip()
+    if not provided or not HEALTH_TOKEN:
+        return False
+    return hmac.compare_digest(
+        hashlib.sha256(provided.encode("utf-8")).digest(),
+        hashlib.sha256(HEALTH_TOKEN.encode("utf-8")).digest(),
+    )
 
 
 def _valid_health_snapshot(payload: object) -> bool:
@@ -140,6 +162,25 @@ def health() -> Response:
     return Response(json.dumps(payload), status=200 if upstream_status == 200 else 503, content_type="application/json")
 
 
+@app.get("/_startup/audit")
+def startup_audit() -> Response:
+    try:
+        payload = json.loads(STARTUP_AUDIT_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return _health_snapshot_response({
+            "status": "unknown",
+            "failures": -1,
+            "message": "No startup refresh audit has been recorded yet.",
+        }, 404)
+    except (OSError, json.JSONDecodeError):
+        return _health_snapshot_response({
+            "status": "unavailable",
+            "failures": -1,
+            "message": "The startup refresh audit could not be read.",
+        }, 503)
+    return _health_snapshot_response(payload)
+
+
 @app.route("/_health/snapshot", methods=["GET", "POST"])
 def health_snapshot() -> Response:
     if request.method == "GET":
@@ -157,6 +198,12 @@ def health_snapshot() -> Response:
             }, 503)
         return _health_snapshot_response(payload)
 
+    if not _authorized_health_post():
+        return _health_snapshot_response({
+            "status": "unauthorized",
+            "message": "Health snapshot POST requires Authorization: Bearer <PORTFOLIO_HEALTH_TOKEN> or X-Portfolio-Health-Token.",
+        }, 401)
+
     if request.content_length is not None and request.content_length > MAX_HEALTH_SNAPSHOT_BYTES:
         return _health_snapshot_response({"status": "invalid", "message": "Health snapshot is too large."}, 413)
 
@@ -164,8 +211,12 @@ def health_snapshot() -> Response:
     if not _valid_health_snapshot(payload):
         return _health_snapshot_response({"status": "invalid", "message": "Health snapshot schema is invalid."}, 400)
 
-    payload["status"] = "live"
+    data_date = str(payload.get("dataDate") or "")
+    required_d1 = (datetime.now(IST) - timedelta(days=1)).strftime("%Y-%m-%d")
+    payload["status"] = "live" if data_date >= required_d1 else "stale"
     payload["receivedAt"] = datetime.now(timezone.utc).isoformat()
+    if payload["status"] == "stale":
+        payload["message"] = f"HealthKit snapshot stored but dataDate {data_date} is behind required D-1 {required_d1}."
     try:
         HEALTH_SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = HEALTH_SNAPSHOT_PATH.with_suffix(".tmp")
@@ -175,10 +226,10 @@ def health_snapshot() -> Response:
         return _health_snapshot_response({"status": "unavailable", "message": f"Could not persist Health snapshot: {error}"}, 500)
 
     return _health_snapshot_response({
-        "status": "live",
+        "status": payload["status"],
         "dataDate": payload["dataDate"],
         "capturedAt": payload["capturedAt"],
-        "message": "HealthKit snapshot stored on this Mac.",
+        "message": payload.get("message") or "HealthKit snapshot stored on this Mac.",
     }, 201)
 
 

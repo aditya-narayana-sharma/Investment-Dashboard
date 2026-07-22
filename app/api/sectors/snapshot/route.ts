@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const sectorId = requested in sectorCompanies ? requested : "pharma";
   const headers = { "Cache-Control": "no-store, max-age=0" };
   const storedSession = readCookie(request, "kite_dashboard_session");
-  if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), true);
+  if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), false);
   try {
     return Response.json(await getSectorMarketSnapshot(sectorId), { headers });
   } catch {

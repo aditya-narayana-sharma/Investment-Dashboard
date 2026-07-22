@@ -323,6 +323,9 @@ final class HealthKitSyncCoordinator: ObservableObject {
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let healthToken = ProcessInfo.processInfo.environment["PORTFOLIO_HEALTH_TOKEN"] ?? "portfolio-local-health-token"
+        request.setValue("Bearer \(healthToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(healthToken, forHTTPHeaderField: "X-Portfolio-Health-Token")
         request.httpBody = try JSONEncoder().encode(snapshot)
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }

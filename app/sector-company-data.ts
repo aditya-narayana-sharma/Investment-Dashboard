@@ -87,6 +87,13 @@ export const sectorCompanies: Record<string, SectorCompany[]> = {
     company("OIL", "Oil India", 5, [4.1, 4.3, 4.1, 4.0]), company("PETRONET", "Petronet LNG", 5, [3.6, 4.2, 4.3, 4.3]),
     company("IGL", "Indraprastha Gas", 3, [3.3, 4.0, 4.2, 4.1]), company("MGL", "Mahanagar Gas", 3, [3.2, 4.1, 4.3, 4.2]),
   ],
+  defence: [
+    company("HAL", "Hindustan Aeronautics", 22, [4.6, 4.5, 4.3, 4.4]), company("BEL", "Bharat Electronics", 18, [4.5, 4.6, 4.4, 4.5]),
+    company("MAZDOCK", "Mazagon Dock Shipbuilders", 12, [4.7, 4.4, 4.2, 4.1]), company("BDL", "Bharat Dynamics", 10, [4.4, 4.3, 4.1, 4.0]),
+    company("COCHINSHIP", "Cochin Shipyard", 9, [4.3, 4.1, 3.9, 4.0]), company("GRSE", "Garden Reach Shipbuilders", 8, [4.2, 3.9, 3.8, 3.8]),
+    company("DATAPATTNS", "Data Patterns", 7, [4.6, 4.0, 3.9, 3.7]), company("SOLARINDS", "Solar Industries", 6, [4.5, 4.4, 4.2, 4.0]),
+    company("ZENTEC", "Zen Technologies", 4, [4.4, 3.8, 3.7, 3.6]), company("PARAS", "Paras Defence and Space", 4, [4.3, 3.6, 3.5, 3.4]),
+  ],
 };
 
 export const fundamentalMetricLabels: Record<FundamentalMetricKey, string> = {
@@ -107,4 +114,5 @@ export const sectorUniverseLabels: Record<string, string> = {
   fmcg: "NIFTY FMCG",
   consumer: "NIFTY India Consumption",
   energy: "NIFTY Oil & Gas",
+  defence: "NSE · Defence & Aerospace research universe",
 };
