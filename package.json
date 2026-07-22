@@ -15,6 +15,7 @@
     "flask:stop": "./scripts/stop-flask-app.sh",
     "desktop": "./scripts/install-desktop-app.sh",
     "iphone": "./scripts/install-iphone-app.sh",
+    "iphone:pair": "./scripts/generate-health-pairing-code.sh",
     "remote": "./scripts/start-remote-app.sh",
     "iphone:vinext": "./scripts/start-iphone-app.sh",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",

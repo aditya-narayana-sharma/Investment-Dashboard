@@ -32,6 +32,7 @@ class FlaskGatewayTests(unittest.TestCase):
     def setUp(self):
         flask_gateway.app.config.update(TESTING=True)
         self.client = flask_gateway.app.test_client()
+        flask_gateway.PAIRING_CODES.clear()
 
     @patch("flask_gateway.urlopen")
     def test_proxies_dashboard_query_and_headers(self, mocked_urlopen):
@@ -116,6 +117,61 @@ class FlaskGatewayTests(unittest.TestCase):
         self.assertEqual(loaded.status_code, 200)
         self.assertEqual(loaded.get_json()["dataDate"], "2026-07-18")
         self.assertEqual(loaded.headers["Cache-Control"], "no-store, max-age=0")
+
+    def test_pairs_installation_and_accepts_keychain_token(self):
+        snapshot = {
+            "schemaVersion": 1,
+            "status": "live",
+            "source": "Apple Health",
+            "dataDate": "2026-07-18",
+            "capturedAt": "2026-07-19T08:00:00Z",
+            "message": "Latest completed-day HealthKit aggregates.",
+            "categories": [{
+                "name": "Activity",
+                "note": "Apple Health · 18 Jul",
+                "tone": "green",
+                "metrics": [{"label": "Steps", "value": "10,000", "averages": {}}],
+            }],
+            "sources": [{"source": "Apple Health / HealthKit", "status": "Synced", "detail": "Completed day", "tone": "green"}],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", root / "pairings.json"),
+                patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", root / "health.json"),
+            ):
+                code_response = self.client.post("/_health/pair/code")
+                self.assertEqual(code_response.status_code, 201)
+                code = code_response.get_json()["code"]
+
+                paired = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-test-install",
+                    "label": "Test iPhone",
+                })
+                self.assertEqual(paired.status_code, 201)
+                token = paired.get_json()["token"]
+                self.assertNotEqual(token, flask_gateway.HEALTH_TOKEN)
+
+                stored = self.client.post(
+                    "/_health/snapshot",
+                    json=snapshot,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                self.assertEqual(stored.status_code, 201)
+
+                revoked = self.client.delete("/_health/pair/iphone-test-install")
+                self.assertEqual(revoked.status_code, 200)
+                rejected = self.client.post(
+                    "/_health/snapshot",
+                    json=snapshot,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                self.assertEqual(rejected.status_code, 401)
+
+    def test_rejects_remote_pairing_code_generation_without_admin_token(self):
+        response = self.client.post("/_health/pair/code", environ_base={"REMOTE_ADDR": "10.0.0.7"})
+        self.assertEqual(response.status_code, 401)
 
 
 if __name__ == "__main__":

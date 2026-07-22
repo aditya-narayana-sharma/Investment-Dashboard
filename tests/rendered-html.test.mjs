@@ -466,3 +466,36 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /position:\s*sticky/);
   assert.match(globalCss, /\.sector-rank-grid/);
 });
+
+test("native iPhone shell exposes complete workspace, freshness, pairing and offline contracts", async () => {
+  const [contentView, configuration, browser, status, shell, pairing, healthKit, flaskGateway, page] = await Promise.all([
+    readFile(new URL("../apple-app/InvestmentDashboard/ContentView.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/PortfolioDashboardConfiguration.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/DashboardBrowser.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/DashboardStatus.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/DashboardShellViews.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/HealthPairing.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/HealthKitSync.swift", import.meta.url), "utf8"),
+    readFile(new URL("../flask_gateway.py", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case health/);
+  assert.match(configuration, /URLQueryItem\(name: "view", value: rawValue\)/);
+  assert.match(browser, /private\(set\) lazy var webView/);
+  assert.match(browser, /portfolio-native-refresh/);
+  assert.match(browser, /WKDownloadDelegate/);
+  assert.match(status, /\/_flask\/health/);
+  assert.match(status, /\/_startup\/audit/);
+  assert.match(shell, /NativeWorkspacePicker/);
+  assert.match(shell, /NativeFreshnessStrip/);
+  assert.match(shell, /DashboardOfflineOverlay/);
+  assert.match(shell, /DashboardOnboardingView/);
+  assert.match(contentView, /HealthKitSyncCoordinator/);
+  assert.match(pairing, /kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly/);
+  assert.match(healthKit, /HealthCredentialStore\.token\(\)/);
+  assert.doesNotMatch(healthKit, /portfolio-local-health-token/);
+  assert.match(flaskGateway, /@app\.post\("\/_health\/pair\/code"\)/);
+  assert.match(flaskGateway, /@app\.post\("\/_health\/pair"\)/);
+  assert.match(page, /portfolio-native-refresh/);
+});
