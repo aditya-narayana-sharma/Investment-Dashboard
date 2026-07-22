@@ -24,6 +24,7 @@ export type LiveHolding = {
 };
 
 export type AllocationSlice = {
+  id?: string;
   name: string;
   value: number;
   weight: number;

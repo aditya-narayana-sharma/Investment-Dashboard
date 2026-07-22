@@ -14,6 +14,12 @@ const globalState = globalThis as typeof globalThis & { __sectorRuntime?: Sector
 const state = globalState.__sectorRuntime ??= { history: new Map(), lastGood: new Map(), publicFallback: new Map() };
 state.publicFallback ??= new Map();
 
+let rateLimitedUntil = 0;
+let authProbeCache: { valid: boolean; expiresAt: number } | undefined;
+
+const CONNECT_MARKET_DATA_MESSAGE =
+  "Kite Connect paid market-data permission is required. Zerodha Personal (free) apps cannot serve live sector quotes.";
+
 function numberOrNull(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -34,6 +40,76 @@ function kiteDate(date: Date, end = false) {
 function percent(current: number | null, previous: number | null) {
   if (current === null || previous === null || previous === 0) return null;
   return Number(((current / previous - 1) * 100).toFixed(2));
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRateLimited() {
+  return Date.now() < rateLimitedUntil;
+}
+
+function isRateLimitError(message: string) {
+  return /too many requests|rate limit/i.test(message);
+}
+
+function isInsufficientPermissionError(message: string) {
+  return /insufficient permission/i.test(message);
+}
+
+function isAuthError(message: string) {
+  return /log in|login|authentication|required|token/i.test(message);
+}
+
+function markRateLimited(message: string) {
+  if (!isRateLimitError(message)) return;
+  rateLimitedUntil = Math.max(rateLimitedUntil, Date.now() + 60_000);
+}
+
+function permissionFailure(message: string) {
+  return new Error(`${CONNECT_MARKET_DATA_MESSAGE} ${message}`);
+}
+
+export async function kiteAuthLikelyValid() {
+  if (authProbeCache && authProbeCache.expiresAt > Date.now()) return authProbeCache.valid;
+  try {
+    await callKiteTool("get_profile");
+    authProbeCache = { valid: true, expiresAt: Date.now() + 60_000 };
+    return true;
+  } catch {
+    authProbeCache = { valid: false, expiresAt: Date.now() + 60_000 };
+    return false;
+  }
+}
+
+export async function loadKiteQuotes(instruments: string[]) {
+  if (isRateLimited()) throw new Error("Zerodha rate limit reached");
+
+  // Prefer LTP first, then OHLC, then full quotes.
+  const attempts = [
+    { tool: "get_ltp", mode: "LTP" },
+    { tool: "get_ohlc", mode: "OHLC" },
+    { tool: "get_quotes", mode: "full quotes" },
+  ] as const;
+
+  let lastError: Error | undefined;
+  for (const attempt of attempts) {
+    try {
+      const raw = await callKiteTool(attempt.tool, { instruments });
+      return { raw, quoteMode: attempt.mode };
+    } catch (error) {
+      const message = errorMessage(error);
+      lastError = error instanceof Error ? error : new Error(message);
+      if (isInsufficientPermissionError(message)) throw permissionFailure(message);
+      if (isRateLimitError(message)) {
+        markRateLimited(message);
+        throw new Error("Zerodha rate limit reached");
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Kite market data could not be loaded.");
 }
 
 function quoteMap(raw: unknown) {
@@ -62,7 +138,7 @@ async function historyReturns(symbol: string, instrumentToken: number | null, cu
   const cached = state.history.get(symbol);
   if (cached?.date === isoDate()) return cached.returns;
   const empty = { week: null, month: null, quarter: null };
-  if (instrumentToken === null) return empty;
+  if (instrumentToken === null || isRateLimited()) return empty;
 
   const to = new Date();
   const from = new Date(to);
@@ -86,14 +162,34 @@ async function historyReturns(symbol: string, instrumentToken: number | null, cu
     };
     state.history.set(symbol, { date: isoDate(), returns });
     return returns;
-  } catch {
+  } catch (error) {
+    const message = errorMessage(error);
+    if (isRateLimitError(message)) markRateLimited(message);
     return empty;
   }
 }
 
-async function addHistory(rows: Array<SectorCompanyMarket & { instrumentToken: number | null }>) {
+async function addHistory(rows: Array<SectorCompanyMarket & { instrumentToken: number | null }>, skipHistorical = false) {
+  if (skipHistorical) {
+    return rows.map((row) => ({
+      symbol: row.symbol,
+      price: row.price,
+      previousClose: row.previousClose,
+      returns: row.returns,
+    }));
+  }
+
   const enriched: SectorCompanyMarket[] = [];
   for (let index = 0; index < rows.length; index += 3) {
+    if (isRateLimited()) {
+      enriched.push(...rows.slice(index).map((row) => ({
+        symbol: row.symbol,
+        price: row.price,
+        previousClose: row.previousClose,
+        returns: row.returns,
+      })));
+      break;
+    }
     const batch = rows.slice(index, index + 3);
     const results = await Promise.all(batch.map(async (row) => ({
       ...row,
@@ -166,7 +262,7 @@ export async function getPublicSectorMarketSnapshot(sectorId: string, reason: st
     status: "public_delayed",
     sectorId,
     asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
-    message: `Public delayed market fallback (Yahoo Finance). Kite account access is valid, but Kite market-data calls failed: ${reason}`,
+    message: `Public delayed market fallback (Yahoo Finance). ${CONNECT_MARKET_DATA_MESSAGE} Kite detail: ${reason}`,
     companies,
   };
   state.publicFallback.set(sectorId, { expiresAt: Date.now() + 5 * 60_000, snapshot });
@@ -177,19 +273,7 @@ export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorM
   const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
   try {
     const instruments = universe.map((company) => `NSE:${company.symbol}`);
-    let raw: unknown;
-    let quoteMode = "full quotes";
-    try {
-      raw = await callKiteTool("get_quotes", { instruments });
-    } catch {
-      try {
-        raw = await callKiteTool("get_ohlc", { instruments });
-        quoteMode = "OHLC fallback";
-      } catch {
-        raw = await callKiteTool("get_ltp", { instruments });
-        quoteMode = "LTP fallback";
-      }
-    }
+    const { raw, quoteMode } = await loadKiteQuotes(instruments);
     const quotes = quoteMap(raw);
     const rows = universe.map((company) => {
       const quote = object(quotes[`NSE:${company.symbol}`]);
@@ -215,22 +299,28 @@ export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorM
     state.lastGood.set(sectorId, snapshot);
     return snapshot;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Sector market data could not be loaded.";
+    const message = errorMessage(error);
     const cached = state.lastGood.get(sectorId);
-    if (cached) return { ...cached, status: "cached", message: `Kite refresh failed. ${message}` };
-    let authRequired = /log in|login|authentication|required|token/i.test(message);
-    if (!authRequired && /failed to get (?:quotes|OHLC|latest trading prices)/i.test(message)) {
+    if (cached) {
+      const suffix = isRateLimitError(message) ? "Zerodha rate limit reached; retaining the last validated sector snapshot." : message;
+      return { ...cached, status: "cached", message: `Kite refresh failed. ${suffix}` };
+    }
+
+    const permissionDenied = isInsufficientPermissionError(message) || message.includes(CONNECT_MARKET_DATA_MESSAGE);
+    let authRequired = isAuthError(message);
+    if (!authRequired && !permissionDenied) {
+      authRequired = !(await kiteAuthLikelyValid());
+    }
+
+    if (permissionDenied || !authRequired) {
       try {
-        await callKiteTool("get_profile");
+        const fallbackReason = permissionDenied ? CONNECT_MARKET_DATA_MESSAGE : message;
+        return await getPublicSectorMarketSnapshot(sectorId, fallbackReason);
       } catch {
-        authRequired = true;
+        // Preserve the explicit Kite state if the independent public source also fails.
       }
     }
-    try {
-      return await getPublicSectorMarketSnapshot(sectorId, authRequired ? "Kite authentication is required." : message);
-    } catch {
-      // Preserve the explicit Kite state if the independent public source also fails.
-    }
+
     return {
       status: authRequired ? "auth_required" : "unavailable",
       sectorId,

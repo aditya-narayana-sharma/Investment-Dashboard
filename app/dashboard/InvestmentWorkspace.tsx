@@ -6,9 +6,15 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, P
 import { axisArchiveAudit, riskAxes, type RiskProfile } from "../portfolio-data";
 import type { ContentDigestSnapshot, MailRecommendation } from "../content-types";
 import type { KiteSnapshot } from "../live-types";
+import { thesisBullets, type ThesisBullet } from "../thesis-bullets";
 import type { MacroBandKey, MacroEventKey } from "./types";
 import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, HoldingLabel, RiskPill } from "./shared-ui";
 import { analysisWindowLabel, exposureFactors, gainShades, inr, macroEvents } from "./utils";
+
+function ThesisBulletList({ bullets, className = "thesis-bullet-list" }: { bullets: ThesisBullet[]; className?: string }) {
+  if (!bullets.length) return <span className="thesis-empty">No scoped thesis in readable Mail content</span>;
+  return <ul className={className}>{bullets.map((bullet) => <li key={`${bullet.marker}-${bullet.text}`} className={bullet.tone}><span aria-hidden="true">{bullet.marker}</span><span>{bullet.text}</span></li>)}</ul>;
+}
 
 function RiskRadar({ profiles, selected, onSelect, averageLabel, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; emptyLabel?: string }) {
   if (!profiles.length) return <div className="live-empty compact"><Mail size={22}/><b>{emptyLabel}</b><p>The refreshed source set did not produce a verified profile for the selected analysis window.</p></div>;
@@ -58,7 +64,7 @@ function MacroScenarioBoard({ eventKey, bandKey, onEventChange, onBandChange, co
 function AxisRecommendationWorkbench({ recommendations, content }: { recommendations: MailRecommendation[]; content: ContentDigestSnapshot }) {
   const [selectedSymbol, setSelectedSymbol] = useState(recommendations[0]?.symbol ?? "");
   const selected = recommendations.find((item) => item.symbol === selectedSymbol) ?? recommendations[0];
-  if (!selected) return <section className="axis-workbench"><div className="live-empty"><Mail size={24}/><b>No Axis recommendation was parsed for {analysisWindowLabel(content)}</b><p>The exact iCloud → Axis Research mailbox refreshed successfully, but no qualifying BUY/HOLD/SELL target was found in the selected analysis window. No older static call is being presented as current.</p></div></section>;
+  if (!selected) return <section className="axis-workbench"><div className="live-empty"><Mail size={24}/><b>No Axis recommendation was parsed for {analysisWindowLabel(content)}</b><p>The exact iCloud → Axis Research mailbox refreshed successfully, but no qualifying BUY/HOLD/SELL target was found in readable Mail text for the selected analysis window. PDF attachments are not OCR’d into calls. No older static call is being presented as current.</p></div></section>;
   const categories = [
     { label: "Fundamental", count: recommendations.filter((item) => !item.call.includes("TECHNICAL") && !item.call.includes("TRADING")).length, tone: "green" },
     { label: "Technical", count: recommendations.filter((item) => item.call.includes("TECHNICAL")).length, tone: "blue" },
@@ -66,12 +72,12 @@ function AxisRecommendationWorkbench({ recommendations, content }: { recommendat
   ];
   const upside = selected.target && selected.cmp ? (selected.target / selected.cmp - 1) * 100 : null;
   const category = selected.call.includes("TECHNICAL") ? "Technical" : selected.call.includes("TRADING") ? "Trading" : "Fundamental";
-  const thesisBullets = selected.thesis.split(/;|, and |, /).map((item) => item.trim()).filter(Boolean).slice(0, 3);
+  const detailBullets = thesisBullets(selected.thesis, { symbol: selected.symbol, name: selected.name, call: selected.call, limit: 5 });
 
   return <section className="axis-workbench">
     <div className="axis-audit-strip">
-      <div><Database size={18}/><span><b>{axisArchiveAudit.filesAttempted} files attempted</b><small>{axisArchiveAudit.validPdfs} valid PDFs · {axisArchiveAudit.pagesRead.toLocaleString("en-IN")} pages extracted</small></span></div>
-      <div><b>{axisArchiveAudit.duplicateGroups}</b><small>exact duplicate group</small></div>
+      <div><Mail size={18}/><span><b>{recommendations.length} mail-window calls</b><small>Parsed BUY/HOLD/SELL from iCloud → Axis Research · {analysisWindowLabel(content)}</small></span></div>
+      <div><Database size={18}/><span><b>{axisArchiveAudit.validPdfs} archive PDFs</b><small>Local evidence inventory · not a stock-call count ({axisArchiveAudit.filesAttempted} files scanned)</small></span></div>
       <div className="warning"><b>{axisArchiveAudit.invalidFiles.length}</b><small>invalid non-PDF payloads</small></div>
     </div>
     <div className="axis-category-strip">{categories.map((item) => <div className={item.tone} key={item.label}><span>{item.label}</span><b>{item.count}</b><small>{item.count === 1 ? "active call" : "active calls"}</small></div>)}</div>
@@ -85,11 +91,11 @@ function AxisRecommendationWorkbench({ recommendations, content }: { recommendat
         <div className="axis-pick-heading"><div><span>{category} · {selected.date}</span><h3>{selected.name}</h3><p>{selected.symbol} · {selected.source}</p></div><span className="pill blue">{selected.call}</span></div>
         <div className="axis-numeric-grid"><div><span>CMP</span><b>{selected.cmp ? inr.format(selected.cmp) : "—"}</b></div><div><span>Target</span><b>{selected.target ? inr.format(selected.target) : "No explicit TP"}</b></div><div className={upside !== null && upside >= 0 ? "positive" : ""}><span>Indicated upside</span><b>{upside === null ? selected.upside : `${upside.toFixed(1)}%`}</b></div><div><span>Horizon</span><b>{selected.horizon}</b></div></div>
         <div className="axis-upside-track"><span style={{width:`${Math.min(100, Math.max(0, upside ?? 0) * 4)}%`}}/><i>0%</i><i>25%+</i></div>
-        <ul className="axis-thesis-bullets">{thesisBullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>
-        <div className="axis-evidence"><FileText size={15}/><span><b>Evidence:</b> {selected.source} · {selected.date}</span></div>
+        <ThesisBulletList bullets={detailBullets} className="axis-thesis-bullets" />
+        <div className="axis-evidence"><FileText size={15}/><span><b>Evidence:</b> {selected.source} · {selected.date} · scoped to {selected.symbol}</span></div>
       </article>
     </div>
-    <div className="table-note"><FileText size={16}/><span>Mail-first policy: qualifying Axis reports from {analysisWindowLabel(content)} are shown. Refreshed {content.asOf}; archive PDFs remain supplementary evidence only.</span></div>
+    <div className="table-note"><FileText size={16}/><span>Mail-first policy: I-6 lists symbol-deduplicated calls from readable Axis Research mail in {analysisWindowLabel(content)}. The {axisArchiveAudit.filesAttempted}-file archive audit is supplementary evidence only — it does not mean {axisArchiveAudit.filesAttempted} stock recommendations. PDF attachments are not parsed into calls. Refreshed {content.asOf}.</span></div>
   </section>;
 }
 
@@ -189,9 +195,9 @@ export function InvestmentWorkspace({
           {hasPortfolio ? <><div className="nested-chart-wrap">
             <ResponsiveContainer width="100%" height={410}>
               <PieChart margin={{top:12,right:12,bottom:12,left:12}}>
-                <Pie data={marketCapAllocation} dataKey="value" nameKey="name" innerRadius="18%" outerRadius="31%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="inner"/>}>{marketCapAllocation.map(item => <Cell key={item.name} fill={item.color}/>)}</Pie>
-                <Pie data={sectorAllocation} dataKey="value" nameKey="name" innerRadius="34%" outerRadius="50%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="industry"/>}>{sectorAllocation.map(item => <Cell key={item.name} fill={item.color}/>)}</Pie>
-                <Pie data={subSectorAllocation} dataKey="value" nameKey="name" innerRadius="53%" outerRadius="70%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="subsector"/>}>{subSectorAllocation.map(item => <Cell key={item.name} fill={item.color}/>)}</Pie>
+                <Pie data={marketCapAllocation} dataKey="value" nameKey="name" innerRadius="18%" outerRadius="31%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="inner"/>}>{marketCapAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
+                <Pie data={sectorAllocation} dataKey="value" nameKey="name" innerRadius="34%" outerRadius="50%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="industry"/>}>{sectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
+                <Pie data={subSectorAllocation} dataKey="value" nameKey="name" innerRadius="53%" outerRadius="70%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="subsector"/>}>{subSectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
                 <Pie data={donutHoldings} dataKey="value" nameKey="symbol" innerRadius="73%" outerRadius="96%" startAngle={90} endAngle={-270} paddingAngle={0} isAnimationActive={false} labelLine={false} label={(props) => <HoldingLabel {...props}/> }>
                   {donutHoldings.map((h,index) => <Cell key={h.symbol} fill={h.pnl >= 0 ? gainShades[index] : "#c33f47"} fillOpacity={h.dayPnl >= 0 ? 1 : .52} stroke={h.dayPnl >= 0 ? "#ffffff" : "#9b2f36"} strokeWidth={h.dayPnl >= 0 ? 2 : 1.5}/>) }
                 </Pie>
@@ -239,7 +245,28 @@ export function InvestmentWorkspace({
 
       <div className="workspace-section">
       <CollapsibleSection number="I-4" title="Analyst call matrix" note="Targets are reference points, not quarter forecasts">
-      <section className="panel table-scroll"><table><thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>Target</th><th>Implied vs live</th><th>Published</th><th>What matters</th></tr></thead><tbody>{analystRows.map(a=>{const current=currentBySymbol.get(a.symbol);const implied=current&&a.target?(a.target/current-1)*100:null;return <tr key={`${a.symbol}-${a.house}`}><td><b>{a.symbol}</b>{a.mail&&<small className="mail-row-label">WINDOW MAIL</small>}</td><td>{a.house}</td><td><span className="pill blue">{a.rating}</span></td><td>{a.target?inr.format(a.target):"—"}</td><td className={implied===null?"":implied>=0?"positive":"negative"}>{implied===null?"—":`${implied>=0?"+":""}${implied.toFixed(1)}%`}</td><td>{a.date}</td><td>{a.thesis}</td></tr>})}</tbody></table><div className="table-note"><Target size={16}/><span>Axis Mail calls from {analysisWindowLabel(content)} are prioritised and deduplicated by symbol; other houses remain explicitly labelled supplementary references. Implied upside uses each live Kite last price.</span></div></section>
+      <section className="panel analyst-matrix">
+        <div className="table-scroll">
+          <table className="analyst-table">
+            <thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>Target</th><th>Implied vs live</th><th>Published</th><th>What matters</th></tr></thead>
+            <tbody>{analystRows.map((a) => {
+              const current = currentBySymbol.get(a.symbol);
+              const implied = current && a.target ? (a.target / current - 1) * 100 : null;
+              const bullets = thesisBullets(a.thesis, { symbol: a.symbol, call: a.rating, limit: 4 });
+              return <tr key={`${a.symbol}-${a.house}`}>
+                <td data-label="Stock"><b>{a.symbol}</b>{a.mail && <small className="mail-row-label">WINDOW MAIL</small>}</td>
+                <td data-label="Source / house">{a.house}</td>
+                <td data-label="Call"><span className="pill blue">{a.rating}</span></td>
+                <td data-label="Target">{a.target ? inr.format(a.target) : "—"}</td>
+                <td data-label="Implied vs live" className={implied === null ? "" : implied >= 0 ? "positive" : "negative"}>{implied === null ? "—" : `${implied >= 0 ? "+" : ""}${implied.toFixed(1)}%`}</td>
+                <td data-label="Published">{a.date}</td>
+                <td data-label="What matters"><ThesisBulletList bullets={bullets} className="thesis-bullet-list" /></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+        <div className="table-note"><Target size={16}/><span>Axis Mail calls from {analysisWindowLabel(content)} are prioritised and deduplicated by symbol; What matters bullets are scoped to that row’s symbol. Other houses remain explicitly labelled supplementary references. Implied upside uses each live Kite last price.</span></div>
+      </section>
       </CollapsibleSection>
       </div>
 
@@ -253,7 +280,7 @@ export function InvestmentWorkspace({
       </div>
 
       <div className="workspace-section">
-      <CollapsibleSection number="I-6" title="Axis recommended stocks" note="Visual call categories, upside, horizon and evidence · iCloud Axis Research plus validated archive PDFs">
+      <CollapsibleSection number="I-6" title="Axis recommended stocks" note="Mail-window calls with scoped thesis · archive PDFs are evidence inventory only">
         <AxisRecommendationWorkbench recommendations={mailAxisRecommendations} content={content}/>
       </CollapsibleSection>
       </div>

@@ -15,18 +15,24 @@ check_source() {
   local path="$2"
   local expected_status="$3"
   local require_d1="${4:-false}"
+  local max_time="${5:-90}"
   local code
   local body
   local status
   local data_date
   body="$(mktemp)"
-  code="$(curl -sS --max-time 90 -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$body" -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
-  status="$(/usr/bin/python3 -c 'import json,sys
+  code="$(curl -sS --max-time "$max_time" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$body" -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
+  if [[ -z "$code" || "$code" == "000" ]]; then
+    status="unreachable"
+    data_date=""
+  else
+    status="$(/usr/bin/python3 -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get("status", "missing"))
 except Exception: print("invalid_json")' "$body")"
-  data_date="$(/usr/bin/python3 -c 'import json,sys
+    data_date="$(/usr/bin/python3 -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get("dataDate", ""))
 except Exception: print("")' "$body")"
+  fi
 
   local semantic_ok=false
   if [[ "$code" =~ ^2 && "$status" == "$expected_status" ]]; then
@@ -52,11 +58,12 @@ printf 'Complete dashboard refresh audit\n'
 printf 'Started\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 "$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh" >/dev/null 2>&1 || true
 check_source "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
-check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live"
+# Mail/Calendar force refresh can exceed 90s when Mail.app is slow; Calendar is SQLite-backed.
+check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live" "false" "300"
 check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
 check_source "HealthKit D-1 snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
 for sector in "${SECTORS[@]}"; do
-  check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live"
+  check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
 done
 printf 'Finished\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 printf 'Failures\t%s\n' "$FAILURES"
@@ -71,7 +78,13 @@ failed = [part.strip() for part in failed_csv.split(",") if part.strip()] if fai
 if failures == 0:
   message = "Complete dashboard refresh audit passed."
 else:
-  kite_hint = " Authenticate Kite to restore live portfolio and sector quotes." if any(item.lower().startswith("kite") for item in failed) else ""
+  kite_hint = ""
+  if any("unreachable" in item.lower() for item in failed):
+    kite_hint = " Gateway was unreachable (HTTP 000); restart Portfolio Intelligence before re-auditing sources."
+  elif any(item.lower().startswith("kite") and "auth" in item.lower() for item in failed):
+    kite_hint = " Authenticate Kite to restore live portfolio and sector quotes."
+  elif any(item.lower().startswith("kite") for item in failed):
+    kite_hint = " Inspect Kite snapshot status in startup-refresh.log."
   message = f"Startup refresh audit reported {failures} failed source check(s): {'; '.join(failed)}.{kite_hint} Inspect startup-refresh.log."
 payload = {
   "status": "ok" if failures == 0 else "failed",

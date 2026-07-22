@@ -4,7 +4,7 @@ import { useState, type CSSProperties } from "react";
 import { Activity, BarChart3, Database, ExternalLink, Gauge, Layers3, Target } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { pestelAxes, porterAxes, sectorComposite, sectorScoreLabels, sectorSourceNote, sectors } from "../sector-data";
-import { fundamentalMetricLabels, sectorCompanies, sectorUniverseLabels, type FundamentalMetricKey } from "../sector-company-data";
+import { fundamentalMetricLabels, sectorCompanies, sectorUniverseLabels, type FundamentalMetricKey, type SectorCompany } from "../sector-company-data";
 import { type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
 import { lifeCyclePoints, macroDials, marketStructurePoints, sectorImpactRows, squeezeWidths, type ImpactSignal } from "../sector-analytics-data";
 import type { LiveHolding } from "../live-types";
@@ -12,9 +12,207 @@ import type { SectorRankingView } from "./types";
 import { currentIstDateLabel, inr, matchesSelectedSector } from "./utils";
 
 const impactGlyph: Record<ImpactSignal, string> = { tailwind: "▲", headwind: "▼", "two-way": "●", na: "—" };
+const LIFE_CYCLE_STAGES = ["", "Growth", "Shakeout", "Mature", "Decline", "Legacy"];
+const axisLabelStyle = { fill: "#9ba6b2", fontSize: 11, fontWeight: 700 };
+
+type CompanyBubblePoint = {
+  kind: "company";
+  id: string;
+  symbol: string;
+  name: string;
+  label: string;
+  industryName: string;
+  color: string;
+  stage: number;
+  growth: number;
+  margin: number;
+  concentration: number;
+  size: number;
+  growthScore: number;
+  marginScore: number;
+  held: boolean;
+  anchorName: string;
+};
+
+type IndustryAnchorPoint = {
+  kind: "industry";
+  id: string;
+  name: string;
+  label: string;
+  industryName: string;
+  color: string;
+  stage: number;
+  growth: number;
+  margin: number;
+  concentration: number;
+  size: number;
+  profit: number;
+};
 
 function isFocused(selectedIds: string[], sectorId: string) {
   return selectedIds.length === 0 || selectedIds.includes(sectorId);
+}
+
+function sectorMeta(sectorId: string) {
+  return sectors.find((sector) => sector.id === sectorId);
+}
+
+function pickLifeCycleAnchor(sectorId: string, company: SectorCompany) {
+  const anchors = lifeCyclePoints.filter((point) => point.id === sectorId);
+  if (!anchors.length) return null;
+  if (anchors.length === 1) return anchors[0];
+  const ordered = [...anchors].sort((a, b) => a.stage - b.stage);
+  const growthRank = Math.max(0, Math.min(1, (company.scores.growth - 1) / 4));
+  const index = Math.min(ordered.length - 1, Math.round((1 - growthRank) * (ordered.length - 1)));
+  return ordered[index];
+}
+
+function pickStructureAnchor(sectorId: string) {
+  return marketStructurePoints.find((point) => point.id === sectorId) ?? null;
+}
+
+function buildCompanyLifeCyclePoints(heldSymbols: Set<string>): CompanyBubblePoint[] {
+  return sectors.flatMap((sector) => {
+    const companies = sectorCompanies[sector.id] ?? [];
+    return companies.flatMap((company) => {
+      const anchor = pickLifeCycleAnchor(sector.id, company);
+      if (!anchor) return [];
+      const growthDelta = (company.scores.growth - 3.5) * 5.5;
+      const stageDelta = (3.5 - company.scores.growth) * 0.22;
+      return [{
+        kind: "company" as const,
+        id: sector.id,
+        symbol: company.symbol,
+        name: company.name,
+        label: company.symbol,
+        industryName: sector.name,
+        color: sector.color,
+        stage: Number(Math.max(0.7, Math.min(5.1, anchor.stage + stageDelta)).toFixed(2)),
+        growth: Number((anchor.growth + growthDelta).toFixed(1)),
+        margin: 0,
+        concentration: 0,
+        size: company.universeShare,
+        growthScore: company.scores.growth,
+        marginScore: company.scores.margin,
+        held: heldSymbols.has(company.symbol),
+        anchorName: anchor.name,
+      }];
+    });
+  });
+}
+
+function buildCompanyStructurePoints(heldSymbols: Set<string>): CompanyBubblePoint[] {
+  return sectors.flatMap((sector) => {
+    const anchor = pickStructureAnchor(sector.id);
+    if (!anchor) return [];
+    return (sectorCompanies[sector.id] ?? []).map((company) => {
+      const marginDelta = (company.scores.margin - 3.5) * 3.8;
+      const concentrationDelta = (company.universeShare / 40 - 0.25) + (company.scores.quality - 3.5) * 0.12;
+      return {
+        kind: "company" as const,
+        id: sector.id,
+        symbol: company.symbol,
+        name: company.name,
+        label: company.symbol,
+        industryName: sector.name,
+        color: sector.color,
+        stage: 0,
+        growth: 0,
+        margin: Number(Math.max(1, Math.min(55, anchor.margin + marginDelta)).toFixed(1)),
+        concentration: Number(Math.max(1.6, Math.min(5.1, anchor.concentration + concentrationDelta)).toFixed(2)),
+        size: company.universeShare,
+        growthScore: company.scores.growth,
+        marginScore: company.scores.margin,
+        held: heldSymbols.has(company.symbol),
+        anchorName: anchor.name,
+      };
+    });
+  });
+}
+
+function industryLifeCycleAnchors(): IndustryAnchorPoint[] {
+  return lifeCyclePoints.map((point) => ({
+    kind: "industry" as const,
+    id: point.id,
+    name: point.name,
+    label: point.name,
+    industryName: sectorMeta(point.id)?.name ?? point.name,
+    color: point.color,
+    stage: point.stage,
+    growth: point.growth,
+    margin: 0,
+    concentration: 0,
+    size: Math.max(18, point.profit * 0.55),
+    profit: point.profit,
+  }));
+}
+
+function industryStructureAnchors(): IndustryAnchorPoint[] {
+  return marketStructurePoints.map((point) => ({
+    kind: "industry" as const,
+    id: point.id,
+    name: point.name,
+    label: point.name,
+    industryName: sectorMeta(point.id)?.name ?? point.name,
+    color: point.color,
+    stage: 0,
+    growth: 0,
+    margin: point.margin,
+    concentration: point.concentration,
+    size: Math.max(18, point.profit * 0.55),
+    profit: point.profit,
+  }));
+}
+
+function SmartBubbleLabel({
+  x = 0,
+  y = 0,
+  value = "",
+  visibleLabels,
+}: {
+  x?: number;
+  y?: number;
+  value?: string;
+  visibleLabels: Set<string>;
+}) {
+  if (!visibleLabels.has(value)) return null;
+  return <text x={x} y={y - 10} textAnchor="middle" className="bubble-label selected">{value}</text>;
+}
+
+function BubbleTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: CompanyBubblePoint | IndustryAnchorPoint }> }) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+  if (point.kind === "industry") {
+    if (point.concentration > 0) {
+      return <div className="bubble-tooltip"><b>{point.name}</b><span>{point.industryName} · industry anchor</span><small>{point.margin}% margin · {point.concentration.toFixed(1)}/5 concentration · profit pool {point.profit}</small></div>;
+    }
+    return <div className="bubble-tooltip"><b>{point.name}</b><span>{point.industryName} · industry anchor</span><small>Growth {point.growth}% · profit pool {point.profit}</small></div>;
+  }
+  return <div className="bubble-tooltip">
+    <b>{point.name}</b>
+    <span style={{ color: point.color }}>{point.industryName} · {point.symbol}{point.held ? " · OWNED" : ""}</span>
+    <small>Universe weight {point.size.toFixed(1)}% · {point.anchorName}</small>
+    {point.concentration > 0
+      ? <small>Mapped margin {point.margin}% · concentration {point.concentration.toFixed(1)}/5 · margin score {point.marginScore.toFixed(1)}/5</small>
+      : <small>Mapped growth {point.growth}% · stage score via growth {point.growthScore.toFixed(1)}/5</small>}
+  </div>;
+}
+
+function SqueezeGauge({ name, value, color, focused }: { name: string; value: number; color: string; focused: boolean }) {
+  const maxBand = 5;
+  const ratio = Math.max(0, Math.min(1, value / maxBand));
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const dash = circumference * ratio;
+  return <div className={`squeeze-gauge ${focused ? "focused" : "sector-dimmed"}`} style={{ "--sector": color } as CSSProperties}>
+    <svg viewBox="0 0 88 88" aria-hidden="true">
+      <circle cx="44" cy="44" r={radius} className="squeeze-gauge-track"/>
+      <circle cx="44" cy="44" r={radius} className="squeeze-gauge-value" stroke={color} strokeDasharray={`${dash} ${circumference}`} transform="rotate(-90 44 44)"/>
+      <text x="44" y="42" textAnchor="middle" className="squeeze-gauge-pct">{value.toFixed(1)}%</text>
+      <text x="44" y="56" textAnchor="middle" className="squeeze-gauge-cap">band</text>
+    </svg>
+    <b>{name}</b>
+  </div>;
 }
 
 function SectorImpactMatrix({ selectedIds, onToggle }: { selectedIds: string[]; onToggle: (sectorId: string) => void }) {
@@ -36,66 +234,179 @@ function SectorImpactMatrix({ selectedIds, onToggle }: { selectedIds: string[]; 
   </article>;
 }
 
-function BubbleLabel({ x = 0, y = 0, value = "", activeNames = new Set<string>(), filterActive = false }: { x?: number; y?: number; value?: string; activeNames?: Set<string>; filterActive?: boolean }) {
-  const selected = activeNames.has(value);
-  const className = !filterActive ? "selected" : selected ? "selected" : "dimmed";
-  return <text x={x} y={y - 12} textAnchor="middle" className={`bubble-label ${className}`}>{value}</text>;
-}
-
 function SectorAnalyticalCharts({ selectedIds, holdings }: { selectedIds: string[]; holdings: LiveHolding[] }) {
   const filterActive = selectedIds.length > 0;
-  const selectedLife = lifeCyclePoints.filter((point) => isFocused(selectedIds, point.id));
-  const selectedStructure = marketStructurePoints.filter((point) => isFocused(selectedIds, point.id));
-  const activeLifeNames = new Set(selectedLife.map((point) => point.name));
-  const activeStructureNames = new Set(selectedStructure.map((point) => point.name));
   const heldSymbols = new Set(holdings.map((holding) => holding.symbol));
+  const companyLife = buildCompanyLifeCyclePoints(heldSymbols);
+  const companyStructure = buildCompanyStructurePoints(heldSymbols);
+  const lifeAnchors = industryLifeCycleAnchors();
+  const structureAnchors = industryStructureAnchors();
+  const focusedCompaniesLife = companyLife.filter((point) => isFocused(selectedIds, point.id));
+  const focusedCompaniesStructure = companyStructure.filter((point) => isFocused(selectedIds, point.id));
+  const labelThreshold = filterActive ? 6 : 14;
+  const lifeLabels = new Set(
+    (filterActive ? focusedCompaniesLife : companyLife)
+      .filter((point) => point.held || point.size >= labelThreshold || (filterActive && point.size >= 8))
+      .slice()
+      .sort((a, b) => b.size - a.size)
+      .slice(0, filterActive ? 18 : 14)
+      .map((point) => point.label),
+  );
+  const structureLabels = new Set(
+    (filterActive ? focusedCompaniesStructure : companyStructure)
+      .filter((point) => point.held || point.size >= labelThreshold || (filterActive && point.size >= 8))
+      .slice()
+      .sort((a, b) => b.size - a.size)
+      .slice(0, filterActive ? 18 : 14)
+      .map((point) => point.label),
+  );
+  const industryLegend = sectors.filter((sector) => (sectorCompanies[sector.id] ?? []).length > 0);
+  const insightLife = (filterActive ? focusedCompaniesLife : companyLife).slice().sort((a, b) => b.size - a.size).slice(0, 8);
+  const insightStructure = (filterActive ? focusedCompaniesStructure : companyStructure).slice().sort((a, b) => b.size - a.size).slice(0, 8);
   const relevantDialNames = selectedIds.includes("energy") || selectedIds.length === 0
     ? new Set(["Brent", "USD / INR", "Nifty", "India VIX"])
     : selectedIds.includes("banking") || selectedIds.includes("nbfc")
       ? new Set(["USD / INR", "Nifty", "Bank Nifty", "India VIX"])
       : new Set(["Brent", "USD / INR", "Nifty", "India VIX"]);
+  const macroRadar = macroDials.map((dial) => {
+    const span = dial.max - dial.min || 1;
+    return {
+      axis: dial.name,
+      current: Number((((dial.value - dial.min) / span) * 100).toFixed(1)),
+      trigger: Number((((dial.trigger - dial.min) / span) * 100).toFixed(1)),
+      focused: !filterActive || relevantDialNames.has(dial.name),
+      raw: dial,
+    };
+  });
+  const squeezeMax = Math.max(...squeezeWidths.map((item) => item.value), 1);
+
   return <div className="sector-analytical-stack">
-    <section className="analytics-band"><div className="analytics-subhead"><b>C · Industry life cycle</b><span>Growth stage, expected revenue growth and relative profit pool</span></div><div className="analytics-split bubble-split">
-      <article className="panel bubble-panel"><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 28, right: 30, bottom: 38, left: 14 }}><CartesianGrid strokeDasharray="3 3"/><XAxis type="number" dataKey="stage" domain={[0.6,5.2]} ticks={[1,2,3,4,5]} tickFormatter={(value) => (["", "Growth", "Shakeout", "Mature", "Decline", "Legacy"][Number(value)] ?? "")}/><YAxis type="number" dataKey="growth" unit="%"/><ZAxis type="number" dataKey="profit" range={[120, 900]}/><ReferenceLine y={10} stroke="#65717c" strokeDasharray="5 5"/><Tooltip cursor={{strokeDasharray:"3 3"}} formatter={(value,name) => [name === "growth" ? `${value}%` : value, String(name)]}/><Scatter data={lifeCyclePoints} name="Subsectors" shape="circle">{lifeCyclePoints.map((point) => {
-        const focused = isFocused(selectedIds, point.id);
-        return <Cell key={point.name} fill={point.color} fillOpacity={!filterActive || focused ? 1 : .12} stroke={!filterActive || focused ? "#fff" : point.color} strokeOpacity={!filterActive || focused ? 1 : .18} strokeWidth={!filterActive || focused ? 3 : 1}/>;
-      }) }<LabelList dataKey="name" content={<BubbleLabel activeNames={activeLifeNames} filterActive={filterActive}/>}/></Scatter></ScatterChart></ResponsiveContainer></article>
-      <aside className="panel linked-insight">
-        <h4>Where your money actually sits</h4>
-        <div className="linked-insight-scroll" role="list">
-          {selectedLife.length
-            ? selectedLife.map((point) => <div role="listitem" key={point.name} style={{"--sector":point.color} as CSSProperties}><b>{point.name}</b><span>Expected growth {point.growth}% · profit pool {point.profit}</span></div>)
-            : <p>Select a plotted sector to isolate its subsectors.</p>}
-        </div>
-        <p className="linked-insight-note">White outlines identify selected or portfolio-linked sectors. Bubble area represents relative profit pool, not market capitalisation.</p>
-      </aside>
-    </div></section>
-    <section className="analytics-band"><div className="analytics-subhead"><b>D · Market structure + value-chain sweet spot</b><span>Profitability versus concentration</span></div><div className="analytics-split bubble-split">
-      <article className="panel bubble-panel"><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 28, right: 28, bottom: 34, left: 12 }}><CartesianGrid strokeDasharray="3 3"/><XAxis type="number" dataKey="margin" unit="%" name="Operating margin"/><YAxis type="number" dataKey="concentration" domain={[1.5,5.2]} name="Concentration"/><ZAxis type="number" dataKey="profit" range={[140,900]}/><ReferenceLine x={20} stroke="#65717c" strokeDasharray="5 5"/><ReferenceLine y={3.5} stroke="#65717c" strokeDasharray="5 5"/><Tooltip/><Scatter data={marketStructurePoints}>{marketStructurePoints.map((point) => {
-        const focused = isFocused(selectedIds, point.id);
-        return <Cell key={point.name} fill={point.color} fillOpacity={!filterActive || focused ? 1 : .12} stroke={!filterActive || focused ? "#fff" : point.color} strokeOpacity={!filterActive || focused ? 1 : .18} strokeWidth={!filterActive || focused ? 3 : 1}/>;
-      }) }<LabelList dataKey="name" content={<BubbleLabel activeNames={activeStructureNames} filterActive={filterActive}/>}/></Scatter></ScatterChart></ResponsiveContainer></article>
-      <aside className="panel linked-insight">
-        <h4>Value-chain sweet spot</h4>
-        <div className="linked-insight-scroll" role="list">
-          {(selectedStructure.length ? selectedStructure : marketStructurePoints.slice(0,4)).map((point) => <div role="listitem" key={point.name} style={{"--sector":point.color} as CSSProperties}><b>{point.name}</b><span>{point.margin}% margin · {point.concentration.toFixed(1)}/5 concentration</span></div>)}
-        </div>
-        <p className="linked-insight-note">Top-right combines stronger operating economics with concentrated profit pools; verify regulation and valuation before treating it as attractive.</p>
-      </aside>
-    </div></section>
-    <section className="analytics-band"><div className="analytics-subhead"><b>E · Macro dials + volatility squeeze watch</b><span>Distance to decision triggers and current band width</span></div><div className="analytics-split macro-chart-split">
-      <article className="panel macro-dial-list">{macroDials.map((dial) => {
-        const focused = !filterActive || relevantDialNames.has(dial.name);
-        const position = (dial.value-dial.min)/(dial.max-dial.min)*100;
-        const trigger = (dial.trigger-dial.min)/(dial.max-dial.min)*100;
-        return <div className={focused ? "selected" : "sector-dimmed"} key={dial.name}><header><b>{dial.name}</b><span>{dial.unit}{dial.value.toLocaleString("en-IN")}</span></header><div><i style={{width:`${Math.max(0,Math.min(100,position))}%`}} className={dial.tone}/><em style={{left:`${Math.max(0,Math.min(100,trigger))}%`}}/></div><small>Trigger {dial.unit}{dial.trigger.toLocaleString("en-IN")}</small></div>;
-      })}</article>
-      <article className="panel squeeze-chart"><ResponsiveContainer width="100%" height={300}><BarChart data={squeezeWidths} layout="vertical" margin={{top:10,right:34,bottom:18,left:16}}><CartesianGrid strokeDasharray="3 3" horizontal={false}/><XAxis type="number" unit="%"/><YAxis type="category" dataKey="name" width={82}/><Tooltip formatter={(value)=>[`${value}% of price`,"Band width"]}/><Bar dataKey="value" radius={[0,4,4,0]}>{squeezeWidths.map((item)=>{
-        const selectedCompany = selectedIds.some((sectorId) => (sectorCompanies[sectorId] ?? []).some((company) => company.symbol === item.name) || (heldSymbols.has(item.name) && matchesSelectedSector(sectorId, item.name)));
-        const focused = !filterActive || selectedCompany;
-        return <Cell key={item.name} fill={item.color} fillOpacity={focused ? 1 : .18}/>;
-      })}<LabelList dataKey="value" position="right" formatter={(value)=>`${value}%`}/></Bar></BarChart></ResponsiveContainer></article>
-    </div></section>
+    <section className="analytics-band">
+      <div className="analytics-subhead"><div><b>C · Company life-cycle map</b><span>Companies plotted by mapped stage and growth · industry color · bubble size = universe weight</span></div></div>
+      <div className="analytics-split bubble-split">
+        <article className="panel bubble-panel">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 18, right: 22, bottom: 48, left: 18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
+              <XAxis type="number" dataKey="stage" domain={[0.6, 5.2]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(value) => LIFE_CYCLE_STAGES[Number(value)] ?? ""} tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "X · Life-cycle stage", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
+              <YAxis type="number" dataKey="growth" tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "Y · Expected revenue growth %", angle: -90, position: "insideLeft", offset: 8, ...axisLabelStyle }}/>
+              <ZAxis type="number" dataKey="size" range={[40, 520]}/>
+              <ReferenceLine y={10} stroke="#65717c" strokeDasharray="5 5"/>
+              <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<BubbleTooltip/>}/>
+              <Scatter data={lifeAnchors} name="Industry anchors" fillOpacity={0.16} shape="circle">
+                {lifeAnchors.map((point) => {
+                  const focused = isFocused(selectedIds, point.id);
+                  return <Cell key={`life-anchor-${point.name}`} fill={point.color} fillOpacity={!filterActive || focused ? 0.18 : 0.05} stroke={point.color} strokeOpacity={!filterActive || focused ? 0.55 : 0.12} strokeWidth={2}/>;
+                })}
+              </Scatter>
+              <Scatter data={companyLife} name="Companies" shape="circle">
+                {companyLife.map((point) => {
+                  const focused = isFocused(selectedIds, point.id);
+                  return <Cell key={`life-${point.symbol}`} fill={point.color} fillOpacity={!filterActive || focused ? (point.held ? 1 : 0.88) : 0.1} stroke={point.held || (!filterActive || focused) ? "#fff" : point.color} strokeOpacity={!filterActive || focused ? 1 : 0.15} strokeWidth={point.held ? 2.5 : (!filterActive || focused ? 1.4 : 1)}/>;
+                })}
+                <LabelList dataKey="label" content={<SmartBubbleLabel visibleLabels={lifeLabels}/>}/>
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div className="bubble-axis-legend" aria-hidden="true">
+            {industryLegend.map((sector) => <span key={sector.id} className={!filterActive || isFocused(selectedIds, sector.id) ? "" : "dimmed"}><i style={{ background: sector.color }}/></span>)}
+            <em>Color = industry · size = universe weight % · hollow rings = industry anchors · white stroke = focused / owned</em>
+          </div>
+        </article>
+        <aside className="panel linked-insight">
+          <h4>Company outliers vs industry stage</h4>
+          <div className="linked-insight-scroll" role="list">
+            {insightLife.length
+              ? insightLife.map((point) => <div role="listitem" key={point.symbol} style={{ "--sector": point.color } as CSSProperties}><b>{point.name}</b><span>{point.industryName} · weight {point.size.toFixed(1)}% · growth {point.growth}% · stage {LIFE_CYCLE_STAGES[Math.round(point.stage)] ?? point.stage.toFixed(1)}</span></div>)
+              : <p>Select an industry to isolate its companies on the life-cycle map.</p>}
+          </div>
+          <p className="linked-insight-note">Individual companies can sit ahead of or behind their industry anchor. Bubble area uses tracked universe weight (market-cap / AUM proxy), not industry profit pool.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section className="analytics-band">
+      <div className="analytics-subhead"><div><b>D · Company market-structure map</b><span>Operating margin vs concentration · industry color · bubble size = universe weight</span></div></div>
+      <div className="analytics-split bubble-split">
+        <article className="panel bubble-panel">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 18, right: 22, bottom: 48, left: 22 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
+              <XAxis type="number" dataKey="margin" unit="%" tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "X · Operating margin %", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
+              <YAxis type="number" dataKey="concentration" domain={[1.5, 5.2]} tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "Y · Profit-pool concentration / 5", angle: -90, position: "insideLeft", offset: 4, ...axisLabelStyle }}/>
+              <ZAxis type="number" dataKey="size" range={[40, 520]}/>
+              <ReferenceLine x={20} stroke="#65717c" strokeDasharray="5 5"/>
+              <ReferenceLine y={3.5} stroke="#65717c" strokeDasharray="5 5"/>
+              <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<BubbleTooltip/>}/>
+              <Scatter data={structureAnchors} name="Industry anchors" shape="circle">
+                {structureAnchors.map((point) => {
+                  const focused = isFocused(selectedIds, point.id);
+                  return <Cell key={`struct-anchor-${point.name}`} fill={point.color} fillOpacity={!filterActive || focused ? 0.18 : 0.05} stroke={point.color} strokeOpacity={!filterActive || focused ? 0.55 : 0.12} strokeWidth={2}/>;
+                })}
+              </Scatter>
+              <Scatter data={companyStructure} name="Companies" shape="circle">
+                {companyStructure.map((point) => {
+                  const focused = isFocused(selectedIds, point.id);
+                  return <Cell key={`struct-${point.symbol}`} fill={point.color} fillOpacity={!filterActive || focused ? (point.held ? 1 : 0.88) : 0.1} stroke={point.held || (!filterActive || focused) ? "#fff" : point.color} strokeOpacity={!filterActive || focused ? 1 : 0.15} strokeWidth={point.held ? 2.5 : (!filterActive || focused ? 1.4 : 1)}/>;
+                })}
+                <LabelList dataKey="label" content={<SmartBubbleLabel visibleLabels={structureLabels}/>}/>
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div className="bubble-axis-legend" aria-hidden="true">
+            {industryLegend.map((sector) => <span key={`d-${sector.id}`} className={!filterActive || isFocused(selectedIds, sector.id) ? "" : "dimmed"}><i style={{ background: sector.color }}/></span>)}
+            <em>Top-right = stronger margins in more concentrated profit pools · size = universe weight %</em>
+          </div>
+        </article>
+        <aside className="panel linked-insight">
+          <h4>Value-chain sweet spot · companies</h4>
+          <div className="linked-insight-scroll" role="list">
+            {insightStructure.map((point) => <div role="listitem" key={point.symbol} style={{ "--sector": point.color } as CSSProperties}><b>{point.name}</b><span>{point.industryName} · {point.margin}% margin · {point.concentration.toFixed(1)}/5 concentration · weight {point.size.toFixed(1)}%</span></div>)}
+          </div>
+          <p className="linked-insight-note">Industry rings show the sector sweet-spot; company bubbles reveal names that deviate on margin quality or universe weight within the same industry color.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section className="analytics-band">
+      <div className="analytics-subhead"><div><b>E · Macro trigger radar + squeeze multiples</b><span>Continuous distance-to-trigger and volatility band compression — timing context A–D do not show</span></div></div>
+      <div className="analytics-split macro-trigger-split">
+        <article className="panel macro-radar-panel">
+          <div className="macro-panel-caption"><b>Macro dials on a common 0–100 range</b><span>Current level versus decision trigger · dimmed dials are less relevant to the active industry filter</span></div>
+          <ResponsiveContainer width="100%" height={300}>
+            <RadarChart data={macroRadar} outerRadius="68%" margin={{ top: 16, right: 28, bottom: 12, left: 28 }}>
+              <PolarGrid stroke="#3a4550"/>
+              <PolarAngleAxis dataKey="axis" tick={{ fill: "#fff", fontSize: 10, fontWeight: 800 }}/>
+              <PolarRadiusAxis angle={90} domain={[0, 100]} tickCount={5} tick={{ fill: "#9ba6b2", fontSize: 8 }}/>
+              <Radar name="Decision trigger" dataKey="trigger" stroke="#9ca4ad" fill="#9ca4ad" fillOpacity={0.08} strokeDasharray="5 4" isAnimationActive={false}/>
+              <Radar name="Current level" dataKey="current" stroke="#72aaff" fill="#72aaff" fillOpacity={0.28} strokeWidth={2.4} isAnimationActive={false}/>
+              <Legend/>
+              <Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)} / 100 of dial range`, String(name)]}/>
+            </RadarChart>
+          </ResponsiveContainer>
+          <div className="macro-dial-chips">
+            {macroRadar.map((dial) => <div key={dial.axis} className={dial.focused ? "focused" : "sector-dimmed"}><b>{dial.axis}</b><span>{dial.raw.unit}{dial.raw.value.toLocaleString("en-IN")}</span><small>Trigger {dial.raw.unit}{dial.raw.trigger.toLocaleString("en-IN")} · {Math.abs(dial.current - dial.trigger).toFixed(0)} pts from trigger</small></div>)}
+          </div>
+        </article>
+        <article className="panel squeeze-multiples-panel">
+          <div className="macro-panel-caption"><b>Volatility squeeze · small multiples</b><span>Band width as % of price · tighter rings = more compressed · grouped index vs names</span></div>
+          {(["Index", "Name"] as const).map((group) => {
+            const rows = squeezeWidths.filter((item) => item.group === group);
+            return <div key={group} className="squeeze-group">
+              <h4>{group === "Index" ? "Index bands" : "Portfolio-linked names"}</h4>
+              <div className="squeeze-multiples">
+                {rows.map((item) => {
+                  const selectedCompany = selectedIds.some((sectorId) => (sectorCompanies[sectorId] ?? []).some((company) => company.symbol === item.name) || (heldSymbols.has(item.name) && matchesSelectedSector(sectorId, item.name)));
+                  const focused = !filterActive || item.group === "Index" || selectedCompany;
+                  return <SqueezeGauge key={item.name} name={item.name} value={item.value} color={item.color} focused={focused}/>;
+                })}
+              </div>
+            </div>;
+          })}
+          <p className="linked-insight-note">Scale is relative to a {squeezeMax.toFixed(1)}% reference band. Use with the radar: compressed names near a macro trigger deserve tighter position sizing, not automatic entries.</p>
+        </article>
+      </div>
+    </section>
   </div>;
 }
 

@@ -4,8 +4,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="$HOME/Library/Logs/PortfolioIntelligence"
 PID_FILE="$LOG_DIR/service.pid"
+LOCK_DIR="$LOG_DIR/service.start.lockdir"
 
 mkdir -p "$LOG_DIR"
+
+acquire_start_lock() {
+  local waited=0
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    if curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1; then
+      printf 'Portfolio Intelligence is already running at http://localhost:5050/\n'
+      exit 0
+    fi
+    waited=$((waited + 1))
+    if (( waited >= 75 )); then
+      # Stale lock from a crashed starter: reclaim after timeout.
+      rmdir "$LOCK_DIR" 2>/dev/null || true
+      if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        printf 'Portfolio Intelligence start is already in progress. Check ~/Library/Logs/PortfolioIntelligence/.\n' >&2
+        exit 1
+      fi
+      break
+    fi
+    sleep 1
+  done
+  trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+}
+
+acquire_start_lock
 
 if curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1; then
   printf 'Portfolio Intelligence is already running at http://localhost:5050/\n'

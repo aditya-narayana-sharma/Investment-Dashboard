@@ -1,5 +1,6 @@
 import { getPublicSectorMarketSnapshot, getSectorMarketSnapshot } from "../../../sector-live-server";
 import { restoreKiteSession } from "../../../kite-live-server";
+import { readPersistedKiteSession } from "../../../kite-session-store";
 import { sectorCompanies } from "../../../sector-company-data";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,12 @@ export async function GET(request: Request) {
   const sectorId = requested in sectorCompanies ? requested : "pharma";
   const headers = { "Cache-Control": "no-store, max-age=0" };
   const storedSession = readCookie(request, "kite_dashboard_session");
-  if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), false);
+  if (storedSession) {
+    restoreKiteSession(decodeURIComponent(storedSession), false);
+  } else {
+    const persisted = readPersistedKiteSession();
+    if (persisted) restoreKiteSession(persisted, false);
+  }
   try {
     return Response.json(await getSectorMarketSnapshot(sectorId), { headers });
   } catch {

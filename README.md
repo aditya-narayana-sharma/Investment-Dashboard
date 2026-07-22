@@ -37,7 +37,7 @@ and Flask/Waitress bind to localhost, so private dashboard data is not exposed
 to other devices or network interfaces.
 The local-only launcher restores the Mac dashboard at `http://localhost:5050/` without exposing private data to the LAN. Tailscale Serve provides private iPhone and mobile-data access without exposing port `5050` to the public internet.
 
-On macOS, open `http://localhost:5050/` in Safari and choose **File → Add to Dock**. The Flask installation guide is available at `/install` on the same address.
+Install the Mac Dock app once with `npm run desktop` (creates `~/Applications/Portfolio Intelligence.app` and pins it). Alternatively open `http://localhost:5050/` in Safari and choose **File → Add to Dock**. For iPhone, run `npm run iphone` (Tailscale when signed in, otherwise same-Wi-Fi LAN), open the printed Install URL in Safari, then **Share → Add to Home Screen**. The guide is also at `/install`.
 
 The iPhone refreshes all dashboard sources when it opens or returns to the
 foreground, when connectivity returns, when **Refresh now** is pressed, and
@@ -107,10 +107,11 @@ Kite snapshot and never labels it as live.
 
 Use the dashboard's **Authenticate Kite** action only when the existing session
 genuinely requires authentication. Complete the Zerodha login, return to the
-dashboard, and press **Refresh now**. The session ID is retained in an HTTP-only
-localhost cookie for up to 12 hours; Zerodha's normal daily authentication expiry
-still applies. Avoid additional same-day logins because Zerodha can invalidate the
-previous access token for the same API key.
+dashboard, and press **Refresh now**. After one successful login, the daily
+access token is kept until the next ~06:00 IST boundary (Zerodha's once-per-day
+rule). The dashboard and local Kite MCP server reuse that token across restarts
+and MCP session rotations; avoid additional same-day logins because Zerodha can
+invalidate the previous access token for the same API key.
 
 ## Research Sources
 

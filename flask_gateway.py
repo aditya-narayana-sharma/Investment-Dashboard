@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
+from http.client import RemoteDisconnected
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request as UpstreamRequest
@@ -18,6 +19,8 @@ from flask import Flask, Response, request
 ROOT = Path(__file__).resolve().parent
 UPSTREAM = os.environ.get("DASHBOARD_UPSTREAM", "http://127.0.0.1:3000").rstrip("/") + "/"
 UPSTREAM_TIMEOUT_SECONDS = int(os.environ.get("DASHBOARD_UPSTREAM_TIMEOUT", "180"))
+# Content digest force-refresh can take up to 300s in the Next route; keep gateway ahead of that.
+CONTENT_REFRESH_TIMEOUT_SECONDS = int(os.environ.get("DASHBOARD_CONTENT_REFRESH_TIMEOUT", "320"))
 HEALTH_SNAPSHOT_PATH = Path(os.environ.get(
     "PORTFOLIO_HEALTH_SNAPSHOT_PATH",
     ROOT / "artifacts" / "private" / "health-snapshot.json",
@@ -41,7 +44,8 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 
-app = Flask(__name__)
+app = Flask("Portfolio Intelligence")
+app.config["APP_NAME"] = "Portfolio Intelligence"
 
 
 def _health_snapshot_response(payload: dict, status: int = 200) -> Response:
@@ -154,6 +158,7 @@ def health() -> Response:
         upstream_status = 0
     payload = {
         "status": "ok" if upstream_status == 200 else "degraded",
+        "app": "Portfolio Intelligence",
         "gateway": "flask",
         "upstream": UPSTREAM.rstrip("/"),
         "upstreamStatus": upstream_status,
@@ -235,21 +240,31 @@ def health_snapshot() -> Response:
 
 @app.get("/install")
 def install() -> Response:
-    dashboard_url = request.host_url
+    dashboard_url = request.host_url.rstrip("/") + "/"
     return Response(
         f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-title" content="Portfolio">
         <meta name="theme-color" content="#050607"><title>Install Portfolio Intelligence</title>
+        <link rel="manifest" href="/manifest.webmanifest">
+        <link rel="apple-touch-icon" href="/app-icon-192.png">
         <style>body{{margin:0;background:#050607;color:#f1f2f3;font:16px system-ui;line-height:1.55}}
         main{{width:min(720px,calc(100% - 36px));margin:40px auto}}h1{{font:700 38px Georgia,serif}}
         section{{border-top:3px solid #4c8fff;background:#0d1013;padding:22px;margin:18px 0}}
-        li{{margin:10px 0;color:#c5cbd2}}a{{display:inline-block;background:#174b84;color:white;padding:11px 14px;text-decoration:none;font-weight:800}}
-        code{{color:#8fc2ff}}</style></head><body><main><h1>Install Portfolio Intelligence</h1>
-        <p>This private app stays on your Mac and is shared with your iPhone over the same trusted Wi-Fi network.</p>
-        <section><h2>iPhone or iPad</h2><ol><li>Open <code>{escape(dashboard_url)}</code> in Safari.</li>
-        <li>Tap Share.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol></section>
-        <section><h2>macOS</h2><ol><li>Open the dashboard in Safari.</li><li>Choose <b>File → Add to Dock</b>.</li>
-        <li>Open Portfolio Intelligence from the Dock or Applications.</li></ol></section>
+        li{{margin:10px 0;color:#c5cbd2}}a{{display:inline-block;background:#174b84;color:white;padding:11px 14px;text-decoration:none;font-weight:800;margin-right:10px;margin-top:8px}}
+        code{{color:#8fc2ff;word-break:break-all}}</style></head><body><main><h1>Install Portfolio Intelligence</h1>
+        <p>Private app hosted on your Mac. Install once on Dock and Home Screen; it keeps using this Mac as the server.</p>
+        <section><h2>iPhone or iPad</h2><ol>
+        <li>Open this page in <b>Safari</b> (not Chrome): <code>{escape(dashboard_url)}</code></li>
+        <li>Tap the Share button.</li>
+        <li>Choose <b>Add to Home Screen</b>.</li>
+        <li>Tap <b>Add</b>. The icon opens as a standalone app.</li></ol>
+        <p>Prefer Tailscale on both devices for mobile-data access. Same Wi-Fi works when the Mac is bound for LAN.</p></section>
+        <section><h2>Mac Dock app</h2><ol>
+        <li>On the Mac run <code>npm run desktop</code> once (creates <b>Portfolio Intelligence.app</b> in ~/Applications and pins it to the Dock).</li>
+        <li>Or in Safari open the dashboard and choose <b>File → Add to Dock</b>.</li>
+        <li>The Dock icon starts the local service if needed and opens the app window.</li></ol></section>
         <a href="/">Open dashboard</a></main></body></html>""",
         content_type="text/html",
     )
@@ -265,15 +280,21 @@ def proxy(path: str) -> Response:
         headers=_request_headers(),
         method=request.method,
     )
+    timeout_seconds = (
+        CONTENT_REFRESH_TIMEOUT_SECONDS
+        if path.startswith("api/content/")
+        else UPSTREAM_TIMEOUT_SECONDS
+    )
     try:
-        with urlopen(upstream_request, timeout=UPSTREAM_TIMEOUT_SECONDS) as upstream_response:
+        with urlopen(upstream_request, timeout=timeout_seconds) as upstream_response:
             payload = b"" if request.method == "HEAD" else upstream_response.read()
             return Response(payload, status=upstream_response.status, headers=_response_headers(upstream_response.headers))
     except HTTPError as error:
         payload = b"" if request.method == "HEAD" else error.read()
         return Response(payload, status=error.code, headers=_response_headers(error.headers))
-    except (URLError, TimeoutError) as error:
-        return _proxy_error(f"The Flask gateway could not reach {UPSTREAM.rstrip('/')}: {error.reason if isinstance(error, URLError) else error}")
+    except (URLError, TimeoutError, RemoteDisconnected, ConnectionResetError, BrokenPipeError, OSError) as error:
+        reason = error.reason if isinstance(error, URLError) else error
+        return _proxy_error(f"The Flask gateway could not reach {UPSTREAM.rstrip('/')}: {reason}")
 
 
 if __name__ == "__main__":

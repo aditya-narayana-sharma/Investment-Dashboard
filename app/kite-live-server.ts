@@ -1,5 +1,7 @@
 import { classificationSources, securityClassifications } from "./portfolio-data";
-import type { AllocationSlice, KiteSnapshot, LiveGtt, LiveHolding, LiveOrder } from "./live-types";
+import { buildContiguousAllocations, sortDonutHoldings } from "./portfolio-donut";
+import { persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
+import type { KiteSnapshot, LiveGtt, LiveHolding, LiveOrder } from "./live-types";
 
 type JsonObject = Record<string, unknown>;
 type McpState = {
@@ -15,9 +17,12 @@ const state = globalState.__kiteDashboardMcp ??= { requestId: 1 };
 const endpoint = process.env.KITE_MCP_URL ?? "http://127.0.0.1:8080/mcp";
 const AUTH_URL_MAX_AGE_MS = 20 * 60 * 1000;
 const SNAPSHOT_COALESCE_MS = 5 * 1000;
+const KITE_CALL_MIN_GAP_MS = 350;
 let lastLiveSnapshot: KiteSnapshot | undefined;
 let lastLiveAt = 0;
 let snapshotInFlight: Promise<KiteSnapshot> | undefined;
+let kiteCallChain: Promise<unknown> = Promise.resolve();
+let lastKiteCallAt = 0;
 
 const metadata = new Map(Object.entries(securityClassifications));
 
@@ -62,6 +67,9 @@ async function postMcp(payload: JsonObject, sessionId: string | null | undefined
     if ((response.status === 400 || response.status === 404) && sessionId) {
       state.sessionId = undefined;
       clearAuthUrl();
+      // Drop the dead MCP session id from disk so the next request creates a fresh
+      // MCP session that can re-apply the persisted daily Kite access token.
+      clearPersistedKiteSession();
       throw new KiteSessionInvalid("Kite MCP session expired");
     }
     throw new Error(`Kite MCP returned HTTP ${response.status}`);
@@ -91,6 +99,7 @@ async function initializeSession() {
 }
 
 async function ensureSession() {
+  adoptPersistedKiteSession();
   if (state.sessionId) return;
   state.sessionInit ??= initializeSession().finally(() => {
     state.sessionInit = undefined;
@@ -98,7 +107,7 @@ async function ensureSession() {
   await state.sessionInit;
 }
 
-export async function callKiteTool(name: string, args: JsonObject = {}): Promise<unknown> {
+async function invokeKiteTool(name: string, args: JsonObject = {}): Promise<unknown> {
   await ensureSession();
   const { body } = await postMcp({ jsonrpc: "2.0", id: state.requestId++, method: "tools/call", params: { name, arguments: args } });
   const result = body.result as JsonObject | undefined;
@@ -113,6 +122,17 @@ export async function callKiteTool(name: string, args: JsonObject = {}): Promise
   }
   if (typeof text !== "string") return null;
   try { return JSON.parse(text); } catch { return text; }
+}
+
+export async function callKiteTool(name: string, args: JsonObject = {}): Promise<unknown> {
+  const scheduled = kiteCallChain.then(async () => {
+    const waitMs = Math.max(0, KITE_CALL_MIN_GAP_MS - (Date.now() - lastKiteCallAt));
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    lastKiteCallAt = Date.now();
+    return invokeKiteTool(name, args);
+  });
+  kiteCallChain = scheduled.then(() => undefined, () => undefined);
+  return scheduled;
 }
 
 async function getLoginUrl() {
@@ -175,13 +195,6 @@ function mapLiveHoldings(rawHoldings: JsonObject[], rawPositions: JsonObject[]):
   return rows.map((holding) => ({ ...holding, weight: total ? holding.value / total * 100 : 0 })).sort((a, b) => b.value - a.value);
 }
 
-function allocations(holdings: LiveHolding[], key: "marketCap" | "sector" | "subSector", colors: Record<string, string>): AllocationSlice[] {
-  const grouped = new Map<string, number>();
-  for (const holding of holdings) grouped.set(holding[key], (grouped.get(holding[key]) ?? 0) + holding.value);
-  const total = holdings.reduce((sum, holding) => sum + holding.value, 0);
-  return [...grouped.entries()].map(([name, value]) => ({ name, value, weight: total ? value / total * 100 : 0, color: colors[name] ?? "#6f8193" }));
-}
-
 function mapOrders(rawOrders: JsonObject[]): LiveOrder[] {
   return rawOrders.slice().reverse().map((raw) => ({
     id: string(raw.order_id), symbol: string(raw.tradingsymbol), side: string(raw.transaction_type), qty: number(raw.quantity),
@@ -221,7 +234,7 @@ function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
 }
 
 export function restoreKiteSession(sessionId?: string, replaceExisting = false) {
-  // Prefer the in-memory MCP session. Only adopt a cookie when no session exists,
+  // Prefer the in-memory MCP session. Only adopt a cookie/file when no session exists,
   // or when a caller explicitly opts into replacement (avoid multi-tab clobber).
   if (!sessionId) return;
   if (!state.sessionId) {
@@ -233,6 +246,12 @@ export function restoreKiteSession(sessionId?: string, replaceExisting = false) 
     state.sessionId = sessionId;
     clearAuthUrl();
   }
+}
+
+function adoptPersistedKiteSession() {
+  if (state.sessionId) return;
+  const persisted = readPersistedKiteSession();
+  if (persisted) restoreKiteSession(persisted, false);
 }
 
 export function currentKiteSession() {
@@ -269,10 +288,7 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       .map((result, index) => result.status === "rejected" ? toolNames[index] : null)
       .filter((name): name is typeof toolNames[number] => name !== null);
     const holdings = mapLiveHoldings(holdingsRaw as JsonObject[], positionsRaw as JsonObject[]);
-    const donutHoldings = holdings.slice().sort((a, b) =>
-      `${a.marketCap}|${a.sector}|${a.subSector}|${String(a.donutOrder).padStart(3, "0")}|${a.symbol}`
-        .localeCompare(`${b.marketCap}|${b.sector}|${b.subSector}|${String(b.donutOrder).padStart(3, "0")}|${b.symbol}`),
-    );
+    const donutHoldings = sortDonutHoldings(holdings);
     const value = holdings.reduce((sum, holding) => sum + holding.value, 0);
     const invested = holdings.reduce((sum, holding) => sum + holding.avg * holding.qty, 0);
     const pnl = holdings.reduce((sum, holding) => sum + holding.pnl, 0);
@@ -293,9 +309,9 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       holdings,
       orders: mapOrders(ordersRaw as JsonObject[]),
       gtts: mapGtts(gttsRaw as JsonObject[]),
-      marketCapAllocation: allocations(donutHoldings, "marketCap", marketCapColors),
-      sectorAllocation: allocations(donutHoldings, "sector", sectorColors),
-      subSectorAllocation: allocations(donutHoldings, "subSector", subSectorColors),
+      marketCapAllocation: buildContiguousAllocations(donutHoldings, "marketCap", marketCapColors),
+      sectorAllocation: buildContiguousAllocations(donutHoldings, "sector", sectorColors),
+      subSectorAllocation: buildContiguousAllocations(donutHoldings, "subSector", subSectorColors),
       classification: {
         industrySource: classificationSources.industry,
         marketCapSource: classificationSources.marketCap,
@@ -307,6 +323,7 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     };
     lastLiveSnapshot = snapshot;
     lastLiveAt = Date.now();
+    persistKiteSession(state.sessionId);
     return snapshot;
   } catch (error) {
     if (error instanceof KiteSessionInvalid && !retried) return fetchKiteSnapshot(true);
@@ -322,10 +339,19 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
         : fallbackSnapshot("Zerodha rate limit reached. Retry after the current request window resets.");
     }
 
+    if (lastLiveSnapshot) {
+      return {
+        ...lastLiveSnapshot,
+        status: "snapshot",
+        asOf: `${lastLiveSnapshot.asOf} · cached`,
+        message: `Kite refresh failed (${message}). Retaining the last validated Kite snapshot until the next five-minute refresh.`,
+      };
+    }
+
     // Some Kite SDK failures arrive as a generic "Failed to execute" message
-    // instead of an explicit token-expired error. Probe the profile before
-    // accepting the cached fallback so the dashboard can still surface a
-    // usable authentication link after the daily access token expires.
+    // instead of an explicit token-expired error. Probe the profile only when
+    // no validated snapshot exists so the dashboard can still surface a login
+    // link after the daily access token expires.
     try {
       await callKiteTool("get_profile");
     } catch {
