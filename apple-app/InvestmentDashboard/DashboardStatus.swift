@@ -147,9 +147,8 @@ final class DashboardStatusModel: ObservableObject {
                 return
             }
 
-            async let auditRequest = try? client.audit(baseURL: baseURL)
-            async let healthRequest = try? client.healthFreshness(baseURL: baseURL)
-            let (latestAudit, latestHealth) = await (auditRequest, healthRequest)
+            let latestAudit = try? await client.audit(baseURL: baseURL)
+            let latestHealth = try? await client.healthFreshness(baseURL: baseURL)
             audit = latestAudit
             healthFreshness = latestHealth
             lastChecked = Date()
