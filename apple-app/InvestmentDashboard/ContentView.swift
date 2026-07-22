@@ -31,16 +31,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NativeDashboardHeader(
-                browser: browser,
-                statusModel: statusModel,
-#if os(iOS)
-                healthSync: healthSync,
-#endif
-                refresh: refreshAll,
-                report: openReport,
-                settings: { showingSettings = true }
-            )
+            nativeHeader
 
             NativeWorkspacePicker(selection: workspace)
             NativeFreshnessStrip(model: statusModel)
@@ -115,6 +106,28 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private var nativeHeader: some View {
+#if os(iOS)
+        NativeDashboardHeader(
+            browser: browser,
+            statusModel: statusModel,
+            healthSync: healthSync,
+            refresh: refreshAll,
+            report: openReport,
+            settings: { showingSettings = true }
+        )
+#else
+        NativeDashboardHeader(
+            browser: browser,
+            statusModel: statusModel,
+            refresh: refreshAll,
+            report: openReport,
+            settings: { showingSettings = true }
+        )
+#endif
     }
 
     private func startSession() {
