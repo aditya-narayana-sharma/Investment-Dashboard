@@ -1,4 +1,5 @@
 #if os(iOS)
+import Combine
 import Foundation
 import HealthKit
 
@@ -278,14 +279,15 @@ final class HealthKitSyncCoordinator: ObservableObject {
             ("Core sleep", [HKCategoryValueSleepAnalysis.asleepCore.rawValue]),
             ("Awake", [HKCategoryValueSleepAnalysis.awake.rawValue]),
         ]
-        let daySamples = try await categorySamples(type: type, start: date, end: end)
-        let weekSamples = try await categorySamples(type: type, start: weekStart, end: end)
-        let monthSamples = try await categorySamples(type: type, start: monthStart, end: end)
+        let overlapAllowance: TimeInterval = 12 * 60 * 60
+        let daySamples = try await categorySamples(type: type, start: date.addingTimeInterval(-overlapAllowance), end: end)
+        let weekSamples = try await categorySamples(type: type, start: weekStart.addingTimeInterval(-overlapAllowance), end: end)
+        let monthSamples = try await categorySamples(type: type, start: monthStart.addingTimeInterval(-overlapAllowance), end: end)
         return definitions.compactMap { label, values in
-            let day = duration(of: values, in: daySamples)
+            let day = duration(of: values, in: daySamples, windowStart: date, windowEnd: end)
             guard day > 0 else { return nil }
-            let week = duration(of: values, in: weekSamples) / 7
-            let month = duration(of: values, in: monthSamples) / 30
+            let week = duration(of: values, in: weekSamples, windowStart: weekStart, windowEnd: end) / 7
+            let month = duration(of: values, in: monthSamples, windowStart: monthStart, windowEnd: end) / 30
             return durationMetric(label: label, day: day, week: week, month: month, date: date)
         }
     }
@@ -301,8 +303,17 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
     }
 
-    private func duration(of values: Set<Int>, in samples: [HKCategorySample]) -> TimeInterval {
-        samples.filter { values.contains($0.value) }.reduce(0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+    private func duration(
+        of values: Set<Int>,
+        in samples: [HKCategorySample],
+        windowStart: Date,
+        windowEnd: Date
+    ) -> TimeInterval {
+        samples.filter { values.contains($0.value) }.reduce(0) { total, sample in
+            let clippedStart = max(sample.startDate, windowStart)
+            let clippedEnd = min(sample.endDate, windowEnd)
+            return total + max(0, clippedEnd.timeIntervalSince(clippedStart))
+        }
     }
 
     private func durationMetric(label: String, day: TimeInterval, week: TimeInterval, month: TimeInterval, date: Date) -> DashboardHealthMetric {

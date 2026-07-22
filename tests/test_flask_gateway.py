@@ -105,13 +105,17 @@ class FlaskGatewayTests(unittest.TestCase):
             }],
             "sources": [{"source": "Apple Health / HealthKit", "status": "Synced", "detail": "Completed day", "tone": "green"}],
         }
-        with tempfile.TemporaryDirectory() as directory, patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", Path(directory) / "health.json"):
-            stored = self.client.post(
-                "/_health/snapshot",
-                json=snapshot,
-                headers={"Authorization": "Bearer portfolio-local-health-token"},
-            )
-            loaded = self.client.get("/_health/snapshot")
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", Path(directory) / "health.json"),
+                patch.object(flask_gateway, "HEALTH_TOKEN", "portfolio-test-admin-token"),
+            ):
+                stored = self.client.post(
+                    "/_health/snapshot",
+                    json=snapshot,
+                    headers={"Authorization": "Bearer portfolio-test-admin-token"},
+                )
+                loaded = self.client.get("/_health/snapshot")
 
         self.assertEqual(stored.status_code, 201)
         self.assertEqual(loaded.status_code, 200)
@@ -160,7 +164,11 @@ class FlaskGatewayTests(unittest.TestCase):
                 )
                 self.assertEqual(stored.status_code, 201)
 
-                revoked = self.client.delete("/_health/pair/iphone-test-install")
+                revoked = self.client.delete(
+                    "/_health/pair/iphone-test-install",
+                    headers={"Authorization": f"Bearer {token}"},
+                    environ_base={"REMOTE_ADDR": "10.0.0.7"},
+                )
                 self.assertEqual(revoked.status_code, 200)
                 rejected = self.client.post(
                     "/_health/snapshot",
@@ -172,6 +180,30 @@ class FlaskGatewayTests(unittest.TestCase):
     def test_rejects_remote_pairing_code_generation_without_admin_token(self):
         response = self.client.post("/_health/pair/code", environ_base={"REMOTE_ADDR": "10.0.0.7"})
         self.assertEqual(response.status_code, 401)
+
+    def test_rejects_malformed_or_future_health_dates(self):
+        base = {
+            "schemaVersion": 1,
+            "source": "Apple Health",
+            "capturedAt": "2026-07-19T08:00:00Z",
+            "categories": [{
+                "name": "Activity",
+                "metrics": [{"label": "Steps", "value": "10,000"}],
+            }],
+        }
+        with patch.object(flask_gateway, "HEALTH_TOKEN", "portfolio-test-admin-token"):
+            malformed = self.client.post(
+                "/_health/snapshot",
+                json={**base, "dataDate": "not-a-date"},
+                headers={"Authorization": "Bearer portfolio-test-admin-token"},
+            )
+            future = self.client.post(
+                "/_health/snapshot",
+                json={**base, "dataDate": "2999-01-01"},
+                headers={"Authorization": "Bearer portfolio-test-admin-token"},
+            )
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(future.status_code, 400)
 
 
 if __name__ == "__main__":

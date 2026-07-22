@@ -276,7 +276,8 @@ struct DashboardSettingsView: View {
                         .foregroundStyle(pairing.isPaired ? .green : .secondary)
                     if pairing.isPaired {
                         Button("Remove Health pairing", role: .destructive) {
-                            pairing.unpair()
+                            guard let normalizedURL else { return }
+                            Task { _ = await pairing.unpair(baseURL: normalizedURL) }
                         }
                     } else {
                         TextField("Pairing code from Mac", text: $pairingCode)

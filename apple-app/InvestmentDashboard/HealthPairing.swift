@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Security
 #if os(iOS)
@@ -123,6 +124,28 @@ struct HealthPairingClient {
         return try JSONDecoder().decode(HealthPairingResponse.self, from: data)
     }
 
+    func revoke(baseURL: URL, installId: String, token: String) async throws {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw DashboardClientError.invalidURL
+        }
+        components.path = "/_health/pair/\(installId)"
+        components.query = nil
+        guard let url = components.url else { throw DashboardClientError.invalidURL }
+
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HealthCredentialError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let serverMessage = (try? JSONDecoder().decode(ServerMessage.self, from: data).message)
+                ?? "Pairing removal failed with HTTP \(http.statusCode)."
+            throw HealthCredentialError.server(serverMessage)
+        }
+    }
+
     private struct ServerMessage: Decodable {
         let message: String
     }
@@ -169,10 +192,18 @@ final class HealthPairingModel: ObservableObject {
         }
     }
 
-    func unpair() {
-        HealthCredentialStore.remove()
-        isPaired = false
-        message = "HealthKit upload is not paired."
+    func unpair(baseURL: URL) async -> Bool {
+        do {
+            let token = try HealthCredentialStore.token()
+            try await client.revoke(baseURL: baseURL, installId: installId, token: token)
+            HealthCredentialStore.remove()
+            isPaired = false
+            message = "HealthKit upload pairing removed."
+            return true
+        } catch {
+            message = "Could not remove Health pairing: \(error.localizedDescription)"
+            return false
+        }
     }
 
     private var deviceLabel: String {
