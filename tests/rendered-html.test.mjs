@@ -244,7 +244,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(flaskGateway, /PORTFOLIO_HEALTH_TOKEN/);
   assert.match(flaskGateway, /\/_startup\/audit/);
   assert.match(healthKitSync, /Authorization/);
-  assert.match(healthKitSync, /X-Portfolio-Health-Token/);
+  assert.match(healthKitSync, /HealthCredentialStore\.token\(\)/);
   assert.match(liveServer, /status: unavailable\.length \? "partial" : "live"/);
   assert.match(page, /skip-link/);
   assert.match(globalCss, /startup-audit-banner/);
