@@ -39,6 +39,23 @@ The local-only launcher restores the Mac dashboard at `http://localhost:5050/` w
 
 Install the Mac Dock app once with `npm run desktop` (creates `~/Applications/Portfolio Intelligence.app` and pins it). Alternatively open `http://localhost:5050/` in Safari and choose **File → Add to Dock**. For iPhone, run `npm run iphone` (Tailscale when signed in, otherwise same-Wi-Fi LAN), open the printed Install URL in Safari, then **Share → Add to Home Screen**. The guide is also at `/install`.
 
+The primary full-featured iPhone client is the SwiftUI app in
+`apple-app/InvestmentDashboard.xcodeproj`. It provides native onboarding,
+Investment/Sectoral/Health workspace navigation, startup-audit and connection
+status, HealthKit D-1 upload, offline recovery, and PDF sharing around one
+persistent WKWebView. The Safari PWA remains a fallback installation path.
+See `apple-app/README.md` for physical-device and TestFlight instructions.
+
+After installing the native app, generate its single-use HealthKit pairing code
+on the Mac:
+
+```bash
+npm run iphone:pair
+```
+
+The paired upload token is stored in the iPhone Keychain; the Mac stores only
+its hash in the ignored private artifacts directory.
+
 The iPhone refreshes all dashboard sources when it opens or returns to the
 foreground, when connectivity returns, when **Refresh now** is pressed, and
 every five minutes while active. Mac-side updates therefore appear on iPhone

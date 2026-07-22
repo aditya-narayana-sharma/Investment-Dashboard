@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
+import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
@@ -29,10 +32,17 @@ STARTUP_AUDIT_PATH = Path(os.environ.get(
     "PORTFOLIO_STARTUP_AUDIT_PATH",
     ROOT / "artifacts" / "private" / "startup-audit.json",
 ))
+HEALTH_PAIRINGS_PATH = Path(os.environ.get(
+    "PORTFOLIO_HEALTH_PAIRINGS_PATH",
+    ROOT / "artifacts" / "private" / "health-pairings.json",
+))
 # Shared secret for HealthKit POST. Override via PORTFOLIO_HEALTH_TOKEN in production.
 HEALTH_TOKEN = os.environ.get("PORTFOLIO_HEALTH_TOKEN", "portfolio-local-health-token")
 MAX_HEALTH_SNAPSHOT_BYTES = 512 * 1024
+PAIRING_CODE_TTL_SECONDS = 5 * 60
 IST = timezone(timedelta(hours=5, minutes=30))
+PAIRING_CODES: dict[str, datetime] = {}
+PAIRING_LOCK = threading.Lock()
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -55,17 +65,80 @@ def _health_snapshot_response(payload: dict, status: int = 200) -> Response:
     return response
 
 
-def _authorized_health_post() -> bool:
+def _token_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _load_health_pairings() -> dict:
+    try:
+        payload = json.loads(HEALTH_PAIRINGS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {"schemaVersion": 1, "installations": {}}
+    if not isinstance(payload, dict) or not isinstance(payload.get("installations"), dict):
+        return {"schemaVersion": 1, "installations": {}}
+    return payload
+
+
+def _write_health_pairings(payload: dict) -> None:
+    HEALTH_PAIRINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = HEALTH_PAIRINGS_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(HEALTH_PAIRINGS_PATH)
+
+
+def _shared_health_token_matches(provided: str) -> bool:
+    if not provided or not HEALTH_TOKEN:
+        return False
+    return hmac.compare_digest(_token_digest(provided), _token_digest(HEALTH_TOKEN))
+
+
+def _paired_health_token_matches(provided: str) -> bool:
+    if not provided:
+        return False
+    provided_digest = _token_digest(provided)
+    with PAIRING_LOCK:
+        pairings = _load_health_pairings()
+        for install_id, installation in pairings["installations"].items():
+            stored_digest = installation.get("tokenHash") if isinstance(installation, dict) else None
+            if isinstance(stored_digest, str) and hmac.compare_digest(provided_digest, stored_digest):
+                installation["lastUsedAt"] = datetime.now(timezone.utc).isoformat()
+                pairings["installations"][install_id] = installation
+                try:
+                    _write_health_pairings(pairings)
+                except OSError:
+                    pass
+                return True
+    return False
+
+
+def _provided_health_token() -> str:
     provided = request.headers.get("X-Portfolio-Health-Token") or ""
     auth = request.headers.get("Authorization") or ""
     if auth.lower().startswith("bearer "):
         provided = auth[7:].strip()
-    if not provided or not HEALTH_TOKEN:
+    return provided
+
+
+def _authorized_health_post() -> bool:
+    provided = _provided_health_token()
+    return _shared_health_token_matches(provided) or _paired_health_token_matches(provided)
+
+
+def _authorized_pairing_admin() -> bool:
+    remote = request.remote_addr or ""
+    try:
+        if ipaddress.ip_address(remote).is_loopback:
+            return True
+    except ValueError:
+        pass
+    return _shared_health_token_matches(_provided_health_token())
+
+
+def _valid_install_id(value: object) -> bool:
+    if not isinstance(value, str) or not 8 <= len(value) <= 100:
         return False
-    return hmac.compare_digest(
-        hashlib.sha256(provided.encode("utf-8")).digest(),
-        hashlib.sha256(HEALTH_TOKEN.encode("utf-8")).digest(),
-    )
+    return all(character.isalnum() or character in "-_" for character in value)
 
 
 def _valid_health_snapshot(payload: object) -> bool:
@@ -184,6 +257,107 @@ def startup_audit() -> Response:
             "message": "The startup refresh audit could not be read.",
         }, 503)
     return _health_snapshot_response(payload)
+
+
+@app.post("/_health/pair/code")
+def create_health_pairing_code() -> Response:
+    if not _authorized_pairing_admin():
+        return _health_snapshot_response({
+            "status": "unauthorized",
+            "message": "Pairing codes can only be generated locally on the Mac or with the configured Health admin token.",
+        }, 401)
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=PAIRING_CODE_TTL_SECONDS)
+    code = secrets.token_hex(4).upper()
+    with PAIRING_LOCK:
+        expired = [value for value, expiry in PAIRING_CODES.items() if expiry <= now]
+        for value in expired:
+            PAIRING_CODES.pop(value, None)
+        PAIRING_CODES[code] = expires_at
+    return _health_snapshot_response({
+        "status": "ready",
+        "code": code,
+        "expiresAt": expires_at.isoformat(),
+        "expiresInSeconds": PAIRING_CODE_TTL_SECONDS,
+        "message": "Enter this one-time code in the Portfolio Intelligence iPhone app.",
+    }, 201)
+
+
+@app.post("/_health/pair")
+def pair_health_installation() -> Response:
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _health_snapshot_response({"status": "invalid", "message": "Pairing request must be JSON."}, 400)
+
+    code = str(payload.get("code") or "").strip().upper()
+    install_id = payload.get("installId")
+    label = str(payload.get("label") or "Portfolio Intelligence iPhone").strip()[:80]
+    if not code or not _valid_install_id(install_id):
+        return _health_snapshot_response({
+            "status": "invalid",
+            "message": "A valid pairing code and installId are required.",
+        }, 400)
+
+    now = datetime.now(timezone.utc)
+    with PAIRING_LOCK:
+        expiry = PAIRING_CODES.pop(code, None)
+        if expiry is None or expiry <= now:
+            return _health_snapshot_response({
+                "status": "invalid",
+                "message": "The pairing code is invalid or expired. Generate a new code on the Mac.",
+            }, 401)
+
+        token = secrets.token_urlsafe(32)
+        pairings = _load_health_pairings()
+        pairings["installations"][install_id] = {
+            "tokenHash": _token_digest(token),
+            "label": label or "Portfolio Intelligence iPhone",
+            "createdAt": now.isoformat(),
+            "lastUsedAt": None,
+        }
+        try:
+            _write_health_pairings(pairings)
+        except OSError as error:
+            return _health_snapshot_response({
+                "status": "unavailable",
+                "message": f"Could not persist Health pairing: {error}",
+            }, 500)
+
+    return _health_snapshot_response({
+        "status": "paired",
+        "installId": install_id,
+        "token": token,
+        "createdAt": now.isoformat(),
+        "message": "HealthKit upload paired with this Mac.",
+    }, 201)
+
+
+@app.delete("/_health/pair/<install_id>")
+def revoke_health_installation(install_id: str) -> Response:
+    if not _authorized_pairing_admin():
+        return _health_snapshot_response({
+            "status": "unauthorized",
+            "message": "Health pairing revocation requires local Mac access or the configured Health admin token.",
+        }, 401)
+    if not _valid_install_id(install_id):
+        return _health_snapshot_response({"status": "invalid", "message": "Invalid installId."}, 400)
+
+    with PAIRING_LOCK:
+        pairings = _load_health_pairings()
+        removed = pairings["installations"].pop(install_id, None)
+        try:
+            _write_health_pairings(pairings)
+        except OSError as error:
+            return _health_snapshot_response({
+                "status": "unavailable",
+                "message": f"Could not update Health pairings: {error}",
+            }, 500)
+    return _health_snapshot_response({
+        "status": "revoked" if removed else "not_found",
+        "installId": install_id,
+        "message": "Health pairing revoked." if removed else "No Health pairing exists for this installId.",
+    }, 200 if removed else 404)
 
 
 @app.route("/_health/snapshot", methods=["GET", "POST"])

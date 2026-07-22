@@ -312,12 +312,14 @@ export default function Home() {
     document.addEventListener("visibilitychange", refreshWhenActive);
     window.addEventListener("focus", refreshWhenActive);
     window.addEventListener("online", refreshWhenActive);
+    window.addEventListener("portfolio-native-refresh", refreshWhenActive);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", refreshWhenActive);
       window.removeEventListener("focus", refreshWhenActive);
       window.removeEventListener("online", refreshWhenActive);
+      window.removeEventListener("portfolio-native-refresh", refreshWhenActive);
     };
   }, [refreshAll]);
 
