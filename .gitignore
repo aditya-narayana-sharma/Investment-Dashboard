@@ -40,3 +40,15 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/tmp/
+/artifacts/private/
+
+# local Flask gateway runtime
+/.venv-flask/
+__pycache__/
+*.py[cod]
+
+# Apple app user and build state
+**/xcuserdata/
+**/*.xcuserstate
+/apple-app/DerivedData/

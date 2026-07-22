@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "kite-connect": {
+      "command": "node",
+      "args": [
+        "/Users/adityasharma/Documents/Codex/2026-07-13/referenced-chatgpt-conversation-this-is-untrusted/dist/index.js"
+      ],
+      "env": {
+        "KITE_API_KEY": "your_api_key",
+        "KITE_API_SECRET": "your_api_secret",
+        "KITE_ACCESS_TOKEN": "optional_daily_access_token",
+        "KITE_RATE_LIMIT_RPS": "3",
+        "KITE_LOG_LEVEL": "info"
+      }
+    }
+  }
+}

@@ -1,0 +1,341 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { buildPortfolioAnalytics } from "./analytics.js";
+import { parseCsv } from "./csv.js";
+import { formatError } from "./errors.js";
+import { KiteClient } from "./kite-client.js";
+import { maskSecret } from "./logger.js";
+import {
+  AuthSetSchema,
+  CancelOrderSchema,
+  GenerateSessionSchema,
+  GttPayloadSchema,
+  HistoricalSchema,
+  InstrumentListSchema,
+  InstrumentsSchema,
+  LoginUrlSchema,
+  MarginSchema,
+  MfOrderIdSchema,
+  ModifyGttSchema,
+  ModifyOrderSchema,
+  OrderIdSchema,
+  OrderPayloadSchema,
+  PositionConversionSchema,
+  TriggerIdSchema
+} from "./schemas.js";
+
+type ToolHandler = (args: Record<string, unknown>) => Promise<unknown> | unknown;
+
+export function registerTools(server: McpServer, client: KiteClient) {
+  tool(server, "kite_auth_login_url", "Build the Kite Connect login URL for obtaining a request_token.", LoginUrlSchema, async (args) => {
+    const parsed = LoginUrlSchema.parse(args);
+    return {
+      login_url: client.loginUrl(parsed.api_key, parsed.redirect_params),
+      next_step: "Open this URL, complete login, then pass the returned request_token to kite_auth_generate_session."
+    };
+  }, true);
+
+  tool(server, "kite_auth_generate_session", "Exchange a short-lived request_token for an access token and store it in memory.", GenerateSessionSchema, async (args) => {
+    const parsed = GenerateSessionSchema.parse(args);
+    const data = (await client.generateSession({
+      requestToken: parsed.request_token,
+      apiKey: parsed.api_key,
+      apiSecret: parsed.api_secret
+    })) as Record<string, unknown>;
+    return {
+      ...redactSession(data, parsed.return_access_token),
+      credential_status: client.getCredentialStatus()
+    };
+  }, false);
+
+  tool(server, "kite_auth_set_access_token", "Set API key and daily access token in this MCP server process.", AuthSetSchema, async (args) => {
+    const parsed = AuthSetSchema.parse(args);
+    client.setCredentials({
+      apiKey: parsed.api_key,
+      accessToken: parsed.access_token,
+      apiSecret: parsed.api_secret
+    });
+    return client.getCredentialStatus();
+  }, false);
+
+  tool(server, "kite_auth_clear_session", "Clear credentials from this MCP server process memory.", z.object({}), async () => {
+    client.clearCredentials();
+    return client.getCredentialStatus();
+  }, false);
+
+  tool(server, "kite_auth_logout", "Invalidate the current Kite access token, then clear local credentials.", z.object({}), async () => client.logout(), false, true);
+
+  tool(server, "kite_get_profile", "Fetch the authenticated Kite user profile.", z.object({}), async () => client.request("GET", "/user/profile"), true);
+
+  tool(server, "kite_get_margins", "Fetch account funds and margins for all segments or one segment.", MarginSchema, async (args) => {
+    const parsed = MarginSchema.parse(args);
+    return client.request("GET", parsed.segment ? `/user/margins/${parsed.segment}` : "/user/margins");
+  }, true);
+
+  tool(server, "kite_get_holdings", "Fetch long-term equity holdings from the portfolio.", z.object({}), async () => client.request("GET", "/portfolio/holdings"), true);
+
+  tool(server, "kite_get_holding_auctions", "Fetch available holdings auctions.", z.object({}), async () => client.request("GET", "/portfolio/holdings/auctions"), true);
+
+  tool(server, "kite_get_positions", "Fetch day and net positions.", z.object({}), async () => client.request("GET", "/portfolio/positions"), true);
+
+  tool(server, "kite_convert_position", "Convert an open position between Kite margin products.", PositionConversionSchema, async (args) => {
+    const parsed = PositionConversionSchema.parse(args);
+    const { dry_run, ...form } = parsed;
+    if (dry_run) return dryRun("PUT", "/portfolio/positions", form);
+    return client.request("PUT", "/portfolio/positions", { form });
+  }, false);
+
+  tool(server, "kite_get_portfolio_analytics", "Read holdings and positions, then compute operational exposure and P&L analytics.", z.object({}), async () => {
+    const [holdings, positions] = await Promise.all([
+      client.request("GET", "/portfolio/holdings"),
+      client.request("GET", "/portfolio/positions")
+    ]);
+    return buildPortfolioAnalytics(holdings, positions);
+  }, true);
+
+  tool(server, "kite_list_orders", "Fetch all orders for the trading day.", z.object({}), async () => client.request("GET", "/orders"), true);
+
+  tool(server, "kite_get_order_history", "Fetch the status history for one order.", OrderIdSchema, async (args) => {
+    const { order_id } = OrderIdSchema.parse(args);
+    return client.request("GET", `/orders/${encodeURIComponent(order_id)}`);
+  }, true);
+
+  tool(server, "kite_list_trades", "Fetch all executed trades for the trading day.", z.object({}), async () => client.request("GET", "/trades"), true);
+
+  tool(server, "kite_get_order_trades", "Fetch trades generated by one order.", OrderIdSchema, async (args) => {
+    const { order_id } = OrderIdSchema.parse(args);
+    return client.request("GET", `/orders/${encodeURIComponent(order_id)}/trades`);
+  }, true);
+
+  tool(server, "kite_place_order", "Place a Kite order. Defaults to dry_run=true; set dry_run=false to send.", OrderPayloadSchema, async (args) => {
+    const parsed = OrderPayloadSchema.parse(args);
+    const { variety, dry_run, ...form } = parsed;
+    const path = `/orders/${encodeURIComponent(variety)}`;
+    if (dry_run) return dryRun("POST", path, form);
+    return client.request("POST", path, { form });
+  }, false);
+
+  tool(server, "kite_modify_order", "Modify an open or pending Kite order. Defaults to dry_run=true.", ModifyOrderSchema, async (args) => {
+    const parsed = ModifyOrderSchema.parse(args);
+    const { variety, order_id, dry_run, ...form } = parsed;
+    const path = `/orders/${encodeURIComponent(variety)}/${encodeURIComponent(order_id)}`;
+    if (dry_run) return dryRun("PUT", path, form);
+    return client.request("PUT", path, { form });
+  }, false);
+
+  tool(server, "kite_cancel_order", "Cancel an open or pending Kite order. Defaults to dry_run=true.", CancelOrderSchema, async (args) => {
+    const parsed = CancelOrderSchema.parse(args);
+    const { variety, order_id, dry_run, parent_order_id } = parsed;
+    const path = `/orders/${encodeURIComponent(variety)}/${encodeURIComponent(order_id)}`;
+    const query = parent_order_id ? { parent_order_id } : undefined;
+    if (dry_run) return dryRun("DELETE", path, query ?? {});
+    return client.request("DELETE", path, { query });
+  }, false, true);
+
+  tool(server, "kite_list_gtts", "Fetch all GTT triggers visible in the GTT order book.", z.object({}), async () => client.request("GET", "/gtt/triggers"), true);
+
+  tool(server, "kite_get_gtt", "Fetch one GTT trigger by id.", TriggerIdSchema, async (args) => {
+    const { trigger_id } = TriggerIdSchema.parse(args);
+    return client.request("GET", `/gtt/triggers/${encodeURIComponent(String(trigger_id))}`);
+  }, true);
+
+  tool(server, "kite_place_gtt", "Place a Kite GTT trigger. Defaults to dry_run=true; set dry_run=false to send.", GttPayloadSchema, async (args) => {
+    const parsed = GttPayloadSchema.parse(args);
+    const form = gttForm(parsed);
+    if (parsed.dry_run) return dryRun("POST", "/gtt/triggers", form);
+    return client.request("POST", "/gtt/triggers", { form });
+  }, false);
+
+  tool(server, "kite_modify_gtt", "Modify an active Kite GTT trigger. Defaults to dry_run=true.", ModifyGttSchema, async (args) => {
+    const parsed = ModifyGttSchema.parse(args);
+    const path = `/gtt/triggers/${encodeURIComponent(String(parsed.trigger_id))}`;
+    const form = gttForm(parsed);
+    if (parsed.dry_run) return dryRun("PUT", path, form);
+    return client.request("PUT", path, { form });
+  }, false);
+
+  tool(server, "kite_delete_gtt", "Delete an active Kite GTT trigger. Defaults to dry_run=true.", TriggerIdSchema.extend({ dry_run: z.boolean().default(true) }), async (args) => {
+    const parsed = TriggerIdSchema.extend({ dry_run: z.boolean().default(true) }).parse(args);
+    const path = `/gtt/triggers/${encodeURIComponent(String(parsed.trigger_id))}`;
+    if (parsed.dry_run) return dryRun("DELETE", path, {});
+    return client.request("DELETE", path);
+  }, false, true);
+
+  tool(server, "kite_list_instruments", "Fetch and filter the daily Kite instrument master CSV.", InstrumentsSchema, async (args) => {
+    const parsed = InstrumentsSchema.parse(args);
+    const path = parsed.exchange ? `/instruments/${encodeURIComponent(parsed.exchange)}` : "/instruments";
+    const csv = (await client.request("GET", path, { rawText: true })) as string;
+    const rows = parseCsv(csv);
+    const search = parsed.search?.toLowerCase();
+    const filtered = search
+      ? rows.filter((row) => Object.values(row).some((value) => value.toLowerCase().includes(search)))
+      : rows;
+    const offset = parsed.cursor ? Number.parseInt(parsed.cursor, 10) : 0;
+    const safeOffset = Number.isFinite(offset) && offset > 0 ? offset : 0;
+    const instruments = filtered.slice(safeOffset, safeOffset + parsed.limit);
+    const next = safeOffset + parsed.limit < filtered.length ? String(safeOffset + parsed.limit) : undefined;
+    return {
+      instruments,
+      count: instruments.length,
+      total_matching: filtered.length,
+      next_cursor: next
+    };
+  }, true);
+
+  tool(server, "kite_get_quotes", "Fetch full quote snapshots, including OHLC, OI, and market depth, for up to 250 instruments.", InstrumentListSchema, async (args) => {
+    const { instruments } = InstrumentListSchema.parse(args);
+    return client.request("GET", "/quote", { query: { i: instruments } });
+  }, true);
+
+  tool(server, "kite_get_ohlc", "Fetch OHLC quotes for up to 250 instruments.", InstrumentListSchema, async (args) => {
+    const { instruments } = InstrumentListSchema.parse(args);
+    return client.request("GET", "/quote/ohlc", { query: { i: instruments } });
+  }, true);
+
+  tool(server, "kite_get_ltp", "Fetch last traded prices for up to 250 instruments.", InstrumentListSchema, async (args) => {
+    const { instruments } = InstrumentListSchema.parse(args);
+    return client.request("GET", "/quote/ltp", { query: { i: instruments } });
+  }, true);
+
+  tool(server, "kite_get_market_depth", "Fetch market depth ladders for up to 250 instruments.", InstrumentListSchema, async (args) => {
+    const { instruments } = InstrumentListSchema.parse(args);
+    const quotes = (await client.request("GET", "/quote", { query: { i: instruments } })) as Record<string, { depth?: unknown }>;
+    return Object.fromEntries(Object.entries(quotes).map(([key, quote]) => [key, quote.depth ?? null]));
+  }, true);
+
+  tool(server, "kite_get_historical_data", "Fetch historical candles for one instrument token and interval.", HistoricalSchema, async (args) => {
+    const parsed = HistoricalSchema.parse(args);
+    const path = `/instruments/historical/${encodeURIComponent(String(parsed.instrument_token))}/${parsed.interval}`;
+    const result = (await client.request("GET", path, {
+      query: {
+        from: parsed.from,
+        to: parsed.to,
+        continuous: parsed.continuous ? 1 : 0,
+        oi: parsed.oi ? 1 : 0
+      }
+    })) as { candles?: unknown[] };
+    return {
+      candles: Array.isArray(result.candles) ? result.candles.map(normalizeCandle) : [],
+      raw: result
+    };
+  }, true);
+
+  tool(server, "kite_list_mf_orders", "Fetch mutual fund orders from the last seven days.", z.object({}), async () => client.request("GET", "/mf/orders"), true);
+
+  tool(server, "kite_get_mf_order", "Fetch one mutual fund order by id.", MfOrderIdSchema, async (args) => {
+    const { order_id } = MfOrderIdSchema.parse(args);
+    return client.request("GET", `/mf/orders/${encodeURIComponent(order_id)}`);
+  }, true);
+
+  tool(server, "kite_list_mf_sips", "Fetch all open mutual fund SIP orders.", z.object({}), async () => client.request("GET", "/mf/sips"), true);
+
+  tool(server, "kite_get_mf_holdings", "Fetch mutual fund holdings available in demat.", z.object({}), async () => client.request("GET", "/mf/holdings"), true);
+
+  tool(server, "kite_list_mf_instruments", "Fetch and filter the mutual fund instrument master CSV.", InstrumentsSchema.omit({ exchange: true }), async (args) => {
+    const parsed = InstrumentsSchema.omit({ exchange: true }).parse(args);
+    const csv = (await client.request("GET", "/mf/instruments", { rawText: true })) as string;
+    const rows = parseCsv(csv);
+    const search = parsed.search?.toLowerCase();
+    const filtered = search
+      ? rows.filter((row) => Object.values(row).some((value) => value.toLowerCase().includes(search)))
+      : rows;
+    const offset = parsed.cursor ? Number.parseInt(parsed.cursor, 10) : 0;
+    const safeOffset = Number.isFinite(offset) && offset > 0 ? offset : 0;
+    const instruments = filtered.slice(safeOffset, safeOffset + parsed.limit);
+    return {
+      instruments,
+      count: instruments.length,
+      total_matching: filtered.length,
+      next_cursor: safeOffset + parsed.limit < filtered.length ? String(safeOffset + parsed.limit) : undefined
+    };
+  }, true);
+}
+
+function tool(
+  server: McpServer,
+  name: string,
+  description: string,
+  schema: z.ZodObject<z.ZodRawShape>,
+  handler: ToolHandler,
+  readOnly: boolean,
+  destructive = false
+) {
+  server.registerTool(
+    name,
+    {
+      description,
+      inputSchema: schema.shape,
+      annotations: {
+        readOnlyHint: readOnly,
+        destructiveHint: destructive,
+        openWorldHint: true
+      }
+    },
+    async (args: Record<string, unknown>) => {
+      try {
+        const data = await handler(args);
+        return toResult(data);
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: formatError(error) }]
+        };
+      }
+    }
+  );
+}
+
+function toResult(data: unknown) {
+  return {
+    structuredContent: { result: data },
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(data, null, 2)
+      }
+    ]
+  };
+}
+
+function dryRun(method: string, path: string, payload: Record<string, unknown>) {
+  return {
+    dry_run: true,
+    method,
+    path,
+    payload: removeUndefined(payload),
+    next_step: "Set dry_run=false to send this request to Kite Connect."
+  };
+}
+
+function removeUndefined(payload: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+function gttForm(parsed: z.infer<typeof GttPayloadSchema>) {
+  return {
+    type: parsed.type,
+    condition: JSON.stringify(parsed.condition),
+    orders: JSON.stringify(parsed.orders)
+  };
+}
+
+function normalizeCandle(row: unknown) {
+  if (!Array.isArray(row)) return row;
+  return {
+    timestamp: row[0],
+    open: row[1],
+    high: row[2],
+    low: row[3],
+    close: row[4],
+    volume: row[5],
+    oi: row[6]
+  };
+}
+
+function redactSession(data: Record<string, unknown>, returnAccessToken: boolean) {
+  const clone = { ...data };
+  for (const key of ["access_token", "refresh_token", "public_token", "enctoken"]) {
+    if (typeof clone[key] === "string" && !returnAccessToken) clone[key] = maskSecret(clone[key] as string);
+  }
+  return clone;
+}
