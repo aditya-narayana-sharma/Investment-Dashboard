@@ -36,8 +36,9 @@ HEALTH_PAIRINGS_PATH = Path(os.environ.get(
     "PORTFOLIO_HEALTH_PAIRINGS_PATH",
     ROOT / "artifacts" / "private" / "health-pairings.json",
 ))
-# Shared secret for HealthKit POST. Override via PORTFOLIO_HEALTH_TOKEN in production.
-HEALTH_TOKEN = os.environ.get("PORTFOLIO_HEALTH_TOKEN", "portfolio-local-health-token")
+# Optional Mac-admin token retained for automation/backward compatibility.
+# Native iPhone builds use a per-install token issued by the pairing flow.
+HEALTH_TOKEN = os.environ.get("PORTFOLIO_HEALTH_TOKEN", "")
 MAX_HEALTH_SNAPSHOT_BYTES = 512 * 1024
 PAIRING_CODE_TTL_SECONDS = 5 * 60
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -112,6 +113,16 @@ def _paired_health_token_matches(provided: str) -> bool:
     return False
 
 
+def _paired_health_token_matches_install(provided: str, install_id: str) -> bool:
+    if not provided:
+        return False
+    pairings = _load_health_pairings()
+    installation = pairings["installations"].get(install_id)
+    if not isinstance(installation, dict) or not isinstance(installation.get("tokenHash"), str):
+        return False
+    return hmac.compare_digest(_token_digest(provided), installation["tokenHash"])
+
+
 def _provided_health_token() -> str:
     provided = request.headers.get("X-Portfolio-Health-Token") or ""
     auth = request.headers.get("Authorization") or ""
@@ -147,6 +158,13 @@ def _valid_health_snapshot(payload: object) -> bool:
     if payload.get("schemaVersion") != 1 or payload.get("source") != "Apple Health":
         return False
     if not isinstance(payload.get("dataDate"), str) or not isinstance(payload.get("capturedAt"), str):
+        return False
+    try:
+        data_date = datetime.strptime(payload["dataDate"], "%Y-%m-%d").date()
+        captured_at = datetime.fromisoformat(payload["capturedAt"].replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if data_date > datetime.now(IST).date() or captured_at.tzinfo is None:
         return False
     categories = payload.get("categories")
     if not isinstance(categories, list) or not 1 <= len(categories) <= 12:
@@ -335,7 +353,8 @@ def pair_health_installation() -> Response:
 
 @app.delete("/_health/pair/<install_id>")
 def revoke_health_installation(install_id: str) -> Response:
-    if not _authorized_pairing_admin():
+    provided = _provided_health_token()
+    if not (_authorized_pairing_admin() or _paired_health_token_matches_install(provided, install_id)):
         return _health_snapshot_response({
             "status": "unauthorized",
             "message": "Health pairing revocation requires local Mac access or the configured Health admin token.",
@@ -390,12 +409,12 @@ def health_snapshot() -> Response:
     if not _valid_health_snapshot(payload):
         return _health_snapshot_response({"status": "invalid", "message": "Health snapshot schema is invalid."}, 400)
 
-    data_date = str(payload.get("dataDate") or "")
-    required_d1 = (datetime.now(IST) - timedelta(days=1)).strftime("%Y-%m-%d")
+    data_date = datetime.strptime(str(payload.get("dataDate")), "%Y-%m-%d").date()
+    required_d1 = (datetime.now(IST) - timedelta(days=1)).date()
     payload["status"] = "live" if data_date >= required_d1 else "stale"
     payload["receivedAt"] = datetime.now(timezone.utc).isoformat()
     if payload["status"] == "stale":
-        payload["message"] = f"HealthKit snapshot stored but dataDate {data_date} is behind required D-1 {required_d1}."
+        payload["message"] = f"HealthKit snapshot stored but dataDate {data_date.isoformat()} is behind required D-1 {required_d1.isoformat()}."
     try:
         HEALTH_SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = HEALTH_SNAPSHOT_PATH.with_suffix(".tmp")

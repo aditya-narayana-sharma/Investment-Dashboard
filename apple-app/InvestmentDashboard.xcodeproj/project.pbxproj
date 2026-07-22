@@ -396,6 +396,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = InvestmentDashboard/InvestmentDashboard.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -444,6 +445,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = InvestmentDashboard/InvestmentDashboard.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
