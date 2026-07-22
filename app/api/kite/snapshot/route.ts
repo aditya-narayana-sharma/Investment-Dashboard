@@ -1,4 +1,5 @@
 import { currentKiteSession, getKiteSnapshot, restoreKiteSession } from "../../../kite-live-server";
+import { kiteSessionCookie } from "../../../kite-session-store";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
   const snapshot = await getKiteSnapshot();
   const sessionId = currentKiteSession();
   const headers: Record<string, string> = { "Cache-Control": "no-store, max-age=0" };
-  if (sessionId) headers["Set-Cookie"] = `kite_dashboard_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`;
+  if (sessionId) headers["Set-Cookie"] = kiteSessionCookie(sessionId);
   return Response.json(snapshot, {
     status: snapshot.status === "unavailable" ? 503 : 200,
     headers,

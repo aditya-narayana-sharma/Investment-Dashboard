@@ -189,6 +189,12 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "EBITDA margin", value: "21.4%", change: "Calculated from reported revenue", tone: "green" },
     { label: "PAT", value: "₹3,226 Cr", change: "+46% YoY", tone: "green" },
   ], summary: "Record volumes, exports and realisations supported strong revenue and profit growth. The company published its Q1 FY27 release on 21 July.", source: "https://www.bajajauto.com/investors/financial-and-operational-performance" },
+  { date: "21 Jul", day: "21", symbol: "TVSMOTOR", name: "TVS Motor", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Revenue", value: "₹13,896 Cr", change: "+38% YoY", tone: "green" },
+    { label: "EBITDA", value: "₹1,779 Cr", change: "+41% YoY", tone: "green" },
+    { label: "EBITDA margin", value: "12.8%", change: "+30 bps YoY", tone: "green" },
+    { label: "Standalone PAT", value: "₹1,174 Cr", change: "+51% YoY", tone: "green" },
+  ], summary: "Highest-ever quarterly sales with 2W/3W volumes at 1.63 million (+28% YoY). Standalone revenue, EBITDA and PAT all rose sharply; consolidated PAT was ₹1,057.61 crore (+65% YoY) per the regulatory filing coverage.", source: "https://www.business-standard.com/markets/news/street-cheers-tvs-motor-s-q1-beat-stock-gains-3-analysts-see-15-upside-126072200176_1.html" },
   { date: "21 Jul", day: "21", symbol: "BPCL", name: "Bharat Petroleum", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
     { label: "Refinery throughput", value: "10.15 MMT", change: "vs 10.42 MMT YoY", tone: "amber" },
     { label: "Marketing volume", value: "14.13 MMT", change: "Domestic 13.62 · Export 0.51", tone: "green" },

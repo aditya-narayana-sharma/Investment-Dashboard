@@ -5,6 +5,7 @@ import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, RefreshCw, Shiel
 import { analystCalls, axisRecommendations, portfolioRiskProfiles, type RiskProfile } from "./portfolio-data";
 import type { HealthLiveSnapshot } from "./health-live-types";
 import { emptySnapshot, type KiteSnapshot } from "./live-types";
+import { sortDonutHoldings } from "./portfolio-donut";
 import type { ContentDigestSnapshot, MailRecommendation } from "./content-types";
 import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
@@ -84,7 +85,7 @@ export default function Home() {
     ...mailAxisRecommendations.map((item) => ({ symbol: item.symbol, house: `${item.source} / iCloud Axis Research`, rating: item.call, target: item.target, date: item.date, thesis: item.thesis, mail: true })),
     ...analystCalls.filter((item) => !mailAxisRecommendations.some((axis) => axis.symbol === item.symbol)).map((item) => ({ ...item, mail: false })),
   ], [mailAxisRecommendations]);
-  const donutHoldings = useMemo(() => snapshot.holdings.slice().sort((a, b) => `${a.marketCap}|${a.sector}|${a.subSector}|${a.symbol}`.localeCompare(`${b.marketCap}|${b.sector}|${b.subSector}|${b.symbol}`)), [snapshot.holdings]);
+  const donutHoldings = useMemo(() => sortDonutHoldings(snapshot.holdings), [snapshot.holdings]);
   const exposureComposition = useMemo(() => {
     const profileBySymbol = new Map(portfolioRiskProfiles.map((profile) => [profile.symbol, profile]));
     return snapshot.holdings.map((holding) => {

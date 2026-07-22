@@ -5,24 +5,40 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { isAxisResearchMail } from "./axis-mail-filter.mjs";
+import { extractAxisRecommendations } from "./axis-recommendations.mjs";
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.CONTENT_DIGEST_PORT ?? 3003);
 const PODCAST_DB = `${process.env.HOME}/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Documents/MTLibrary.sqlite`;
 const REMINDERS_STORE_DIR = `${process.env.HOME}/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores`;
+const CALENDAR_DB = `${process.env.HOME}/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb`;
+const CORE_DATA_EPOCH = 978307200;
+const MAIL_CONTENT_CHARS = 2500;
+/** Newsletter digests only need ~360 chars after cleaning; keep bodies small for Mail.app. */
+const NEWSLETTER_CONTENT_CHARS = 800;
+const CALENDAR_NOTES_CHARS = 500;
 const CONTENT_SNAPSHOT_PATH = process.env.CONTENT_SNAPSHOT_PATH ?? fileURLToPath(new URL("../artifacts/private/content-snapshot.json", import.meta.url));
 const CONTENT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const FORCE_REFRESH_BUDGET_MS = 90_000;
+const FORCE_REFRESH_BUDGET_MS = 480_000;
 const NEWSLETTER_DIGEST_LIMIT = 500;
+const NEWSLETTER_LIST_TIMEOUT_MS = 60_000;
+const NEWSLETTER_BODY_TIMEOUT_MS = 120_000;
+/** Soft deadline inside osascript so bodies return before Node kills the process. */
+const NEWSLETTER_BODY_BUDGET_MS = 95_000;
 function istDateKey(daysAgo) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
 }
 const ANALYSIS_WINDOW_START = process.env.INVESTMENT_ANALYSIS_START_DATE ?? istDateKey(3);
 const ANALYSIS_DATE = process.env.INVESTMENT_ANALYSIS_DATE ?? istDateKey(0);
+const CALENDAR_WINDOW_END = (() => {
+  const end = new Date(`${ANALYSIS_DATE}T00:00:00+05:30`);
+  end.setDate(end.getDate() + 46);
+  return end.toISOString().slice(0, 10);
+})();
 const AXIS_LOOKBACK_DAYS = 3;
 const AXIS_DIGEST_LIMIT = 500;
 
-const newsletterMailScript = String.raw`
+const newsletterMailboxHelpers = String.raw`
 const Mail = Application("Mail");
 function exactAccount(name) {
   const account = Mail.accounts().find((candidate) => String(candidate.name()) === name);
@@ -35,22 +51,8 @@ function exactMailbox(account, name) {
   return mailbox;
 }
 const account = exactAccount("iCloud");
-function serialize(message) {
-  try {
-    const properties = message.properties();
-    const received = properties.dateReceived || message.dateReceived();
-    return {
-      subject: String(properties.subject || "Untitled message"),
-      sender: String(properties.sender || "Unknown sender"),
-      received: received.toISOString(),
-      content: String(properties.content || "").slice(0, 16000),
-    };
-  } catch (error) {
-    return null;
-  }
-}
-function analysisDayMessages(name, limit) {
-  const mailbox = exactMailbox(account, name);
+function newsletterWindowMessages(limit) {
+  const mailbox = exactMailbox(account, "Newsletters");
   const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
   const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
   end.setDate(end.getDate() + 1);
@@ -59,15 +61,67 @@ function analysisDayMessages(name, limit) {
     { dateReceived: { _lessThan: end } },
   ] })();
   const totalCount = recent.length;
-  const messages = recent
-    .map((message) => ({ message, received: message.dateReceived().getTime() }))
+  const ordered = recent
+    .map((message) => {
+      try {
+        return { message, received: message.dateReceived() };
+      } catch (error) {
+        return null;
+      }
+    })
+    .filter(Boolean)
     .sort((left, right) => right.received - left.received)
-    .slice(0, limit)
-    .map(({ message }) => serialize(message))
-    .filter(Boolean);
-  return { totalCount, messages };
+    .slice(0, limit);
+  return { totalCount, ordered };
 }
-JSON.stringify(analysisDayMessages("Newsletters", ${NEWSLETTER_DIGEST_LIMIT}));
+`;
+
+/** Fast metadata pass — proves the mailbox is readable without loading bodies. */
+const newsletterListScript = String.raw`
+${newsletterMailboxHelpers}
+const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
+const messages = ordered.map(({ message, received }) => {
+  try {
+    return {
+      subject: String(message.subject() || "Untitled message"),
+      sender: String(message.sender() || "Unknown sender"),
+      received: received.toISOString(),
+      content: "",
+    };
+  } catch (error) {
+    return null;
+  }
+}).filter(Boolean);
+JSON.stringify({ totalCount, messages });
+`;
+
+/**
+ * Body enrichment for the same window. Stops reading content at NEWSLETTER_BODY_BUDGET_MS
+ * so Node does not kill a half-finished osascript; remaining items keep metadata only.
+ */
+const newsletterBodyScript = String.raw`
+${newsletterMailboxHelpers}
+const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
+const started = Date.now();
+const budgetMs = ${NEWSLETTER_BODY_BUDGET_MS};
+const messages = ordered.map(({ message, received }) => {
+  try {
+    const subject = String(message.subject() || "Untitled message");
+    const sender = String(message.sender() || "Unknown sender");
+    let content = "";
+    if (Date.now() - started < budgetMs) {
+      try {
+        content = String(message.content() || "").slice(0, ${NEWSLETTER_CONTENT_CHARS});
+      } catch (error) {
+        content = "";
+      }
+    }
+    return { subject, sender, received: received.toISOString(), content };
+  } catch (error) {
+    return null;
+  }
+}).filter(Boolean);
+JSON.stringify({ totalCount, messages, bodiesLoaded: messages.filter((message) => message.content).length });
 `;
 
 const axisMailScript = String.raw`
@@ -92,7 +146,7 @@ function serialize(message) {
     subject: String(properties.subject || "Untitled message"),
     sender: String(properties.sender || "Unknown sender"),
     received: properties.dateReceived.toISOString(),
-    content: String(properties.content || "").slice(0, 16000),
+    content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
   };
 }
 const mailbox = exactMailbox(account, "Axis Research");
@@ -107,7 +161,7 @@ const messages = recent.map((message) => {
     subject: String(properties.subject || "Untitled message"),
     sender: String(properties.sender || "Unknown sender"),
     received: properties.dateReceived.toISOString(),
-    content: String(properties.content || "").slice(0, 16000),
+    content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
   };
 }).sort((left, right) => new Date(right.received) - new Date(left.received)).slice(0, ${AXIS_DIGEST_LIMIT});
 JSON.stringify({ totalCount, messages });
@@ -130,31 +184,21 @@ WHERE list.ZNAME IN ('🔍Job', 'Job 🔍', 'Earnings')
 ORDER BY list.ZNAME, reminder.ZCREATIONDATE DESC;
 `;
 
-const calendarScript = String.raw`
-const Calendar = Application("Calendar");
-const start = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
-const end = new Date("${ANALYSIS_DATE}T23:59:59+05:30");
-end.setDate(end.getDate() + 45);
-const output = [];
-for (const calendar of Calendar.calendars()) {
-  const calendarName = String(calendar.name());
-  let events = [];
-  try {
-    events = calendar.events.whose({ _and: [{ startDate: { _greaterThan: start } }, { startDate: { _lessThan: end } }] })();
-  } catch (_) { continue; }
-  for (const event of events) {
-    const properties = event.properties();
-    output.push({
-      id: String(properties.uid || properties.id || ""),
-      title: String(properties.summary || "Untitled event"),
-      calendar: calendarName,
-      startsAt: properties.startDate ? properties.startDate.toISOString() : "",
-      endsAt: properties.endDate ? properties.endDate.toISOString() : "",
-      notes: String(properties.description || "").slice(0, 4000),
-    });
-  }
-}
-JSON.stringify(output);
+const calendarQuery = `
+SELECT
+  coalesce(i.unique_identifier, i.UUID, hex(i.ROWID)) AS id,
+  coalesce(i.summary, 'Untitled event') AS title,
+  coalesce(c.title, 'Unknown calendar') AS calendar,
+  i.start_date AS startCoreData,
+  i.end_date AS endCoreData,
+  substr(coalesce(i.description, ''), 1, ${CALENDAR_NOTES_CHARS}) AS notes
+FROM CalendarItem i
+JOIN Calendar c ON c.ROWID = i.calendar_id
+WHERE date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') >= date('${ANALYSIS_WINDOW_START}')
+  AND date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') <= date('${CALENDAR_WINDOW_END}')
+  AND coalesce(c.title, '') NOT LIKE '%Birthday%'
+ORDER BY i.start_date ASC
+LIMIT 500;
 `;
 
 const healthNoteScript = String.raw`
@@ -180,11 +224,11 @@ function podcastQuery(episodeColumns) {
 SELECT
   coalesce(p.ZTITLE, e.ZAUTHOR, 'Apple Podcasts') AS source,
   coalesce(e.ZTITLE, e.ZITUNESTITLE, 'Untitled episode') AS title,
-  datetime(e.ZPUBDATE + 978307200, 'unixepoch', 'localtime') AS published,
+  datetime(e.ZPUBDATE + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') AS published,
   ${description} AS description
 FROM ZMTEPISODE e
 LEFT JOIN ZMTPODCAST p ON p.Z_PK = e.ZPODCAST
-WHERE date(e.ZPUBDATE + 978307200, 'unixepoch', 'localtime') BETWEEN date('${ANALYSIS_WINDOW_START}') AND date('${ANALYSIS_DATE}')
+WHERE date(e.ZPUBDATE + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') BETWEEN date('${ANALYSIS_WINDOW_START}') AND date('${ANALYSIS_DATE}')
 ORDER BY e.ZPUBDATE DESC;`;
 }
 
@@ -275,12 +319,37 @@ function mailItem(message, axis = false, includeDate = false) {
   };
 }
 
+async function readNewsletterListing() {
+  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterListScript], {
+    timeout: NEWSLETTER_LIST_TIMEOUT_MS,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}
+
+async function readNewsletterBodies() {
+  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterBodyScript], {
+    timeout: NEWSLETTER_BODY_TIMEOUT_MS,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}
+
 async function readNewsletters() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterMailScript], { timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
-  const parsed = JSON.parse(stdout);
+  // Listing alone is enough for status=live when the mailbox is readable.
+  const listed = await readNewsletterListing();
+  let messages = listed.messages ?? [];
+  try {
+    const enriched = await readNewsletterBodies();
+    if (Array.isArray(enriched.messages) && enriched.messages.length) {
+      messages = enriched.messages;
+    }
+  } catch {
+    // Retain metadata-only digests; do not fail the Newsletters source after a successful list.
+  }
   return {
-    total: parsed.totalCount,
-    items: parsed.messages.map((message) => mailItem(message, false, true)),
+    total: listed.totalCount,
+    items: messages.map((message) => mailItem(message, false, true)),
   };
 }
 
@@ -292,116 +361,6 @@ async function readAxisResearch() {
     total: parsed.totalCount,
     items: uniqueMessages.map((message) => mailItem(message, true, true)),
   };
-}
-
-const companySymbols = [
-  ["ICICI Bank", "ICICIBANK"], ["Bharti Airtel", "BHARTIARTL"], ["Eternal", "ETERNAL"],
-  ["JSW Energy", "JSWENERGY"], ["Adani Green Energy", "ADANIGREEN"], ["Aether Industries", "AETHER"],
-  ["Tech Mahindra", "TECHM"], ["L&T Technology Services", "LTTS"], ["LTIMindtree", "LTIM"],
-  ["Avenue Supermarts", "DMART"], ["R Systems International", "RSYSTEMS"],
-  ["Ujjivan Small Finance Bank", "UJJIVANSFB"],
-  ["Axis Bank", "AXISBANK"], ["Global Health", "MEDANTA"], ["Bandhan Bank", "BANDHANBNK"],
-  ["Bajaj Auto", "BAJAJ-AUTO"], ["Bharat Petroleum", "BPCL"], ["UltraTech Cement", "ULTRACEMCO"],
-  ["Steel Strips Wheels", "SSWL"], ["Wipro", "WIPRO"], ["Star Cement", "STARCEMENT"],
-  ["Gujarat Fluorochemicals", "FLUOROCHEM"], ["Aptus Value Housing Finance India", "APTUS"],
-  ["Rainbow Children's Medicare", "RAINBOW"], ["Tata Consultancy Services", "TCS"],
-  ["DLF", "DLF"], ["CDSL", "CDSL"], ["Kalyani Steels", "KSL"],
-];
-
-const recommendationColors = ["#4c8fff", "#42c878", "#b38cff", "#ff7f6e", "#21b5c5", "#e3b844"];
-
-const recommendationRiskOverrides = {
-  RSYSTEMS: [4, 4, 4, 5, 4, 1], DMART: [5, 3, 1, 3, 4, 1], LTIM: [3, 4, 1, 4, 4, 1],
-  RAINBOW: [4, 4, 3, 4, 4, 3], TCS: [3, 4, 1, 3, 4, 1], ETERNAL: [5, 4, 2, 4, 4, 1],
-  DLF: [4, 5, 1, 4, 3, 4], CDSL: [4, 4, 1, 4, 3, 1], KSL: [4, 5, 4, 5, 3, 3],
-  UJJIVANSFB: [3, 4, 3, 4, 3, 4], TECHM: [3, 4, 1, 3, 4, 1], LTTS: [4, 4, 2, 4, 4, 1],
-  SSWL: [4, 4, 3, 4, 4, 3], WIPRO: [3, 3, 1, 3, 4, 1], STARCEMENT: [4, 5, 3, 4, 4, 3],
-  FLUOROCHEM: [4, 5, 3, 5, 4, 3], APTUS: [4, 4, 3, 4, 4, 4],
-};
-
-function recommendationRiskScores(symbol, text) {
-  if (recommendationRiskOverrides[symbol]) return recommendationRiskOverrides[symbol];
-  const scores = [3, 3, 3, 3, 3, 3];
-  if (/premium valuation|expensive|high valuation|multiple|rerating/i.test(text)) scores[0] = 5;
-  else if (/valuation comfort|undervalued|attractive valuation/i.test(text)) scores[0] = 2;
-  if (/small.?cap|micro.?cap|cyclical|commodity|real estate/i.test(text)) scores[1] = 4;
-  if (/small.?cap|micro.?cap|low liquidity|technical buy/i.test(text)) scores[2] = 4;
-  else if (/large.?cap|nifty|sensex/i.test(text)) scores[2] = 1;
-  if (/volatile|technical|trading buy|momentum|breakout/i.test(text)) scores[3] = 5;
-  if (/regulatory|geopolitical|currency|commodity|result|earnings|event/i.test(text)) scores[4] = 4;
-  if (/leverage|debt|capital intensive|capex|credit cost|asset quality/i.test(text)) scores[5] = 4;
-  else if (/net cash|debt.?free|asset light/i.test(text)) scores[5] = 1;
-  return scores;
-}
-
-function recommendationSymbol(name) {
-  const match = companySymbols.find(([company]) => name.toLowerCase().includes(company.toLowerCase()) || company.toLowerCase().includes(name.toLowerCase()));
-  return match?.[1] ?? name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
-}
-
-function extractAxisRecommendations(messages) {
-  const recommendations = [];
-  const seen = new Set();
-  const addRecommendation = ({ symbol, name, call, target, message, text, horizon = "Latest Axis report" }) => {
-    if (!name || seen.has(symbol)) return;
-    seen.add(symbol);
-    recommendations.push({
-      symbol, name, call, target, cmp: null,
-      upside: target ? "Target from latest Axis mail" : "No explicit target in readable Mail content",
-      horizon, source: message.source || "Axis Direct", date: message.time, thesis: message.summary,
-      color: recommendationColors[recommendations.length % recommendationColors.length],
-      scores: recommendationRiskScores(symbol, text),
-    });
-  };
-  for (const message of messages) {
-    const text = `${message.title}. ${message.summary}`;
-    const pickMatch = message.title.match(/^Pick of the Week\s*-\s*(.+?)(?:\s+Limited)?$/i);
-    if (pickMatch) {
-      const name = cleanText(pickMatch[1]).trim();
-      const symbol = recommendationSymbol(name);
-      addRecommendation({ symbol, name, call: "PICK", target: null, message, text, horizon: "Pick of the Week" });
-    }
-
-    for (const [company, symbol] of companySymbols) {
-      const companyIndex = text.toLowerCase().indexOf(company.toLowerCase());
-      if (companyIndex < 0) continue;
-      const companyContext = text.slice(companyIndex, companyIndex + 220);
-      const callMatch = companyContext.match(/\b(BUY|HOLD|SELL|REDUCE|ADD|TRADING BUY|TECHNICAL BUY)\b/i);
-      const isTechnicalPick = /Weekly Technical Picks/i.test(message.title);
-      if (!callMatch && !isTechnicalPick) continue;
-      const targetMatch = companyContext.match(/\bTP\s*(?:of|:)?\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
-      addRecommendation({
-        symbol,
-        name: company,
-        call: callMatch?.[1].toUpperCase() ?? "TECHNICAL BUY",
-        target: targetMatch ? Number(targetMatch[1].replace(/,/g, "")) : null,
-        message,
-        text,
-        horizon: isTechnicalPick ? "Weekly technical setup" : "Latest Axis report",
-      });
-    }
-
-    const titleCall = message.title.match(/^(.+?)(?:\s*-\s*Axis Annual Analysis)?\s*:\s*(BUY|HOLD|SELL|REDUCE|ADD|TRADING BUY|TECHNICAL BUY)/i);
-    if (titleCall) {
-      const name = cleanText(titleCall[1]).trim();
-      const symbol = recommendationSymbol(name);
-      const targetMatch = text.match(/(?:TP|target)(?:\s+of)?\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
-      const target = targetMatch ? Number(targetMatch[1].replace(/,/g, "")) : null;
-      addRecommendation({
-        symbol, name, call: titleCall[2].toUpperCase(), target, message, text,
-        horizon: `${ANALYSIS_WINDOW_START} to ${ANALYSIS_DATE}`,
-      });
-    }
-
-    const axisAlphaCall = message.title.match(/^Axis Alpha\s*:\s*(.+?)(?:\s*-\s*|\s*:\s*)(BUY|HOLD|SELL|REDUCE|ADD|TRADING BUY|TECHNICAL BUY)\b/i);
-    if (axisAlphaCall) {
-      const name = cleanText(axisAlphaCall[1]).trim();
-      const symbol = recommendationSymbol(name);
-      const targetMatch = text.match(/(?:TP|target)(?:\s+of)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+)/i);
-      addRecommendation({ symbol, name, call: axisAlphaCall[2].toUpperCase(), target: targetMatch ? Number(targetMatch[1].replace(/,/g, "")) : null, message, text, horizon: "Axis Alpha" });
-    }
-  }
-  return recommendations.slice(0, 20);
 }
 
 function macroEvidence(newsletters, axisItems) {
@@ -437,6 +396,12 @@ async function readPodcasts() {
   }));
 }
 
+function coreDataToIso(coreDataSeconds) {
+  const seconds = Number(coreDataSeconds);
+  if (!Number.isFinite(seconds)) return "";
+  return new Date((seconds + CORE_DATA_EPOCH) * 1000).toISOString();
+}
+
 function classifyTopic(title, detail = "", source = "") {
   const text = `${title} ${detail} ${source}`;
   if (/earnings|results?|q[1-4]|investor|analyst|stock|nifty|sensex|market/i.test(text)) return "Earnings";
@@ -460,7 +425,7 @@ async function readReminders() {
 
   return [...new Map(rows.map((item) => [item.id, item])).values()].map((item) => {
     const dueSeconds = Number(item.dueCoreData);
-    const dueAt = Number.isFinite(dueSeconds) ? new Date((dueSeconds + 978307200) * 1000).toISOString() : null;
+    const dueAt = Number.isFinite(dueSeconds) ? new Date((dueSeconds + CORE_DATA_EPOCH) * 1000).toISOString() : null;
     return {
       id: String(item.id || `${item.list}:${item.title}`),
       title: String(item.title || "Untitled reminder"),
@@ -475,8 +440,16 @@ async function readReminders() {
 }
 
 async function readCalendar() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", calendarScript], { timeout: 60000, maxBuffer: 12 * 1024 * 1024 });
-  return JSON.parse(stdout || "[]").map((item) => ({ ...item, topic: classifyTopic(item.title, item.notes, item.calendar) })).sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
+  const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", CALENDAR_DB, calendarQuery], { timeout: 30000, maxBuffer: 12 * 1024 * 1024 });
+  return JSON.parse(stdout || "[]").map((item) => ({
+    id: String(item.id || ""),
+    title: String(item.title || "Untitled event"),
+    calendar: String(item.calendar || "Unknown calendar"),
+    startsAt: coreDataToIso(item.startCoreData),
+    endsAt: coreDataToIso(item.endCoreData),
+    notes: String(item.notes || ""),
+    topic: classifyTopic(item.title, item.notes, item.calendar),
+  })).sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
 }
 
 async function readHealthNote() {
@@ -495,12 +468,12 @@ async function settle(task) {
 }
 
 async function refresh() {
-  const [newsletters, axisResearch, podcasts, reminders, calendar, healthNote] = await Promise.all([
-    settle(readNewsletters),
-    settle(readAxisResearch),
+  const calendar = await settle(readCalendar);
+  const newsletters = await settle(readNewsletters);
+  const axisResearch = await settle(readAxisResearch);
+  const [podcasts, reminders, healthNote] = await Promise.all([
     settle(readPodcasts),
     settle(readReminders),
-    settle(readCalendar),
     settle(readHealthNote),
   ]);
   const newsletterValue = newsletters.status === "fulfilled" ? newsletters.value : { total: 0, items: [] };
@@ -527,13 +500,13 @@ async function refresh() {
     calendar: calendarValue,
     healthNote: healthNoteValue,
     investment: {
-      policy: "Latest iCloud Axis Research and Newsletters mail is refreshed before investment analysis; static research is fallback-only.",
+      policy: "Mail-first: iCloud → Axis Research window drives I-4/I-6 calls. Local archive PDFs are evidence inventory only, not a stock-call count.",
       analysisWindowStart: ANALYSIS_WINDOW_START,
       analysisDate: ANALYSIS_DATE,
       axisLookbackDays: AXIS_LOOKBACK_DAYS,
       latestAxisAt: axisValue.items[0]?.time ?? "No qualifying Axis report in the rolling window",
       latestNewsletterAt: newsletterValue.items[0]?.time ?? "No newsletter available",
-      axisRecommendations: extractAxisRecommendations(axisValue.items),
+      axisRecommendations: extractAxisRecommendations(axisValue.items, { analysisWindowStart: ANALYSIS_WINDOW_START, analysisDate: ANALYSIS_DATE }),
       macroEvidence: macroEvidence(newsletterValue.items, axisValue.items),
     },
     sources: {
@@ -646,7 +619,7 @@ async function refreshAndCache() {
     ...retained.investment,
     latestAxisAt: retained.axisResearch[0]?.time ?? "No qualifying Axis report in the rolling window",
     latestNewsletterAt: retained.newsletters[0]?.time ?? "No newsletter available",
-    axisRecommendations: extractAxisRecommendations(retained.axisResearch),
+    axisRecommendations: extractAxisRecommendations(retained.axisResearch, { analysisWindowStart: ANALYSIS_WINDOW_START, analysisDate: ANALYSIS_DATE }),
     macroEvidence: macroEvidence(retained.newsletters, retained.axisResearch),
   };
   const requiredKeys = ["newsletters", "axisResearch", "reminders", "calendar", "healthNote"];
@@ -666,7 +639,7 @@ function refreshOnce() {
   return refreshInFlight;
 }
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
   if (requestUrl.pathname === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -718,7 +691,12 @@ createServer(async (request, response) => {
     response.writeHead(500, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     response.end(JSON.stringify({ status: "unavailable", message: error instanceof Error ? error.message : String(error) }));
   }
-}).listen(PORT, "127.0.0.1", () => {
+});
+server.on("error", (error) => {
+  process.stderr.write(`Content digest server failed to listen on 127.0.0.1:${PORT}: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+});
+server.listen(PORT, "127.0.0.1", () => {
   process.stdout.write(`Content digest server listening on http://127.0.0.1:${PORT}\n`);
   if (!lastSnapshot || snapshotAge(lastSnapshot) >= CONTENT_REFRESH_INTERVAL_MS) refreshOnce().catch((error) => process.stderr.write(`Initial content refresh failed: ${error instanceof Error ? error.message : String(error)}\n`));
 });

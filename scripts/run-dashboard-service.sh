@@ -57,20 +57,26 @@ if ! curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
   exit 1
 fi
 
+# channel-timeout must cover long Mail/Podcast force refreshes proxied through Flask.
 DASHBOARD_UPSTREAM="$UPSTREAM_URL" "$VENV_DIR/bin/waitress-serve" \
-  --listen="$BIND_HOST:$FLASK_PORT" --threads=8 --channel-timeout=180 \
+  --listen="$BIND_HOST:$FLASK_PORT" --threads=8 --channel-timeout=360 \
   flask_gateway:app >>"$LOG_DIR/flask.log" 2>&1 &
 FLASK_PID=$!
 
 for _ in {1..30}; do
-  if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/" >/dev/null 2>&1; then
+  if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/_flask/health" >/dev/null 2>&1; then
     break
   fi
   kill -0 "$FLASK_PID" 2>/dev/null || exit 1
   sleep 1
 done
 
-if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/" >/dev/null 2>&1; then
+# Re-assert helpers immediately before the audit so a raced restart cannot leave
+# Kite MCP / content digest down while Flask is briefly healthy.
+"$ROOT_DIR/scripts/ensure-kite-server.sh" >>"$LOG_DIR/kite.log" 2>&1 || true
+"$ROOT_DIR/scripts/ensure-content-digest-server.sh" >>"$LOG_DIR/content-digest.log" 2>&1 || true
+
+if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/_flask/health" >/dev/null 2>&1; then
   set +e
   DASHBOARD_PUBLIC_URL="http://127.0.0.1:$FLASK_PORT" \
     "$ROOT_DIR/scripts/refresh-dashboard-data.sh" >"$LOG_DIR/startup-refresh.log" 2>&1
@@ -88,9 +94,28 @@ else
 fi
 
 while kill -0 "$FLASK_PID" 2>/dev/null; do
-  if [[ -n "$VINEXT_PID" ]] && ! kill -0 "$VINEXT_PID" 2>/dev/null; then
-    exit 1
+  if ! curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+    printf 'Upstream down; restarting Vinext.\n' >>"$LOG_DIR/service.log"
+    if [[ -n "$VINEXT_PID" ]]; then
+      kill "$VINEXT_PID" 2>/dev/null || true
+      wait "$VINEXT_PID" 2>/dev/null || true
+      VINEXT_PID=""
+    fi
+    "$NPM_BIN" run "$NPM_SCRIPT" >>"$LOG_DIR/vinext.log" 2>&1 &
+    VINEXT_PID=$!
+    for _ in {1..45}; do
+      if curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+        break
+      fi
+      kill -0 "$VINEXT_PID" 2>/dev/null || break
+      sleep 1
+    done
+  elif [[ -n "$VINEXT_PID" ]] && ! kill -0 "$VINEXT_PID" 2>/dev/null; then
+    # Orphaned healthy listener (started outside this supervisor): keep serving.
+    VINEXT_PID=""
   fi
+  "$ROOT_DIR/scripts/ensure-kite-server.sh" >>"$LOG_DIR/kite.log" 2>&1 || true
+  "$ROOT_DIR/scripts/ensure-content-digest-server.sh" >>"$LOG_DIR/content-digest.log" 2>&1 || true
   sleep 5
 done
 

@@ -65,6 +65,7 @@ class FlaskGatewayTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["app"], "Portfolio Intelligence")
         self.assertEqual(payload["gateway"], "flask")
 
     def test_rejects_health_snapshot_without_token(self):

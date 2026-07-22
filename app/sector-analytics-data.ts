@@ -36,11 +36,13 @@ export const lifeCyclePoints = [
   { id: "power", name: "Renewables", stage: 1.8, growth: 27, profit: 34, color: "#ffd166" },
   { id: "auto", name: "EV", stage: 2.0, growth: 33, profit: 25, color: "#64b5ff" },
   { id: "consumer", name: "Q-commerce", stage: 2.2, growth: 40, profit: 27, color: "#ff7b87" },
+  { id: "infrastructure", name: "Infra / EPC", stage: 2.6, growth: 16, profit: 31, color: "#ff9f6e" },
   { id: "banking", name: "Fintech lending", stage: 2.8, growth: 18, profit: 29, color: "#42c878" },
+  { id: "pharma", name: "Branded pharma", stage: 3.1, growth: 12, profit: 38, color: "#52d6a3" },
   { id: "it", name: "IT services", stage: 3.4, growth: 9, profit: 44, color: "#4c8fff" },
   { id: "banking", name: "Private banking", stage: 3.7, growth: 13, profit: 48, color: "#42c878" },
+  { id: "nbfc", name: "NBFC credit", stage: 3.2, growth: 17, profit: 35, color: "#35c2d6" },
   { id: "telecom", name: "Wireless", stage: 4.0, growth: 11, profit: 50, color: "#b794f6" },
-  { id: "pharma", name: "Branded pharma", stage: 3.1, growth: 12, profit: 38, color: "#52d6a3" },
   { id: "fmcg", name: "Staples", stage: 4.2, growth: 7, profit: 42, color: "#f58fd2" },
   { id: "energy", name: "Legacy oil", stage: 4.8, growth: -2, profit: 46, color: "#f3a83b" },
 ];
@@ -48,9 +50,11 @@ export const lifeCyclePoints = [
 export const marketStructurePoints = [
   { id: "it", name: "IT Services", margin: 13, concentration: 4.5, profit: 44, color: "#4c8fff" },
   { id: "banking", name: "Private Banks", margin: 16, concentration: 4.2, profit: 48, color: "#42c878" },
+  { id: "nbfc", name: "NBFC", margin: 18, concentration: 3.6, profit: 35, color: "#35c2d6" },
   { id: "auto", name: "Auto OEM", margin: 12, concentration: 4.5, profit: 38, color: "#64b5ff" },
   { id: "pharma", name: "Pharma", margin: 22, concentration: 2.7, profit: 38, color: "#52d6a3" },
   { id: "fmcg", name: "FMCG", margin: 22, concentration: 4.3, profit: 42, color: "#f58fd2" },
+  { id: "consumer", name: "Consumer platforms", margin: 8, concentration: 3.2, profit: 27, color: "#ff7b87" },
   { id: "energy", name: "OMC / Refining", margin: 4, concentration: 4.4, profit: 46, color: "#f3a83b" },
   { id: "power", name: "Power", margin: 15, concentration: 3.4, profit: 34, color: "#ffd166" },
   { id: "telecom", name: "Telecom", margin: 49, concentration: 4.8, profit: 50, color: "#b794f6" },
@@ -67,7 +71,9 @@ export const macroDials = [
 ];
 
 export const squeezeWidths = [
-  { name: "Nifty", value: 0.83, color: "#42c878" }, { name: "Bank Nifty", value: 1.83, color: "#4c8fff" },
-  { name: "ETERNAL", value: 4.2, color: "#ff6b72" }, { name: "AXISBANK", value: 3.1, color: "#ff6b72" },
-  { name: "ICICIBANK", value: 1.2, color: "#4c8fff" },
+  { name: "Nifty", value: 0.83, color: "#42c878", group: "Index" as const },
+  { name: "Bank Nifty", value: 1.83, color: "#4c8fff", group: "Index" as const },
+  { name: "ICICIBANK", value: 1.2, color: "#42c878", group: "Name" as const },
+  { name: "AXISBANK", value: 3.1, color: "#ff6b72", group: "Name" as const },
+  { name: "ETERNAL", value: 4.2, color: "#ff6b72", group: "Name" as const },
 ];

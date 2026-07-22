@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const base = process.env.CONTENT_DIGEST_URL ?? "http://127.0.0.1:3003/refresh";
     const target = new URL(base);
     if (force) target.searchParams.set("force", "1");
-    const response = await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(75000) });
+    const response = await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(300_000) });
     const snapshot = await response.json() as ContentDigestSnapshot;
     return Response.json(snapshot, { status: response.ok ? 200 : 503, headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
