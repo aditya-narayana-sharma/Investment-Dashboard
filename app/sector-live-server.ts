@@ -312,13 +312,15 @@ export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorM
       authRequired = !(await kiteAuthLikelyValid());
     }
 
-    if (permissionDenied || !authRequired) {
-      try {
-        const fallbackReason = permissionDenied ? CONNECT_MARKET_DATA_MESSAGE : message;
-        return await getPublicSectorMarketSnapshot(sectorId, fallbackReason);
-      } catch {
-        // Preserve the explicit Kite state if the independent public source also fails.
-      }
+    try {
+      const fallbackReason = permissionDenied
+        ? CONNECT_MARKET_DATA_MESSAGE
+        : authRequired
+          ? `Kite authentication is required. ${message}`
+          : message;
+      return await getPublicSectorMarketSnapshot(sectorId, fallbackReason);
+    } catch {
+      // Preserve the explicit Kite state if the independent public source also fails.
     }
 
     return {
