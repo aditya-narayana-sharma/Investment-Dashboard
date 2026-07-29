@@ -38,6 +38,7 @@ test("extractAxisRecommendations scopes multi-company digests per symbol", () =>
   const bySymbol = Object.fromEntries(recommendations.map((item) => [item.symbol, item]));
   assert.equal(bySymbol.BANDHANBNK?.call, "BUY");
   assert.equal(bySymbol.BANDHANBNK?.target, 235);
+  assert.equal(bySymbol.BANDHANBNK?.upside, "—");
   assert.match(bySymbol.BANDHANBNK.thesis, /Bandhan Bank/i);
   assert.doesNotMatch(bySymbol.BANDHANBNK.thesis, /Indian Hotels|Bajaj Auto/i);
 

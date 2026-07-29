@@ -2,7 +2,7 @@
 
 ## Startup data refresh
 
-Every dashboard service start runs `scripts/refresh-dashboard-data.sh` after the Flask gateway is ready. The audit refreshes or verifies Kite, Mail and Podcasts, earnings, HealthKit D-1 coverage, and every configured sector. Results are written to `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`; failures remain visible as stale, cached, or unavailable data instead of being presented as live.
+Every dashboard service start runs `scripts/refresh-dashboard-data.sh` after the Flask gateway is ready. The audit refreshes or verifies Kite, Mail and Podcasts, earnings, HealthKit operational-date coverage, and every configured sector. Health rolls to day D at 8:00 PM IST, remains anchored to that date through 1:59 AM, and uses D-1 from 2:00 AM through 7:59 PM. Results are written to `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`; failures remain visible in the compact per-source freshness strip and affected sections as stale, cached, or unavailable data instead of being presented as live. The dashboard intentionally does not show a separate persistent startup-audit failure banner.
 
 Persistent source and freshness rules for future maintenance are in `AGENTS.md`.
 
@@ -41,8 +41,8 @@ Install the Mac Dock app once with `npm run desktop` (creates `~/Applications/Po
 
 The primary full-featured iPhone client is the SwiftUI app in
 `apple-app/InvestmentDashboard.xcodeproj`. It provides native onboarding,
-Investment/Sectoral/Health workspace navigation, startup-audit and connection
-status, HealthKit D-1 upload, offline recovery, and PDF sharing around one
+Investment/Sectoral/Market Intelligence/Health workspace navigation, source freshness and connection
+status, operational-day HealthKit upload, offline recovery, and PDF sharing around one
 persistent WKWebView. The Safari PWA remains a fallback installation path.
 See `apple-app/README.md` for physical-device and TestFlight instructions.
 
@@ -65,14 +65,36 @@ data, and MCP calls remain server-side.
 
 ## Workspace and filtering behavior
 
-The dashboard has three persistent workspaces:
+The dashboard has four persistent workspaces:
 
-- **Investment**: action board, live Kite portfolio snapshot, macro scenarios,
-  analyst calls, portfolio/Axis risk views, and Axis recommendations.
-- **Sectoral Analytics**: sector action board, linked sector analytics, complete
-  intelligence digest, and earnings/decision tools.
-- **Health & Wellness**: private HealthKit coverage, modular category KPIs,
-  comparisons, trends, action board, optimisation, and guardrails.
+- **Investment** (`?view=investment`): action board, live Kite portfolio snapshot,
+  macro scenarios, analyst calls, portfolio/Axis risk views, and Axis
+  recommendations.
+- **Sectoral Analytics** (`?view=sectors`): a non-scrolling 2x2 analytical
+  console for S-1 Action Board, S-2 Industry Analytics, S-3 Benchmarks &
+  Decision Lab, and S-4 Earnings Calendar. Opening a tile uses a viewport-fitted
+  paged view such as `?view=sectors&section=s2&page=companies`; Back/Forward,
+  reload, keyboard navigation, and selected analytical state are preserved.
+- **Market Intelligence** (`?view=intelligence`, alias `?view=market-intelligence`):
+  a daily three-lane action board followed by the complete Live Intelligence
+  Digest (Newsletters, Axis Research, Calendar + action feeds with earnings
+  calendar, Reminders, Notes, Podcasts).
+- **Health & Wellness** (`?view=health`): a private, non-scrolling 2x2 console
+  for H-1 Action Board, H-2 Health Status, H-3 Daily Guidance, and H-4 Vital
+  Metrics. Opening a tile uses a viewport-fitted paged view such as
+  `?view=health&section=h4&page=heart`. Nutrition is split across two metric
+  pages so desktop and iPhone views remain scroll-free. Incognito gates every
+  overview tile and drill-down, including Health values and source metadata.
+
+Every workspace action board uses the same complete three-lane contract:
+`To Do Today`, `Monitor`, and `Completed Today`. Actions are clickable, completed
+items move to the third lane with strike-through styling, and completion state
+is retained for the day before resetting at local midnight. Sectoral S-1 and
+Health H-1 always open the complete board rather than separate lane pages.
+The Investment board is the canonical visual contract: all workspaces use the
+same summary header, lane headers, card anatomy, spacing, empty state, and
+completed-state treatment. Compact, single-lane, or workspace-specific action
+board variants are not supported.
 
 The industry selector in **S-2 Sectoral Analytics** is deliberately scoped to
 S-2. Selecting an industry filters or dims only S-2 matrices, charts, rankings,
@@ -80,18 +102,22 @@ company composition, and linked analytical panels.
 
 The following sections are always outside that filter boundary:
 
-- **S-3 Live Intelligence Digest** always shows the complete refreshed
-  Newsletter, Axis Research, Calendar, Reminders, Notes, and Podcast content.
-  It must not show an industry-filter banner or exclude unmatched industries.
-- **S-4 Earnings & Decision Framework** always keeps every tracked earnings
-  event visible, enabled, and selectable. The S-2 industry choice must not dim,
-  disable, hide, or reduce the earnings event set.
-- The S-4 Decision Framework has its own local industry selector. Changing it
-  updates only that framework and does not change S-2, S-3, or the earnings
-  calendar.
+- **Market Intelligence** always shows the complete refreshed Newsletter, Axis
+  Research, Calendar, Reminders, Notes, Podcast, and earnings-calendar content
+  (Earnings bucket inside Calendar + action feeds). It must not show an
+  industry-filter banner or exclude unmatched industries. Sectoral Analytics
+  must not host a digest or Market Intelligence cross-link.
+- **S-3 Benchmarks & Decision Lab** uses its own local sector selector. Its
+  benchmark, investability, PESTEL, Porter, and macro-trigger pages do not read
+  or mutate S-2 filtering.
+- **S-4 Earnings Calendar** always keeps every tracked earnings event visible,
+  enabled, and selectable. Counts, details, and KPI rows are scoped to the
+  visible month; stars are matched dynamically against current Kite holdings,
+  and an event outside the visible month cannot leak into the detail panel.
 
 This boundary is covered by rendered-dashboard tests. Any future sector filter
-change must preserve full S-3/S-4 visibility on desktop, iPhone, and PDF flows.
+change must preserve full Market Intelligence / S-4 visibility on desktop,
+iPhone, and PDF flows.
 
 ### Access over mobile data
 
@@ -126,9 +152,14 @@ Use the dashboard's **Authenticate Kite** action only when the existing session
 genuinely requires authentication. Complete the Zerodha login, return to the
 dashboard, and press **Refresh now**. After one successful login, the daily
 access token is kept until the next ~06:00 IST boundary (Zerodha's once-per-day
-rule). The dashboard and local Kite MCP server reuse that token across restarts
-and MCP session rotations; avoid additional same-day logins because Zerodha can
-invalidate the previous access token for the same API key.
+regulatory rule — documented by Kite Connect as expiring at 6 AM on the next
+day). This is **not** a fixed 12-hour timer: if you log in around the evening,
+the next 06:00 IST cutover can feel like "~12 hours," but morning logins last
+closer to a full trading day. The dashboard and local Kite MCP server reuse that
+token across restarts and MCP session rotations; avoid additional same-day
+logins because Zerodha can invalidate the previous access token for the same
+API key. PDF export requires a live post-login snapshot — after the overnight
+boundary, re-auth once, then retry export.
 
 ## Research Sources
 
@@ -138,6 +169,20 @@ invalidate the previous access token for the same API key.
 - Live source of truth: Kite holdings, positions, orders, GTTs, and margins
 - Supplemental context: public web sources, Apple Mail digests, Apple Podcasts,
   and the local earnings calendar
+
+Apple Mail summaries use exactly the iCloud `Newsletters` and `Axis Research`
+mailboxes. Displayed digests omit promotions, ads, registration or purchase
+calls to action, follow/subscribe requests, contact details, phone numbers,
+email addresses, and website links. Podcast items are deduplicated by episode
+title and identify whether their evidence came from a locally available
+transcript or only the episode description.
+
+Health refresh validates the newest iCloud Apple Health ZIP before importing
+`apple_health_export/export.xml`. A corrupt or incomplete newest ZIP is reported
+as a fallback source and the last validated extracted export remains in use, so
+a failed archive cannot overwrite a valid Health snapshot. The archive ExportDate
+is evaluated with the same 8 PM policy, and records after its eligible-through
+date are excluded from KPI cards and comparisons.
 
 The current baked research snapshot lives in `app/portfolio-data.ts`; live prices
 and broker state are never sourced from that file while Kite is healthy.
@@ -229,7 +274,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run build`: verify the vinext build output
 - `npm test`: build and verify rendered dashboard behavior
 - `node --test tests/rendered-html.test.mjs`: verify workspace structure,
-  S-2 filter isolation, and S-3/S-4 visibility
+  S-2 filter isolation, and Market Intelligence / S-4 visibility
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
 ## Learn More

@@ -83,7 +83,7 @@ if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/_flask/health" >/dev/null
   AUDIT_EXIT=$?
   set -e
   if [[ "$AUDIT_EXIT" -ne 0 ]]; then
-    printf 'Startup refresh audit FAILED (exit %s). Dashboard remains up; UI will show the audit banner. See %s/startup-refresh.log\n' "$AUDIT_EXIT" "$LOG_DIR" | tee -a "$LOG_DIR/service.log"
+    printf 'Startup refresh audit FAILED (exit %s). Dashboard remains up; inspect the compact freshness strip and %s/startup-refresh.log\n' "$AUDIT_EXIT" "$LOG_DIR" | tee -a "$LOG_DIR/service.log"
   else
     printf 'Startup refresh audit passed.\n' | tee -a "$LOG_DIR/service.log"
   fi

@@ -39,9 +39,14 @@ private struct DashboardHealthAction: Codable {
 
 private struct DashboardHealthSnapshot: Codable {
     let schemaVersion = 1
-    let status = "live"
+    let status: String
     let source = "Apple Health"
     let dataDate: String
+    let targetDate: String
+    let targetPolicy: String
+    let targetLabel: String
+    let requiredThrough: String
+    let eligibleThrough: String
     let capturedAt: String
     let message: String
     let categories: [DashboardHealthCategory]
@@ -86,7 +91,7 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
 
         isSyncing = true
-        status = "Reading latest completed day"
+        status = "Reading operational Health day"
         defer { isSyncing = false }
 
         do {
@@ -97,10 +102,10 @@ final class HealthKitSyncCoordinator: ObservableObject {
             }
             try await healthStore.requestAuthorization(toShare: [], read: readTypes)
 
-            let calendar = Calendar.autoupdatingCurrent
-            let today = calendar.startOfDay(for: Date())
-            guard let dataDate = calendar.date(byAdding: .day, value: -1, to: today) else { return }
-            let snapshot = try await buildSnapshot(for: dataDate, descriptors: descriptors, calendar: calendar)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = HealthOperationalDatePolicy.timeZone
+            let target = HealthOperationalDatePolicy.context(for: Date())
+            let snapshot = try await buildSnapshot(for: target, descriptors: descriptors, calendar: calendar)
             try await upload(snapshot, to: dashboardURL)
             status = "HealthKit synced through \(snapshot.dataDate)"
             lastSyncedAt = Date()
@@ -148,7 +153,8 @@ final class HealthKitSyncCoordinator: ObservableObject {
         ]
     }
 
-    private func buildSnapshot(for date: Date, descriptors: [QuantityMetricDescriptor], calendar: Calendar) async throws -> DashboardHealthSnapshot {
+    private func buildSnapshot(for target: HealthTargetContext, descriptors: [QuantityMetricDescriptor], calendar: Calendar) async throws -> DashboardHealthSnapshot {
+        let date = target.targetDate
         let end = calendar.date(byAdding: .day, value: 1, to: date)!
         let weeklyStart = calendar.date(byAdding: .day, value: -6, to: date)!
         let monthlyStart = calendar.date(byAdding: .day, value: -29, to: date)!
@@ -161,7 +167,7 @@ final class HealthKitSyncCoordinator: ObservableObject {
             guard let day else { continue }
             let week = try await statistics(for: type, start: weeklyStart, end: end, descriptor: descriptor)
             let month = try await statistics(for: type, start: monthlyStart, end: end, descriptor: descriptor)
-            let metric = makeMetric(descriptor: descriptor, day: day, week: week, month: month)
+            let metric = makeMetric(descriptor: descriptor, day: day, week: week, month: month, date: date)
             grouped[descriptor.category, default: []].append(metric)
             tones[descriptor.category] = descriptor.categoryTone
         }
@@ -185,18 +191,24 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
 
         return DashboardHealthSnapshot(
+            status: categories.count == order.count ? "live" : "partial",
             dataDate: Self.machineDayFormatter.string(from: date),
+            targetDate: target.targetDateKey,
+            targetPolicy: target.policy.rawValue,
+            targetLabel: target.label,
+            requiredThrough: target.targetDateKey,
+            eligibleThrough: target.targetDateKey,
             capturedAt: ISO8601DateFormatter().string(from: Date()),
-            message: "Latest completed-day HealthKit aggregates synced privately from the iPhone.",
+            message: "Operational-day HealthKit aggregates synced privately from the iPhone using \(target.label).",
             categories: categories,
             sources: [DashboardHealthSource(
                 source: "Apple Health / HealthKit",
                 status: "Synced",
-                detail: "Completed-day aggregates for \(dateText), with 7-day and 30-day baselines. Raw samples stay on the iPhone.",
+                detail: "Operational-day aggregates for \(dateText), with 7-day and 30-day baselines. Raw samples stay on the iPhone.",
                 tone: "green"
             )],
             actions: [
-                DashboardHealthAction(tone: "green", title: "Latest completed day is synced", text: "Review the direction indicators against both baselines before interpreting an isolated daily value."),
+                DashboardHealthAction(tone: "green", title: "Operational Health day is synced", text: "Review the direction indicators against both baselines before interpreting an isolated daily value."),
                 DashboardHealthAction(tone: "blue", title: "Use trends, not one reading", text: "HealthKit values are wellness signals. Repeated changes and symptoms matter more than a single high or low observation."),
                 DashboardHealthAction(tone: "amber", title: "Treat nutrition as logged intake", text: "Nutrition aggregates reflect recorded entries and may not represent total food or fluid consumption."),
             ]
@@ -242,7 +254,7 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
     }
 
-    private func makeMetric(descriptor: QuantityMetricDescriptor, day: StatisticValues, week: StatisticValues?, month: StatisticValues?) -> DashboardHealthMetric {
+    private func makeMetric(descriptor: QuantityMetricDescriptor, day: StatisticValues, week: StatisticValues?, month: StatisticValues?, date: Date) -> DashboardHealthMetric {
         let display: (StatisticValues) -> String = { values in
             if let minimum = values.minimum, let maximum = values.maximum {
                 return "\(descriptor.format(minimum))–\(descriptor.format(maximum))"
@@ -261,7 +273,7 @@ final class HealthKitSyncCoordinator: ObservableObject {
         return DashboardHealthMetric(
             label: descriptor.label,
             value: display(day),
-            context: "Apple Health · \(Self.dayFormatter.string(from: Date().addingTimeInterval(-86_400)))",
+            context: "Apple Health · \(Self.dayFormatter.string(from: date))",
             tone: descriptor.tone,
             averages: averages
         )

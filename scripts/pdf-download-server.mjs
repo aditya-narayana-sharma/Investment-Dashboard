@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -10,7 +10,6 @@ const execFileAsync = promisify(execFile);
 const HOST = "127.0.0.1";
 const PORT = Number.parseInt(process.env.PDF_DOWNLOAD_PORT || "3002", 10);
 const MAX_REPORT_BYTES = 12 * 1024 * 1024;
-const downloadsDirectory = join(homedir(), "Downloads");
 const chromeCandidates = [
   process.env.PDF_CHROME_PATH,
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -80,15 +79,8 @@ async function renderPdf(payload, filename) {
   const ghostscript = await findGhostscript();
   const workingDirectory = await mkdtemp(join(tmpdir(), "portfolio-report-"));
   const profilePath = join(workingDirectory, "chrome-profile");
-  const outputPath = join(downloadsDirectory, filename);
+  const outputPath = join(workingDirectory, filename);
   try {
-    await mkdir(downloadsDirectory, { recursive: true });
-    try {
-      await access(outputPath);
-      throw Object.assign(new Error("A report with this timestamp already exists."), { status: 409 });
-    } catch (error) {
-      if (error?.status === 409) throw error;
-    }
     const pagePdfs = [];
     for (const [index, html] of pages.entries()) {
       const sourcePath = join(workingDirectory, `page-${index + 1}.html`);

@@ -32,7 +32,8 @@ function istParts(date: Date) {
   };
 }
 
-/** Next Zerodha daily access-token boundary (~06:00 Asia/Kolkata). */
+/** Next Zerodha daily access-token boundary (~06:00 Asia/Kolkata).
+ *  This is a calendar cutover, not a fixed 12-hour TTL from login time. */
 export function nextKiteDailyExpiry(now = new Date()): Date {
   const ist = istParts(now);
   const utcMillis = Date.UTC(ist.year, ist.month - 1, ist.day, ist.hour, ist.minute, ist.second);

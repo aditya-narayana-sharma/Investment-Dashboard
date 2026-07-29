@@ -3,8 +3,10 @@ from __future__ import annotations
 import io
 import tempfile
 import unittest
+from datetime import datetime
 from email.message import Message
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import flask_gateway
@@ -109,6 +111,11 @@ class FlaskGatewayTests(unittest.TestCase):
             with (
                 patch.object(flask_gateway, "HEALTH_SNAPSHOT_PATH", Path(directory) / "health.json"),
                 patch.object(flask_gateway, "HEALTH_TOKEN", "portfolio-test-admin-token"),
+                patch.object(flask_gateway, "_current_health_target", return_value=SimpleNamespace(
+                    target_date=datetime.strptime("2026-07-18", "%Y-%m-%d").date(),
+                    policy="D_MINUS_1",
+                    label="D-1",
+                )),
             ):
                 stored = self.client.post(
                     "/_health/snapshot",
@@ -120,6 +127,8 @@ class FlaskGatewayTests(unittest.TestCase):
         self.assertEqual(stored.status_code, 201)
         self.assertEqual(loaded.status_code, 200)
         self.assertEqual(loaded.get_json()["dataDate"], "2026-07-18")
+        self.assertEqual(loaded.get_json()["targetDate"], "2026-07-18")
+        self.assertEqual(loaded.get_json()["targetPolicy"], "D_MINUS_1")
         self.assertEqual(loaded.headers["Cache-Control"], "no-store, max-age=0")
 
     def test_pairs_installation_and_accepts_keychain_token(self):

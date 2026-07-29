@@ -4,11 +4,16 @@ import { buildEarningsSnapshot } from "../../../earnings-verify";
 import { refreshAppleHealth } from "../../../health-import-server";
 import { currentKiteSession, getKiteSnapshot, restoreKiteSession } from "../../../kite-live-server";
 import { kiteSessionCookie } from "../../../kite-session-store";
+import { getSectorBenchmarkSnapshot } from "../../../sector-benchmark-server";
 
 export const dynamic = "force-dynamic";
 
 function istDate(daysAgo = 0) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - daysAgo * 86400000).toISOString().slice(0, 10);
+}
+
+async function loadHealthForDashboardRefresh() {
+  return refreshAppleHealth();
 }
 
 function cookie(request: Request, name: string) {
@@ -33,29 +38,18 @@ function mapKiteFreshness(status: string | undefined): FreshnessState {
   return "unavailable";
 }
 
-function gateHealthSnapshot<T extends { status?: string; dataDate?: string; completedThrough?: string; message?: string; capturedAt?: string }>(health: T | undefined) {
-  if (!health) return undefined;
-  const requiredDate = istDate(1);
-  const dataDate = health.dataDate ?? health.completedThrough ?? "";
-  const current = Boolean(dataDate && dataDate >= requiredDate);
-  return {
-    ...health,
-    status: current ? "live" : "stale",
-    message: current
-      ? health.message ?? `Latest completed-day Health data is available through ${dataDate}.`
-      : `Health data currently stops at ${dataDate || "unknown"}; latest completed day is ${requiredDate}.`,
-  } as T;
-}
-
 export async function GET(request: Request) {
   const storedSession = cookie(request, "kite_dashboard_session");
   if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), false);
   const refreshedAt = new Date().toISOString();
-  const contentUrl = `${process.env.CONTENT_DIGEST_URL ?? "http://127.0.0.1:3003/refresh"}?force=1`;
-  const [kiteResult, contentResult, healthResult] = await Promise.allSettled([
+  // Hot-path refresh should not force a full Mail/Podcasts re-read on every
+  // browser open/focus. Startup audit and explicit Refresh already force sources.
+  const contentUrl = `${process.env.CONTENT_DIGEST_URL ?? "http://127.0.0.1:3003/refresh"}?force=0`;
+  const [kiteResult, contentResult, healthResult, benchmarkResult] = await Promise.allSettled([
     getKiteSnapshot(),
     jsonFetch<ContentDigestSnapshot>(contentUrl),
-    refreshAppleHealth(),
+    loadHealthForDashboardRefresh(),
+    getSectorBenchmarkSnapshot(),
   ]);
   const { earningsCalendar } = await import("../../../portfolio-data");
   const earnings = buildEarningsSnapshot(earningsCalendar, istDate());
@@ -72,13 +66,33 @@ export async function GET(request: Request) {
             : "unavailable";
     sources.push(freshness(label, mapped, state?.observedAt ?? refreshedAt, key === "podcasts" ? "30 minutes" : "15 minutes", required, state?.message ?? `${state?.count ?? 0} items`));
   }
-  const health = gateHealthSnapshot(healthResult.status === "fulfilled" ? healthResult.value : undefined);
-  const healthFresh: FreshnessState = health?.status === "live" ? "verified" : health?.status === "stale" ? "stale" : "unavailable";
-  sources.push(freshness("Apple Health export", healthFresh, health?.capturedAt ?? refreshedAt, `complete through ${health?.completedThrough ?? health?.dataDate ?? istDate(1)}`, true, health?.message ?? String(healthResult.status === "rejected" ? healthResult.reason : "Health unavailable")));
+  const health = healthResult.status === "fulfilled" ? healthResult.value : undefined;
+  const healthFresh: FreshnessState = health?.status === "live" ? "verified"
+    : health?.status === "cached" ? "cached"
+      : health?.status === "partial" ? "partial"
+        : health?.status === "stale" ? "stale"
+          : "unavailable";
+  sources.push(freshness(
+    "Apple Health export",
+    healthFresh,
+    health?.capturedAt ?? refreshedAt,
+    `${health?.targetLabel ?? "operational target"} · ${health?.requiredThrough ?? health?.targetDate ?? health?.dataDate ?? "unknown"}`,
+    true,
+    health?.message ?? String(healthResult.status === "rejected" ? healthResult.reason : "Health unavailable"),
+  ));
   sources.push(freshness("Earnings", earnings.status === "verified" ? "verified" : earnings.status === "stale" ? "stale" : "unavailable", earnings.asOf, `through ${istDate()}`, true, earnings.message));
+  const benchmarks = benchmarkResult.status === "fulfilled" ? benchmarkResult.value : undefined;
+  sources.push(freshness(
+    "NSE benchmarks",
+    benchmarks?.status === "live" ? "live" : benchmarks?.status === "partial" ? "partial" : benchmarks?.status === "cached" ? "cached" : "unavailable",
+    benchmarks?.asOf ?? refreshedAt,
+    "5-minute supported levels · daily history",
+    false,
+    benchmarks?.message ?? String(benchmarkResult.status === "rejected" ? benchmarkResult.reason : "Benchmarks unavailable"),
+  ));
   const requiredFailed = sources.some((source) => source.required && ["cached", "unavailable", "permission_required", "stale", "partial"].includes(source.state));
   const result: DashboardRefreshResult = {
-    status: requiredFailed ? "partial" : "current", refreshedAt, analysisDate: istDate(), completedHealthThrough: health?.completedThrough ?? health?.dataDate ?? istDate(1), partialToday: Boolean(health?.partialToday), sources, kite, content, earnings, health,
+    status: requiredFailed ? "partial" : "current", refreshedAt, analysisDate: istDate(), completedHealthThrough: health?.completedThrough ?? health?.dataDate ?? istDate(1), partialToday: Boolean(health?.partialToday), sources, kite, content, earnings, health, benchmarks,
   };
   const headers: Record<string, string> = { "Cache-Control": "no-store, max-age=0" };
   const sessionId = currentKiteSession();

@@ -1,13 +1,21 @@
 /** Parse Axis Research mail into symbol-scoped recommendation rows. */
 
+import {
+  axisMessageDateKey,
+  isNseTradingDay,
+  resolveAxisTradingAsOf,
+  shiftIstDateKey,
+} from "./nse-trading-day.mjs";
+
 export const companySymbols = [
   ["ICICI Bank", "ICICIBANK"], ["Bharti Airtel", "BHARTIARTL"], ["Eternal", "ETERNAL"],
   ["JSW Energy", "JSWENERGY"], ["Adani Green Energy", "ADANIGREEN"], ["Aether Industries", "AETHER"],
+  ["L&T Finance", "LTF"], ["LT Finance", "LTF"],
   ["Tech Mahindra", "TECHM"], ["L&T Technology Services", "LTTS"], ["LTIMindtree", "LTIM"],
   ["Avenue Supermarts", "DMART"], ["R Systems International", "RSYSTEMS"], ["R Systems", "RSYSTEMS"],
   ["Ujjivan Small Finance Bank", "UJJIVANSFB"],
   ["Axis Bank", "AXISBANK"], ["Global Health", "MEDANTA"], ["Bandhan Bank", "BANDHANBNK"],
-  ["Bajaj Auto", "BAJAJ-AUTO"], ["Bharat Petroleum", "BPCL"], ["UltraTech Cement", "ULTRACEMCO"],
+  ["Max Healthcare", "MAXHEALTHCARE"], ["Bajaj Auto", "BAJAJ-AUTO"], ["Bharat Petroleum", "BPCL"], ["UltraTech Cement", "ULTRACEMCO"],
   ["Steel Strips Wheels", "SSWL"], ["Wipro", "WIPRO"], ["Star Cement", "STARCEMENT"],
   ["Gujarat Fluorochemicals", "FLUOROCHEM"], ["Aptus Value Housing Finance India", "APTUS"],
   ["Rainbow Children's Medicare", "RAINBOW"], ["Rainbow Children's", "RAINBOW"],
@@ -190,7 +198,8 @@ export function extractAxisRecommendations(messages, { analysisWindowStart, anal
       call,
       target,
       cmp: null,
-      upside: target ? "Target from latest Axis mail" : "No explicit target in readable Mail content",
+      // Display strings are composed in the UI (`TARGET - XX% (Axis Mail)`); keep a short token only.
+      upside: "—",
       horizon,
       source: message.source || "Axis Direct",
       date: message.time,
@@ -293,4 +302,61 @@ export function extractAxisRecommendations(messages, { analysisWindowStart, anal
   }
 
   return recommendations.slice(0, limit);
+}
+
+/**
+ * Axis Recommended Stocks freshness:
+ * - On an NSE trading day, prefer that day's Axis Research mails.
+ * - On weekends / holidays, use the last trading day's mails.
+ * - If the as-of day has no parseable calls, walk back prior trading sessions within lookback.
+ */
+export function extractAxisRecommendationsForTradingAsOf(messages, {
+  calendarDate,
+  lookbackDays = 3,
+  limit = 20,
+} = {}) {
+  const resolved = resolveAxisTradingAsOf(calendarDate);
+  const year = Number(resolved.tradingAsOf.slice(0, 4));
+  const withKeys = (messages ?? []).map((message) => ({
+    message,
+    dateKey: axisMessageDateKey(message, year),
+  }));
+
+  let recommendations = [];
+  let sourceDate = resolved.tradingAsOf;
+  let tradingSessionsChecked = 0;
+  for (let offset = 0; tradingSessionsChecked <= lookbackDays && offset < 21; offset += 1) {
+    const day = shiftIstDateKey(resolved.tradingAsOf, -offset);
+    if (!isNseTradingDay(day)) continue;
+    tradingSessionsChecked += 1;
+    const dayMessages = withKeys.filter((item) => item.dateKey === day).map((item) => item.message);
+    if (!dayMessages.length) continue;
+    recommendations = extractAxisRecommendations(dayMessages, {
+      analysisWindowStart: day,
+      analysisDate: day,
+      limit,
+    });
+    if (recommendations.length) {
+      sourceDate = day;
+      break;
+    }
+  }
+
+  if (!recommendations.length) {
+    const throughTradingDay = withKeys
+      .filter((item) => item.dateKey && item.dateKey <= resolved.tradingAsOf)
+      .map((item) => item.message);
+    recommendations = extractAxisRecommendations(throughTradingDay, {
+      analysisWindowStart: shiftIstDateKey(resolved.tradingAsOf, -lookbackDays),
+      analysisDate: resolved.tradingAsOf,
+      limit,
+    });
+    sourceDate = resolved.tradingAsOf;
+  }
+
+  return {
+    ...resolved,
+    sourceDate,
+    recommendations,
+  };
 }

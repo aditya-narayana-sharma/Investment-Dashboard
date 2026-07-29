@@ -4,6 +4,10 @@ export type DigestItem = {
   receivedAt?: string;
   title: string;
   summary: string;
+  /** Source-backed summary points for Market Intelligence (≥5 when body supports it). */
+  bullets?: string[];
+  /** Podcast only: whether bullets came from a local transcript or episode description. */
+  contentSource?: "transcript" | "description" | "none";
 };
 
 export type MailRecommendation = {
@@ -34,6 +38,10 @@ export type InvestmentMailIntelligence = {
   analysisWindowStart: string;
   analysisDate: string;
   axisLookbackDays: number;
+  /** NSE trading as-of used for Axis Recommended Stocks (today or last trading day). */
+  axisTradingAsOf?: string;
+  axisTradingAsOfLabel?: string;
+  axisUsedLastTradingDay?: boolean;
   latestAxisAt: string;
   latestNewsletterAt: string;
   axisRecommendations: MailRecommendation[];
@@ -56,7 +64,15 @@ export type AppleTaskItem = {
   list?: string;
   dueAt?: string;
   completed: boolean;
+  /** ISO completion timestamp when Reminder is completed (evidence only). */
+  completedAt?: string | null;
+  /** True when Apple Reminders has a recurrence rule for this item. */
+  repeating?: boolean;
+  /** Human label such as "Daily", "Weekly", "Every 3 months". */
+  repeatsOn?: string | null;
   topic: "Earnings" | "Work/Jobs" | "Health" | "Personal" | "Other";
+  /** Unused for reminders — Calendar + Reminder feeds render title/meta only. */
+  bullets?: string[];
 };
 
 export type AppleCalendarItem = {
@@ -67,12 +83,21 @@ export type AppleCalendarItem = {
   endsAt: string;
   topic: AppleTaskItem["topic"];
   notes?: string;
+  /** Unused for calendar events — feeds render title/schedule meta only. */
+  bullets?: string[];
 };
 
 export type AppleNoteSnapshot = {
   title: " Health Daily";
   modifiedAt: string;
   summary: string;
+  /** Latest completed-day key parsed from the note, when available. */
+  observedDate?: string | null;
+  /**
+   * Explicit Daily Optimism text from the exact  Health Daily note.
+   * Null/undefined when the note has no Optimism section — never fabricated.
+   */
+  dailyOptimism?: string | null;
 };
 
 export type ContentDigestSnapshot = {
