@@ -78,12 +78,19 @@ test("earningsEventDateKey parses calendar labels into IST keys", () => {
 
 test("earnings labels resolve company names instead of opaque CAL codes", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
+  const intelligenceWorkspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
   const utils = await readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8");
   assert.doesNotMatch(sectorsWorkspace, /CAL-\$/);
   assert.doesNotMatch(sectorsWorkspace, /`CAL-/);
-  assert.match(sectorsWorkspace, /resolveEarningsIdentity/);
-  assert.match(sectorsWorkspace, /\{event\.name\}/);
-  assert.match(sectorsWorkspace, /\{event\.symbol\}/);
+  assert.doesNotMatch(intelligenceWorkspace, /CAL-\$/);
+  assert.doesNotMatch(intelligenceWorkspace, /`CAL-/);
+  assert.match(utils, /resolveEarningsIdentity/);
+  assert.match(utils, /mergeEarningsCalendarEvents/);
+  assert.match(intelligenceWorkspace, /resolveEarningsIdentity/);
+  assert.match(intelligenceWorkspace, /EarningsMonthCalendar/);
+  assert.match(sectorsWorkspace, /EarningsMonthCalendar/);
+  assert.match(sectorsWorkspace, /\{selected\.name\}/);
+  assert.match(sectorsWorkspace, /\{selected\.symbol\}/);
   assert.match(sectorsWorkspace, /NSE · \{selected\.symbol\}/);
   assert.match(utils, /export function resolveEarningsIdentity/);
   assert.match(utils, /TVSMOTORS:\s*"TVSMOTOR"/);
@@ -102,36 +109,61 @@ test("live earnings calendar uses contractual verification rather than unconditi
   }
 });
 
-test("S-2 receives selectedSectorIds while S-3 and S-4 stay unfiltered", async () => {
+test("S-2 receives selectedSectorIds while Market Intelligence and S-4 stay unfiltered", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
+  const intelligenceWorkspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(sectorsWorkspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\} onToggle=\{onToggleSector\} market=\{sectorMarket\} marketsBySector=\{sectorMarketById\} holdings=\{holdings\}\/>/);
-  assert.match(sectorsWorkspace, /<SectorIntelligenceDigest content=\{content\} mailWindow=\{mailWindow\}\/>/);
-  assert.match(sectorsWorkspace, /<EarningsCalendarWorkbench snapshot=\{earningsSnapshot\} content=\{content\}\/>/);
-  assert.match(sectorsWorkspace, /<SectorDecisionFramework\/>/);
+  assert.match(sectorsWorkspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\} onToggle=\{onToggleSector\} market=\{sectorMarket\} marketsBySector=\{sectorMarketById\} holdings=\{holdings\} page=\{route\.page as SectorAnalyticsPage\}\/>/);
+  assert.doesNotMatch(sectorsWorkspace, /intelligence-crosslink/);
+  assert.doesNotMatch(sectorsWorkspace, /onOpenIntelligence/);
+  assert.doesNotMatch(sectorsWorkspace, /number="S-3"/);
+  assert.doesNotMatch(sectorsWorkspace, /<SectorIntelligenceDigest/);
+  assert.match(intelligenceWorkspace, /function SectorIntelligenceDigest/);
+  assert.match(intelligenceWorkspace, /mergeEarningsCalendarEvents/);
+  assert.match(intelligenceWorkspace, /topic-feed-earnings/);
+  assert.match(intelligenceWorkspace, /EarningsMonthCalendar/);
+  assert.match(intelligenceWorkspace, /number="M-1" title="Market intelligence action board"/);
+  assert.match(intelligenceWorkspace, /number="M-2" title="Live intelligence digest"/);
+  assert.match(intelligenceWorkspace, /workspace="intelligence"/);
+  assert.match(sectorsWorkspace, /<EarningsCalendarWorkbench snapshot=\{earningsSnapshot\} content=\{content\} holdings=\{holdings\} page=\{route\.page as "calendar" \| "day" \| "catalysts" \| "summary"\}\/>/);
+  assert.match(sectorsWorkspace, /<SectorDecisionLab[\s\S]*page=\{route\.page as SectorDecisionPage\}[\s\S]*benchmarks=\{benchmarks\}[\s\S]*marketsBySector=\{sectorMarketById\}[\s\S]*\/>/);
+  assert.match(sectorsWorkspace, /EarningsMonthCalendar/);
+  assert.doesNotMatch(intelligenceWorkspace, /showAllEarnings/);
+  assert.doesNotMatch(sectorsWorkspace, /earnings-rail/);
 
-  assert.doesNotMatch(sectorsWorkspace, /SectorIntelligenceDigest[^\n]*selectedSectorId/);
+  assert.doesNotMatch(intelligenceWorkspace, /SectorIntelligenceDigest[^\n]*selectedSectorId/);
   assert.doesNotMatch(sectorsWorkspace, /EarningsCalendarWorkbench[^\n]*selectedSectorId/);
-  assert.doesNotMatch(sectorsWorkspace, /function SectorIntelligenceDigest\(\{[^}]*selectedSectorId/);
+  assert.doesNotMatch(intelligenceWorkspace, /function SectorIntelligenceDigest\(\{[^}]*selectedSectorId/);
   assert.doesNotMatch(sectorsWorkspace, /function EarningsCalendarWorkbench\(\{[^}]*selectedSectorId/);
+  assert.doesNotMatch(sectorsWorkspace, /sector-dimmed/);
+  assert.doesNotMatch(sectorsWorkspace, /sector-intelligence-filter/);
+  assert.doesNotMatch(intelligenceWorkspace, /sector-dimmed/);
+  assert.doesNotMatch(intelligenceWorkspace, /sector-intelligence-filter/);
+  assert.doesNotMatch(intelligenceWorkspace, /selectedSectorId/);
 
-  const s3Start = sectorsWorkspace.indexOf('number="S-3"');
-  const s4Start = sectorsWorkspace.indexOf('number="S-4"');
-  const s3Block = sectorsWorkspace.slice(s3Start, s4Start);
-  const s4Block = sectorsWorkspace.slice(s4Start);
-  assert.doesNotMatch(s3Block, /sector-dimmed/);
-  assert.doesNotMatch(s4Block, /sector-dimmed/);
-  assert.doesNotMatch(s3Block, /selectedSectorIds/);
-  assert.doesNotMatch(s4Block, /selectedSectorIds/);
+  assert.match(page, /IntelligenceWorkspace/);
+  assert.match(page, /workspace === "intelligence"/);
+  assert.match(page, /value === "market-intelligence"/);
+  assert.doesNotMatch(page, /<IntelligenceWorkspace[\s\S]*selectedSector/);
+  assert.doesNotMatch(page, /onOpenIntelligence/);
+
+  const s4Render = sectorsWorkspace.split("\n").find((line) => line.includes('route.section === "s4"'));
+  assert.ok(s4Render);
+  assert.doesNotMatch(s4Render, /sector-dimmed/);
+  assert.doesNotMatch(s4Render, /selectedSectorIds/);
 
   assert.match(css, /sector-dimmed/);
   assert.doesNotMatch(css, /sector-intelligence-filter/);
+  assert.doesNotMatch(css, /intelligence-crosslink/);
 });
 
 test("health POST auth and kite partial status contracts are present", async () => {
   const flask = await readFile(new URL("../flask_gateway.py", import.meta.url), "utf8");
   const kite = await readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8");
+  const healthServer = await readFile(new URL("../app/health-import-server.ts", import.meta.url), "utf8");
+  const dashboardRefresh = await readFile(new URL("../app/api/dashboard/refresh/route.ts", import.meta.url), "utf8");
   const contentServer = await readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8");
   const refreshScript = await readFile(new URL("../scripts/refresh-dashboard-data.sh", import.meta.url), "utf8");
 
@@ -139,7 +171,16 @@ test("health POST auth and kite partial status contracts are present", async () 
   assert.match(flask, /PORTFOLIO_HEALTH_TOKEN/);
   assert.match(flask, /status_code.?401|401/);
   assert.match(kite, /status: unavailable\.length \? "partial" : "live"/);
+  assert.match(kite, /authStatus: unavailable\.length \? "partial" : "authenticated"/);
+  assert.match(kite, /tokenExpiresAt: expiresAt/);
+  assert.match(kite, /retainedSnapshot/);
+  assert.match(kite, /authStatusForFailure/);
+  assert.match(kite, /nextKiteDailyExpiry/);
   assert.match(contentServer, /Restored from local cache at process start/);
+  assert.match(healthServer, /refresh-apple-health\.sh/);
+  assert.match(dashboardRefresh, /refreshAppleHealth/);
+  assert.doesNotMatch(dashboardRefresh, /readAppleHealthSnapshot/);
+  assert.match(refreshScript, /health_date_policy\.py/);
   assert.match(refreshScript, /force=1/);
   assert.match(refreshScript, /startup-audit\.json/);
 });

@@ -165,7 +165,7 @@ struct NativeFreshnessStrip: View {
         case .degraded(let message), .offline(let message):
             return message
         default:
-            return "Checking Kite, Mail, Podcasts, earnings, sectors, and Health D-1."
+            return "Checking Kite, Mail, Podcasts, earnings, sectors, and the Health operational day."
         }
     }
 }
@@ -246,7 +246,7 @@ struct DashboardSettingsView: View {
                 Section("Private Mac dashboard") {
                     TextField("https://your-mac.tailnet.ts.net/", text: $draftAddress)
                         .textContentType(.URL)
-                        .textInputAutocapitalization(.never)
+                        .dashboardDisablesAutocapitalization()
                         .autocorrectionDisabled()
 
                     if let normalizedURL {
@@ -391,7 +391,7 @@ struct DashboardOnboardingView: View {
             VStack(spacing: 12) {
                 TextField("https://your-mac.tailnet.ts.net/", text: $draftAddress)
                     .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
+                    .dashboardDisablesAutocapitalization()
                     .autocorrectionDisabled()
                 Button("Test Mac connection") {
                     guard let normalizedURL else { return }
@@ -465,15 +465,15 @@ struct DashboardOnboardingView: View {
     private var canAdvance: Bool {
         switch step {
         case 0:
-            true
+            return true
         case 1:
             if case .online = statusModel.connection { return normalizedURL != nil }
             return false
         default:
 #if os(iOS)
-            pairing.isPaired
+            return pairing.isPaired
 #else
-            true
+            return true
 #endif
         }
     }
@@ -486,6 +486,17 @@ struct DashboardOnboardingView: View {
         guard let normalizedURL else { return }
         serverAddress = normalizedURL.absoluteString
         isComplete = true
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func dashboardDisablesAutocapitalization() -> some View {
+#if os(iOS)
+        textInputAutocapitalization(.never)
+#else
+        self
+#endif
     }
 }
 

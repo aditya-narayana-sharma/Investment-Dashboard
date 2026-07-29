@@ -7,6 +7,7 @@ AUDIT_JSON="${PORTFOLIO_STARTUP_AUDIT_PATH:-$ROOT_DIR/artifacts/private/startup-
 SECTORS=(pharma power infrastructure auto telecom banking nbfc fmcg consumer energy defence)
 FAILURES=0
 FAILED_NAMES=()
+HEALTH_REQUIRED_DATE="$(/usr/bin/python3 "$ROOT_DIR/scripts/health_date_policy.py" --date-only)"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
@@ -39,15 +40,13 @@ except Exception: print("")' "$body")"
     semantic_ok=true
   fi
   if [[ "$semantic_ok" == true && "$require_d1" == true ]]; then
-    local required_date
-    required_date="$(date -v-1d '+%Y-%m-%d')"
-    [[ "$data_date" < "$required_date" ]] && semantic_ok=false
+    [[ "$data_date" < "$HEALTH_REQUIRED_DATE" ]] && semantic_ok=false
   fi
 
   if [[ "$semantic_ok" == true ]]; then
     printf '%s\tOK\tHTTP %s · status=%s%s\n' "$name" "$code" "$status" "${data_date:+ · dataDate=$data_date}"
   else
-    printf '%s\tFAILED\tHTTP %s · status=%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "$expected_status" "$([[ "$require_d1" == true ]] && printf ' through D-1')"
+    printf '%s\tFAILED\tHTTP %s · status=%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "$expected_status" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
     FAILURES=$((FAILURES + 1))
     FAILED_NAMES+=("${name} (${status:-missing})")
   fi
@@ -61,7 +60,7 @@ check_source "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
 # Mail/Calendar force refresh can exceed 90s when Mail.app is slow; Calendar is SQLite-backed.
 check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live" "false" "300"
 check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
-check_source "HealthKit D-1 snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
+check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
 for sector in "${SECTORS[@]}"; do
   check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
 done
@@ -82,9 +81,11 @@ else:
   if any("unreachable" in item.lower() for item in failed):
     kite_hint = " Gateway was unreachable (HTTP 000); restart Portfolio Intelligence before re-auditing sources."
   elif any(item.lower().startswith("kite") and "auth" in item.lower() for item in failed):
-    kite_hint = " Authenticate Kite to restore live portfolio and sector quotes."
+    kite_hint = " Authenticate Kite to restore live portfolio quotes."
   elif any(item.lower().startswith("kite") for item in failed):
     kite_hint = " Inspect Kite snapshot status in startup-refresh.log."
+  elif any(item.lower().startswith("sector") for item in failed):
+    kite_hint = " Sector quotes use yfinance; inspect .venv-flask yfinance install and network access."
   message = f"Startup refresh audit reported {failures} failed source check(s): {'; '.join(failed)}.{kite_hint} Inspect startup-refresh.log."
 payload = {
   "status": "ok" if failures == 0 else "failed",

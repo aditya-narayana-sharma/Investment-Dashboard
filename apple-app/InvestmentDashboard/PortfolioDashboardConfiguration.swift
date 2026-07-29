@@ -32,6 +32,7 @@ enum PortfolioDashboardConfiguration {
 enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
     case investment
     case sectors
+    case intelligence
     case health
 
     var id: String { rawValue }
@@ -40,6 +41,7 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .investment: "Investment"
         case .sectors: "Sectoral"
+        case .intelligence: "Market Intel"
         case .health: "Health"
         }
     }
@@ -48,6 +50,7 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .investment: "chart.pie.fill"
         case .sectors: "square.grid.2x2.fill"
+        case .intelligence: "newspaper.fill"
         case .health: "heart.text.square.fill"
         }
     }
@@ -67,6 +70,9 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let value = components.queryItems?.first(where: { $0.name == "view" })?.value else {
             return nil
+        }
+        if value == "market-intelligence" {
+            return .intelligence
         }
         return DashboardWorkspace(rawValue: value)
     }

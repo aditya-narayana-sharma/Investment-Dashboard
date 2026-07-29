@@ -1,4 +1,5 @@
 import type { HealthMetric, HealthTone } from "./health-data";
+import type { HealthTargetPolicy } from "./health-date-policy";
 
 export type HealthCategorySnapshot = {
   name: string;
@@ -22,7 +23,7 @@ export type HealthActionSnapshot = {
 
 export type HealthLiveSnapshot = {
   schemaVersion: 1;
-  status: "live" | "stale" | "unavailable";
+  status: "live" | "partial" | "cached" | "stale" | "unavailable";
   source: "Apple Health";
   dataDate: string;
   capturedAt: string;
@@ -30,9 +31,29 @@ export type HealthLiveSnapshot = {
   message: string;
   completedThrough?: string;
   partialToday?: boolean;
+  partialExportDay?: string;
   missingDates?: string[];
   exportDate?: string;
+  exportCapturedAt?: string;
+  targetDate?: string;
+  targetPolicy?: HealthTargetPolicy;
+  targetLabel?: string;
+  requiredThrough?: string;
+  eligibleThrough?: string;
+  archiveStatus?: string;
+  activeArchive?: string;
+  rejectedArchive?: string;
+  fallbackReason?: string;
+  archive?: {
+    status?: string;
+    activeArchive?: string;
+    rejectedArchive?: string;
+    fallbackReason?: string;
+    message?: string;
+    [key: string]: unknown;
+  };
   coverage?: Record<string, { firstDate: string; lastDate: string; records: number; weekly: boolean; monthly: boolean }>;
+  categoryCoverage?: Record<string, { date: string; available: boolean; metricCount: number; recordCount: number }>;
   categories: HealthCategorySnapshot[];
   sources: HealthSourceSnapshot[];
   actions?: HealthActionSnapshot[];

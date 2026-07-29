@@ -3,7 +3,7 @@
 The Xcode project is the primary iPhone client for the private Portfolio Intelligence dashboard. It is an enhanced hybrid app:
 
 - SwiftUI owns onboarding, workspace navigation, Tailscale/LAN connection state, startup-audit status, HealthKit sync, offline recovery, settings, and report sharing.
-- One persistent `WKWebView` renders the complete Investment, Sectoral Analytics, and Health & Wellness workspaces.
+- One persistent `WKWebView` renders the complete Investment, Sectoral Analytics, Market Intelligence, and Health & Wellness workspaces.
 - The Mac remains the private data plane for Kite, Mail, Podcasts, Calendar, Reminders, Notes, earnings verification, sector snapshots, PDF generation, and stored Health snapshots.
 
 The Safari PWA remains a fallback. It is not the primary HealthKit-capable product.
@@ -39,10 +39,10 @@ Do not treat a browser or WebView reload as a successful complete refresh. The a
 - Kite `status=live`
 - Mail and Podcasts `status=live`
 - earnings `status=verified`
-- Health `status=live` through D-1
+- Health `status=live` through the operational target date: D from 8:00 PM through 1:59 AM, otherwise D-1
 - every sector `status=live`
 
-If paid Kite market data is unavailable, sector snapshots correctly remain `public_delayed`; the app must not label them live.
+Sector snapshots load via yfinance and must report `status=live` when fresh quotes succeed. Kite paid market-data is optional for Sectoral Analytics; do not require it for the sector audit row.
 
 ## Enable private iPhone access
 
@@ -96,20 +96,22 @@ The native workspace selector routes the persistent WebView to:
 
 - `/?view=investment`
 - `/?view=sectors`
+- `/?view=intelligence`
 - `/?view=health`
 
 The web application remains responsible for detailed section state and rendering.
+Alias `/?view=market-intelligence` maps to Market Intelligence.
 
-Sectoral invariants remain mandatory:
+Sectoral and Market Intelligence invariants remain mandatory:
 
 - S-2 industry selection may affect S-2 only.
-- S-3 remains complete and unfiltered.
+- Market Intelligence remains complete and unfiltered, including earnings calendar rows inside Calendar + action feeds.
 - S-4 keeps all earnings visible, enabled, and selectable.
 - The S-4 Decision Framework selector is local to its own cards.
 
 ## HealthKit contract
 
-The iPhone reads the latest completed day and computes 7-day and 30-day comparisons for:
+The iPhone reads the Health operational target and computes 7-day and 30-day comparisons ending on that date. The target rolls forward at 8:00 PM IST and remains anchored to the prior evening from midnight through 1:59 AM.
 
 - Activity
 - Sleep
@@ -163,12 +165,12 @@ Physical-device acceptance must cover:
 
 1. Fresh install and onboarding
 2. Tailscale and same-Wi-Fi fallback
-3. Investment, Sectoral, and Health workspace routing
-4. HealthKit D-1 upload and visible sync status
+3. Investment, Sectoral, Market Intelligence, and Health workspace routing
+4. Operational-day HealthKit upload and visible sync status
 5. Foreground and manual refresh
 6. Mac unavailable and recovery
 7. Kite daily auth boundary
-8. S-2/S-3/S-4 isolation
+8. S-2 / Market Intelligence / S-4 isolation
 9. Report download and share
 10. Dynamic Type, portrait, and landscape
 

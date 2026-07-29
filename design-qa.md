@@ -59,3 +59,44 @@ The approved option 2 visual direction is present: black editorial bands, warm-w
 - P3: a future mobile-specific chart view could expose a compact allocation legend below the rings so every sub-6% category is visible without requiring a tooltip.
 
 final result: passed
+
+## Sectoral And Health Thumbnail Redesign
+
+### Scope
+
+- Replaced the sparse S-1 to S-4 previews with data-bearing, interactive thumbnail workbenches.
+- Replaced the sparse H-1 to H-4 previews with operational-status, guidance, trend, and category summaries.
+- Expanded the H-4 overview into six color-coded category cards with a primary KPI, up to six supporting KPIs, direction-aware seven-day comparisons, source context, and direct category navigation.
+
+### Sectoral Acceptance
+
+- S-1 shows current action counts, the highest-priority task, monitoring state, and completion progress.
+- S-2 shows interactive industry tiles, breadth, leader/laggard context, and preserves the S-2-only dimming contract.
+- S-3 shows benchmark return bars when available. When benchmark history is unavailable it shows explicit Investability, Porter, and Macro decision tools rather than empty or fabricated market data.
+- S-4 shows month-scoped reported/pending progress, current events, and the next verified holding catalyst.
+- Sector selection and final-selection reset were verified: one selection dims the other S-2 industries, while deselecting it restores every industry. S-3 and S-4 remain independent.
+
+### Health Acceptance
+
+- H-1 shows open actions, operational target, priority task, and comparison coverage.
+- H-2 shows source status, operational target, category coverage, and archive integrity.
+- H-3 shows daily context, evidence-backed guidance, and guardrail access.
+- H-4 shows all six Health categories with current values and direction-aware seven-day trends.
+- H-4 category drill-down was verified through the URL-backed Activity page.
+- Health Incognito continues replacing private values, comparisons, sources, guidance, and actions with a hidden-state placeholder.
+
+### Responsive Verification
+
+- Desktop: Sectoral and Health overview cards fill the 2x2 console without internal or document overflow.
+- Mobile console: 481 x 1042 effective browser viewport; both 2x2 workspaces end at 1034 px and retain zero horizontal and vertical document overflow.
+- H-4 mobile overview: six cards fit a 2x3 grid; every card reports `clientWidth === scrollWidth` and `clientHeight === scrollHeight`.
+- Delayed freshness/source updates are observed by each console and trigger a refit, preventing asynchronous content from clipping the second row.
+- Browser console: no warnings or errors.
+
+### Verification Commands
+
+- `npm run lint`
+- `npm run build`
+- `node --test tests/rendered-html.test.mjs tests/freshness-and-isolation.test.mjs`
+
+final result: passed

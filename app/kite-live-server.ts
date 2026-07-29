@@ -1,7 +1,7 @@
-import { classificationSources, securityClassifications } from "./portfolio-data";
+import { classificationSources, securityClassifications, securitySymbolAliases } from "./portfolio-data";
 import { buildContiguousAllocations, sortDonutHoldings } from "./portfolio-donut";
-import { persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
-import type { KiteSnapshot, LiveGtt, LiveHolding, LiveOrder } from "./live-types";
+import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
+import type { KiteAuthStatus, KiteSnapshot, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
 
 type JsonObject = Record<string, unknown>;
 type McpState = {
@@ -25,6 +25,11 @@ let kiteCallChain: Promise<unknown> = Promise.resolve();
 let lastKiteCallAt = 0;
 
 const metadata = new Map(Object.entries(securityClassifications));
+
+function classificationForSymbol(symbol: string) {
+  const canonical = securitySymbolAliases[symbol] ?? symbol;
+  return metadata.get(canonical) ?? metadata.get(symbol);
+}
 
 const marketCapColors: Record<string, string> = { "Large cap": "#315f91", "Mid cap": "#8aa4bd", "Small cap": "#c1ceda" };
 const sectorColors: Record<string, string> = Object.fromEntries(Object.values(securityClassifications).map((holding) => [holding.sector, holding.color]));
@@ -135,14 +140,22 @@ export async function callKiteTool(name: string, args: JsonObject = {}): Promise
   return scheduled;
 }
 
-async function getLoginUrl() {
-  const result = await callKiteTool("login");
+async function getLoginUrl(force = false) {
+  const result = await callKiteTool("login", force ? { force: true } : {});
   const text = string(result);
+  if (!force && /already logged in/i.test(text)) {
+    throw new Error("Kite session is already authenticated; pass force to mint a fresh login URL");
+  }
   const match = text.match(/\[Login to Kite\]\((https?:\/\/[^)]+)\)/) ?? text.match(/https?:\/\/\S+/);
   if (!match) throw new Error("Kite login URL was not returned");
   state.authUrl = match[1] ?? match[0];
   state.authUrlCreatedAt = Date.now();
   return state.authUrl;
+}
+
+/** Explicit user-driven re-auth. Clears the daily token only when force=true. */
+export async function requestKiteLoginUrl(force = false) {
+  return getLoginUrl(force);
 }
 
 function mapLiveHoldings(rawHoldings: JsonObject[], rawPositions: JsonObject[]): LiveHolding[] {
@@ -160,7 +173,7 @@ function mapLiveHoldings(rawHoldings: JsonObject[], rawPositions: JsonObject[]):
 
   const rows = [...merged.entries()].map(([symbol, entry]) => {
     const raw = entry.raw;
-    const verified = metadata.get(symbol);
+    const verified = classificationForSymbol(symbol);
     const details = verified ?? {
       name: symbol, sector: "Verification pending", subSector: "Verification pending", marketCap: "Verification pending", donutOrder: 999, risk: "Review", stance: "Classification required", oil: 3, flow: 3, quarter: "Review", color: "#6f8193",
     };
@@ -202,28 +215,82 @@ function mapOrders(rawOrders: JsonObject[]): LiveOrder[] {
   }));
 }
 
+function mapOpenPositions(rawPositions: JsonObject[]): LivePosition[] {
+  return rawPositions
+    .map((raw, index) => {
+      const qty = number(raw.quantity);
+      if (!qty) return null;
+      const product = string(raw.product).toUpperCase() || "CNC";
+      const side = qty > 0 ? "LONG" : "SHORT";
+      return {
+        id: `${string(raw.tradingsymbol)}-${product}-${index}`,
+        symbol: string(raw.tradingsymbol),
+        product,
+        side,
+        qty: Math.abs(qty),
+        avg: number(raw.average_price),
+        price: number(raw.last_price),
+        pnl: number(raw.pnl) || (number(raw.last_price) - number(raw.average_price)) * qty,
+      } satisfies LivePosition;
+    })
+    .filter((row): row is LivePosition => row !== null);
+}
+
 function mapGtts(rawGtts: JsonObject[]): LiveGtt[] {
   return rawGtts.map((raw) => {
     const condition = (raw.condition ?? {}) as JsonObject;
     const orders = Array.isArray(raw.orders) ? raw.orders as JsonObject[] : [];
     const order = orders[0] ?? {};
     const triggers = Array.isArray(condition.trigger_values) ? condition.trigger_values : [];
+    const side = string(order.transaction_type).toUpperCase();
+    const meta = `${string(raw.type)} ${string(order.order_type)} ${JSON.stringify(raw.meta ?? "")}`.toLowerCase();
+    const trailing = number((raw as JsonObject).trailing_stoploss) || number(order.trailing_stoploss);
+    const kind: LiveGtt["kind"] = side === "SELL" || trailing > 0 || /trail|stoploss|stop.?loss|sl\b/.test(meta) ? "tsl" : "gtt";
     return {
       id: string(raw.id), symbol: string(condition.tradingsymbol), side: string(order.transaction_type), qty: number(order.quantity),
-      trigger: number(triggers[0]), limit: number(order.price), status: string(raw.status), expiry: string(raw.expires_at),
+      trigger: number(triggers[0]), limit: number(order.price), status: string(raw.status), expiry: string(raw.expires_at), kind,
     };
   });
 }
 
+function authStatusForFailure(message: string, authUrl?: string): KiteAuthStatus {
+  if (/expired|token[^\n]*invalid|invalid[^\n]*token|06:00|daily access token/i.test(message)) return "expired";
+  if (authUrl) return "unauthenticated";
+  return "unavailable";
+}
+
+function kiteDailyExpiryHint() {
+  const expiresAt = nextKiteDailyExpiry();
+  const label = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(expiresAt);
+  return { expiresAt: expiresAt.toISOString(), label };
+}
+
+function withDailyAuthHint(message: string) {
+  if (/06:00|daily access token|once per day/i.test(message)) return message;
+  return `${message} Zerodha access tokens expire once per day around 06:00 IST (not a fixed 12-hour timer).`;
+}
+
 function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
+  const { expiresAt } = kiteDailyExpiryHint();
+  const authStatus = authStatusForFailure(message, authUrl);
+  const detail = authStatus === "expired" || authStatus === "unauthenticated"
+    ? withDailyAuthHint(message)
+    : message;
   return {
     status: authUrl ? "auth_required" : "unavailable",
+    authStatus,
     asOf: "Live Kite unavailable",
-    message: "Portfolio figures are hidden because live Kite data is unavailable. " + message,
+    message: "Portfolio figures are hidden because live Kite data is unavailable. " + detail,
     authUrl,
+    tokenExpiresAt: expiresAt,
     unavailableSections: ["live Kite"],
     portfolio: { invested: 0, value: 0, pnl: 0, pnlPct: 0, dayPnl: 0, dayPct: 0, topTwo: 0, equityMargin: 0 },
     holdings: [],
+    positions: [],
     orders: [],
     gtts: [],
     marketCapAllocation: [],
@@ -231,6 +298,54 @@ function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
     subSectorAllocation: [],
     classification: { industrySource: classificationSources.industry, marketCapSource: classificationSources.marketCap, industryUrl: classificationSources.industryUrl, marketCapUrl: classificationSources.marketCapUrl, asOf: classificationSources.asOf, pendingSymbols: [] },
   };
+}
+
+/** Retain last holdings visually, but never claim a verified live auth session. */
+async function retainedSnapshot(base: KiteSnapshot, message: string): Promise<KiteSnapshot> {
+  const { expiresAt } = kiteDailyExpiryHint();
+  try {
+    await callKiteTool("get_profile");
+    return {
+      ...base,
+      status: "snapshot",
+      // Profile still works, but this is retained/cached data — not a fresh live refresh.
+      // UI must treat status=snapshot as cached (never "Kite authenticated").
+      authStatus: "authenticated",
+      asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
+      message,
+      authUrl: undefined,
+      tokenExpiresAt: expiresAt,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    try {
+      const authUrl = await getLoginUrl();
+      const authStatus = authStatusForFailure(detail, authUrl);
+      return {
+        ...base,
+        status: "snapshot",
+        authStatus,
+        asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
+        message: withDailyAuthHint(
+          authStatus === "expired"
+            ? `Kite session expired at the daily ~06:00 IST boundary (${detail}). ${message}`
+            : message,
+        ),
+        authUrl,
+        tokenExpiresAt: expiresAt,
+      };
+    } catch {
+      return {
+        ...base,
+        status: "snapshot",
+        authStatus: "unknown",
+        asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
+        message,
+        authUrl: undefined,
+        tokenExpiresAt: expiresAt,
+      };
+    }
+  }
 }
 
 export function restoreKiteSession(sessionId?: string, replaceExisting = false) {
@@ -287,7 +402,17 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const unavailable = results
       .map((result, index) => result.status === "rejected" ? toolNames[index] : null)
       .filter((name): name is typeof toolNames[number] => name !== null);
+    const marginsFailure = marginsResult.status === "rejected"
+      ? (marginsResult.reason instanceof Error ? marginsResult.reason.message : String(marginsResult.reason))
+      : "";
+    const marginsApiFault = unavailable.includes("margins")
+      && /message build error|failed to execute get_margins|generalexception/i.test(marginsFailure);
     const holdings = mapLiveHoldings(holdingsRaw as JsonObject[], positionsRaw as JsonObject[]);
+    const openPositions = mapOpenPositions(
+      Array.isArray((positionsRaw as JsonObject)?.net)
+        ? (positionsRaw as JsonObject).net as JsonObject[]
+        : Array.isArray(positionsRaw) ? positionsRaw as JsonObject[] : [],
+    );
     const donutHoldings = sortDonutHoldings(holdings);
     const value = holdings.reduce((sum, holding) => sum + holding.value, 0);
     const invested = holdings.reduce((sum, holding) => sum + holding.avg * holding.qty, 0);
@@ -295,18 +420,31 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const dayPnl = holdings.reduce((sum, holding) => sum + holding.dayPnl, 0);
     const margins = marginsRaw as JsonObject;
     const equity = (margins.equity ?? {}) as JsonObject;
+    let partialMessage = unavailable.length
+      ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
+      : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Auto-refreshes every five minutes.";
+    if (marginsApiFault) {
+      partialMessage = `Partial Kite snapshot: session is authenticated and holdings are live, but Zerodha's margins API is returning an error (${marginsFailure || "Message build error"}). PDF export stays locked until margins succeed. Try one re-authentication, then refresh.`;
+    }
+    const { expiresAt, label: expiryLabel } = kiteDailyExpiryHint();
     const snapshot: KiteSnapshot = {
       status: unavailable.length ? "partial" : "live",
+      authStatus: unavailable.length ? "partial" : "authenticated",
       asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
       message: unavailable.length
-        ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
-        : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Auto-refreshes every five minutes.",
+        ? partialMessage
+        : `${partialMessage} Session valid until ~${expiryLabel} (Zerodha daily ~06:00 IST boundary).`,
+      tokenExpiresAt: expiresAt,
+      reauthSuggested: marginsApiFault,
+      // Do not auto-force a login URL here — that would clear a working daily token on every refresh.
+      // UI uses /api/kite/login?force=1 when the user explicitly chooses Re-auth.
       unavailableSections: unavailable,
       portfolio: {
         invested, value, pnl, pnlPct: invested ? pnl / invested * 100 : 0, dayPnl, dayPct: value - dayPnl ? dayPnl / (value - dayPnl) * 100 : 0,
         topTwo: holdings.slice(0, 2).reduce((sum, holding) => sum + holding.weight, 0), equityMargin: number(equity.net),
       },
       holdings,
+      positions: openPositions,
       orders: mapOrders(ordersRaw as JsonObject[]),
       gtts: mapGtts(gttsRaw as JsonObject[]),
       marketCapAllocation: buildContiguousAllocations(donutHoldings, "marketCap", marketCapColors),
@@ -328,24 +466,26 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
   } catch (error) {
     if (error instanceof KiteSessionInvalid && !retried) return fetchKiteSnapshot(true);
     if (error instanceof KiteAuthRequired) {
-      try { return fallbackSnapshot("Authenticate once to restore live refresh.", await getLoginUrl()); }
-      catch (loginError) { error = loginError; }
+      try {
+        return fallbackSnapshot(
+          "Kite session expired or was logged out. Complete Zerodha login once (daily ~06:00 IST boundary), then refresh.",
+          await getLoginUrl(),
+        );
+      } catch (loginError) { error = loginError; }
     }
 
     const message = error instanceof Error ? error.message : String(error);
     if (/too many requests|rate limit/i.test(message)) {
       return lastLiveSnapshot
-        ? { ...lastLiveSnapshot, status: "snapshot", asOf: `${lastLiveSnapshot.asOf} · cached`, message: "Zerodha rate limit reached; retaining the last validated Kite snapshot until the next five-minute refresh." }
+        ? retainedSnapshot(lastLiveSnapshot, "Zerodha rate limit reached; retaining the last validated Kite snapshot until the next five-minute refresh.")
         : fallbackSnapshot("Zerodha rate limit reached. Retry after the current request window resets.");
     }
 
     if (lastLiveSnapshot) {
-      return {
-        ...lastLiveSnapshot,
-        status: "snapshot",
-        asOf: `${lastLiveSnapshot.asOf} · cached`,
-        message: `Kite refresh failed (${message}). Retaining the last validated Kite snapshot until the next five-minute refresh.`,
-      };
+      return retainedSnapshot(
+        lastLiveSnapshot,
+        `Kite refresh failed (${message}). Retaining the last validated Kite snapshot until the next five-minute refresh.`,
+      );
     }
 
     // Some Kite SDK failures arrive as a generic "Failed to execute" message
@@ -356,7 +496,10 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       await callKiteTool("get_profile");
     } catch {
       try {
-        return fallbackSnapshot("Authenticate once to restore live refresh.", await getLoginUrl());
+        return fallbackSnapshot(
+          "Kite session expired or login is required. Complete Zerodha login once (daily ~06:00 IST boundary), then refresh.",
+          await getLoginUrl(),
+        );
       } catch {
         // Preserve the original holdings error when the MCP server itself is
         // unreachable or cannot create a login URL.
