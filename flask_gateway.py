@@ -17,6 +17,7 @@ from urllib.request import Request as UpstreamRequest
 from urllib.request import urlopen
 
 from flask import Flask, Response, request
+from scripts.health_date_policy import health_target_context
 
 
 ROOT = Path(__file__).resolve().parent
@@ -57,6 +58,10 @@ HOP_BY_HOP_HEADERS = {
 
 app = Flask("Portfolio Intelligence")
 app.config["APP_NAME"] = "Portfolio Intelligence"
+
+
+def _current_health_target():
+    return health_target_context(datetime.now(IST))
 
 
 def _health_snapshot_response(payload: dict, status: int = 200) -> Response:
@@ -410,11 +415,23 @@ def health_snapshot() -> Response:
         return _health_snapshot_response({"status": "invalid", "message": "Health snapshot schema is invalid."}, 400)
 
     data_date = datetime.strptime(str(payload.get("dataDate")), "%Y-%m-%d").date()
-    required_d1 = (datetime.now(IST) - timedelta(days=1)).date()
-    payload["status"] = "live" if data_date >= required_d1 else "stale"
+    target = _current_health_target()
+    source_status = str(payload.get("status", "partial"))
+    allowed_statuses = {"live", "partial", "cached", "stale", "unavailable"}
+    payload["targetDate"] = target.target_date.isoformat()
+    payload["targetPolicy"] = target.policy
+    payload["targetLabel"] = target.label
+    payload["requiredThrough"] = target.target_date.isoformat()
+    payload.setdefault("eligibleThrough", data_date.isoformat())
+    payload["status"] = source_status if source_status in allowed_statuses else "partial"
+    if data_date < target.target_date:
+        payload["status"] = "stale"
     payload["receivedAt"] = datetime.now(timezone.utc).isoformat()
     if payload["status"] == "stale":
-        payload["message"] = f"HealthKit snapshot stored but dataDate {data_date.isoformat()} is behind required D-1 {required_d1.isoformat()}."
+        payload["message"] = (
+            f"HealthKit snapshot stored but dataDate {data_date.isoformat()} is behind "
+            f"the {target.label} operational target {target.target_date.isoformat()}."
+        )
     try:
         HEALTH_SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = HEALTH_SNAPSHOT_PATH.with_suffix(".tmp")

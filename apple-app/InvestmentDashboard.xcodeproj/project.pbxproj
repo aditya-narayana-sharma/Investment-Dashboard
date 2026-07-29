@@ -405,7 +405,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Portfolio Intelligence";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence connects privately to the dashboard running on your Mac.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads completed-day Apple Health aggregates to keep your private dashboard current.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads operational-day Apple Health aggregates to keep your private dashboard current.";
 				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -454,7 +454,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Portfolio Intelligence";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence connects privately to the dashboard running on your Mac.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads completed-day Apple Health aggregates to keep your private dashboard current.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads operational-day Apple Health aggregates to keep your private dashboard current.";
 				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

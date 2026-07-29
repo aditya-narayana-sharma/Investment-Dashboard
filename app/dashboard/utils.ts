@@ -1,10 +1,13 @@
-import { CircleDollarSign, HeartPulse, Layers3 } from "lucide-react";
-import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes } from "../portfolio-data";
+import { CircleDollarSign, HeartPulse, Layers3, Newspaper } from "lucide-react";
+import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
 import { healthActions, healthCategories, healthSources, type HealthMetric } from "../health-data";
+import { healthTargetDateKey } from "../health-date-policy";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { ContentDigestSnapshot } from "../content-types";
 import type { EarningsSnapshot } from "../earnings-live-types";
+import type { LiveHolding } from "../live-types";
 import { sectorCompanies } from "../sector-company-data";
+import { earningsEventDateKey } from "../earnings-verify";
 import type { MacroBandKey, MacroEventKey, KanbanItem, KanbanWorkspace, WorkspaceKey, DonutLabelProps } from "./types";
 
 export const DIGEST_PAGE_SIZE = 40;
@@ -43,14 +46,23 @@ export function analysisWindowLabel(content: ContentDigestSnapshot) {
     : `${analysisDay.format(start)}–${analysisDay.format(end)}`;
 }
 
-export const gainShades = ["#0f704f", "#178c61", "#23a472", "#39b785", "#63c99e"];
+/** Outer-ring gain palette — always index with modulo so 6+ holdings never render black. */
+export const gainShades = ["#0f704f", "#178c61", "#23a472", "#39b785", "#63c99e", "#4db88a", "#2d9b6c"];
+export const LOSS_FILL = "#c33f47";
+
+/** Live holding outer-ring fill: green shades for unrealised gain, red for loss. */
+export function holdingOuterFill(pnl: number, index: number) {
+  if (pnl < 0) return LOSS_FILL;
+  return gainShades[index % gainShades.length] ?? gainShades[0];
+}
+
 export const RADIAN = Math.PI / 180;
 export const fallbackContent: ContentDigestSnapshot = {
   status: "unavailable",
   asOf: "Bundled fallback · refresh required",
   newsletters: newsletterDigest,
   axisResearch: axisResearchDigest.map((item) => ({ ...item, source: "Axis Research" })),
-  podcasts: podcastNotes.map(([source, summary], index) => ({ source, title: "Latest captured episode", summary, time: String(index + 1).padStart(2, "0") })),
+  podcasts: podcastNotes.map(([source, summary, bullets], index) => ({ source, title: "Latest captured episode", summary, bullets, time: String(index + 1).padStart(2, "0") })),
   reminders: [],
   calendar: [],
   healthNote: null,
@@ -59,6 +71,9 @@ export const fallbackContent: ContentDigestSnapshot = {
     analysisWindowStart: currentIstDateKey(),
     analysisDate: currentIstDateKey(),
     axisLookbackDays: 3,
+    axisTradingAsOf: currentIstDateKey(),
+    axisTradingAsOfLabel: currentIstDateKey(),
+    axisUsedLastTradingDay: false,
     latestAxisAt: "Unavailable",
     latestNewsletterAt: "Unavailable",
     axisRecommendations: [],
@@ -175,6 +190,67 @@ export function earningsEventMonthLabel(dateLabel: string) {
   return (match?.[1] ?? "Jul").slice(0, 3).toUpperCase();
 }
 
+function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
+  const knownSymbols = new Set(existing.map((event) => event.symbol.toLowerCase()));
+  return content.calendar.filter((item) => item.topic === "Earnings").flatMap((item) => {
+    const identity = resolveEarningsIdentity(item.title, existing);
+    if (knownSymbols.has(identity.symbol.toLowerCase())) return [];
+    const parsed = new Date(item.startsAt);
+    if (Number.isNaN(parsed.getTime())) return [];
+    knownSymbols.add(identity.symbol.toLowerCase());
+    const day = new Intl.DateTimeFormat("en-IN", { day: "2-digit", timeZone: "Asia/Kolkata" }).format(parsed);
+    const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(parsed);
+    const banking = /bank|finance|nbfc|insurance/i.test(`${identity.name} ${item.title}`);
+    const technology = /tech|software|digital|infosys|tcs|wipro/i.test(`${identity.name} ${item.title}`);
+    const kpiLabels = banking
+      ? ["PAT", "NII / income", "Asset quality", "Margin / credit cost"]
+      : technology
+        ? ["Revenue / CC growth", "Operating margin", "Deal wins", "Guidance"]
+        : ["Revenue", "Profit", "Operating margin", "Management guidance"];
+    return [{
+      date,
+      day,
+      symbol: identity.symbol,
+      name: identity.name,
+      state: "Pending · Apple Calendar",
+      portfolio: false,
+      period: "Latest quarter",
+      reported: false,
+      kpis: kpiLabels.map((label) => ({ label, value: "", change: "" })),
+      summary: item.notes || "Calendar event imported from Apple Calendar. KPI fields remain blank until a cited company or exchange result is available.",
+    }];
+  });
+}
+
+export function canonicalEarningsSymbol(raw: string) {
+  return normalizeEarningsTicker(raw);
+}
+
+export function mergeEarningsCalendarEvents(snapshot: EarningsSnapshot, content: ContentDigestSnapshot, holdings: LiveHolding[] = []): EarningsEvent[] {
+  const baseEvents = snapshot.events.length ? snapshot.events : earningsCalendar;
+  const held = new Set(holdings.map((holding) => canonicalEarningsSymbol(holding.symbol)));
+  const hasLiveHoldingIdentity = holdings.length > 0;
+  const analysisDate = snapshot.analysisDate || currentIstDateKey();
+  const deduplicated = new Map<string, EarningsEvent>();
+
+  for (const event of [...baseEvents, ...calendarEarningsEvents(content, baseEvents)]) {
+    const symbol = canonicalEarningsSymbol(event.symbol);
+    const dateKey = earningsEventDateKey(event, analysisDate) ?? event.date;
+    const key = `${symbol}|${event.period.trim().toLowerCase()}|${dateKey}`;
+    const normalized = { ...event, symbol, portfolio: hasLiveHoldingIdentity ? held.has(symbol) : event.portfolio };
+    const previous = deduplicated.get(key);
+    if (!previous || (!previous.reported && normalized.reported) || (!previous.source && normalized.source)) {
+      deduplicated.set(key, normalized);
+    }
+  }
+
+  return [...deduplicated.values()].sort((left, right) => {
+    const leftDate = earningsEventDateKey(left, analysisDate) ?? left.date;
+    const rightDate = earningsEventDateKey(right, analysisDate) ?? right.date;
+    return leftDate.localeCompare(rightDate) || left.symbol.localeCompare(right.symbol);
+  });
+}
+
 export const fallbackHealth: HealthLiveSnapshot = {
   schemaVersion: 1,
   status: "stale",
@@ -202,6 +278,8 @@ export const exposureContext: Record<string, { event: string; kpis: string }> = 
   AETHER: { event: "Crude feedstock, freight, FX and geopolitical supply", kpis: "Gross margin, utilisation and working capital" },
   JSWENERGY: { event: "Rates, power demand and project commissioning", kpis: "Net debt, capacity additions and interest cost" },
   ADANIGREEN: { event: "Rates, grid demand and renewable policy execution", kpis: "Net debt, commissioning, CUF and cash conversion" },
+  AXISBANK: { event: "Oil inflation, INR, yields and FII selling", kpis: "NIM, deposits, credit costs, asset quality" },
+  LTF: { event: "Rates, credit cycle and retail AUM growth", kpis: "NIM + fees, RoE, credit cost and disbursements" },
 };
 
 export const macroEvents: Record<MacroEventKey, {
@@ -267,8 +345,14 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "sec-framework", title: "Run the selected sector through frameworks", detail: "Use PESTEL, Porter, life-cycle and market-structure evidence together before forming a sector stance.", numericAdvantage: "4 independent lenses", strategicAdvantage: "Reduces one-factor conclusions", lane: "monitor", tone: "amber" },
     { id: "sec-earnings", title: "Fill pending earnings KPIs", detail: "Keep unpublished values blank and populate only from official releases.", numericAdvantage: "0 fabricated values", strategicAdvantage: "Preserves research integrity", lane: "monitor", tone: "red" },
   ],
+  intelligence: [
+    { id: "intel-mail", title: "Refresh exact Mail intelligence sources", detail: "Reconcile every item from iCloud Newsletters and Axis Research before using the digest.", numericAdvantage: "2 exact mailbox scopes", strategicAdvantage: "Prevents misfiled evidence", lane: "today", tone: "blue" },
+    { id: "intel-calendar", title: "Reconcile Calendar and Reminders", detail: "Merge current events and incomplete actions without treating schedules as published results.", numericAdvantage: "2 action sources", strategicAdvantage: "Separates plans from evidence", lane: "today", tone: "green" },
+    { id: "intel-earnings", title: "Monitor reported earnings evidence", detail: "Promote KPI rows only after company, exchange, or validated research evidence is available.", numericAdvantage: "0 inferred result fields", strategicAdvantage: "Protects decision quality", lane: "monitor", tone: "amber" },
+    { id: "intel-podcasts", title: "Review Podcast freshness and coverage", detail: "Use local transcripts when available and label description-only summaries explicitly.", numericAdvantage: "30-minute refresh", strategicAdvantage: "Keeps evidence provenance clear", lane: "monitor", tone: "red" },
+  ],
   health: [
-    { id: "health-sync", title: "Verify latest completed-day HealthKit sync", detail: "Open the iPhone app after the day closes and confirm the dashboard freshness badge changes to SYNCED.", numericAdvantage: "1-day maximum lag", strategicAdvantage: "Keeps the wellness record auditable", lane: "today", tone: "blue" },
+    { id: "health-sync", title: "Verify the operational Health target", detail: "After the 8 PM cutoff, confirm the newest archive advances the target date and the dashboard badge changes to SYNCED.", numericAdvantage: "8 PM date roll", strategicAdvantage: "Keeps the wellness record auditable", lane: "today", tone: "blue" },
     { id: "health-averages", title: "Reconcile weekly and monthly averages", detail: "Show trends only where a complete comparison window is available.", numericAdvantage: "7-day + 30-day baselines", strategicAdvantage: "Avoids overreading one day", lane: "today", tone: "green" },
     { id: "health-sleep", title: "Resolve cross-app sleep variance", detail: "Keep Apple Health primary and retain Guava as a separate comparison.", numericAdvantage: "2-source reconciliation", strategicAdvantage: "Prevents incompatible totals being merged", lane: "monitor", tone: "amber" },
     { id: "health-diary", title: "Complete nutrition diary", detail: "Treat logged intake as incomplete until all meals and portions are entered.", numericAdvantage: "100% meal coverage target", strategicAdvantage: "Improves nutrition signal quality", lane: "monitor", tone: "red" },
@@ -277,7 +361,8 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
 
 export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string; icon: typeof CircleDollarSign }> = [
   { key: "investment", label: "Investment", note: "Portfolio, macro and research", icon: CircleDollarSign },
-  { key: "sectors", label: "Sectoral Analytics", note: "Sectors, intelligence and earnings", icon: Layers3 },
+  { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
+  { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
 ];
 
@@ -315,9 +400,7 @@ export function localDateKey(date = new Date()) {
 }
 
 export function latestCompletedHealthDateKey() {
-  const date = new Date();
-  date.setDate(date.getDate() - 1);
-  return localDateKey(date);
+  return healthTargetDateKey();
 }
 
 export function missingHealthDateKeys(dataDate: string, requiredDate = latestCompletedHealthDateKey()) {

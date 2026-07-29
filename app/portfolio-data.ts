@@ -15,8 +15,16 @@ export const securityClassifications = {
   ADANIGREEN: { name: "Adani Green Energy", sector: "Power Generation", subSector: "Renewable Power", marketCap: "Large cap", donutOrder: 40, risk: "High", stance: "Hold / monitor leverage", oil: 2, flow: 5, quarter: "Execution-led", color: "#2aa889" },
   AXISBANK: { name: "Axis Bank", sector: "Private Sector Bank", subSector: "Commercial Banking", marketCap: "Large cap", donutOrder: 45, risk: "Medium", stance: "Core bank / result watch", oil: 3, flow: 5, quarter: "Constructive", color: "#4c8fff" },
   JSWENERGY: { name: "JSW Energy", sector: "Power Generation", subSector: "Integrated Power & Storage", marketCap: "Mid cap", donutOrder: 50, risk: "Medium-high", stance: "Small hold", oil: 2, flow: 3, quarter: "Constructive, execution-led", color: "#df6651" },
+  /** NSE: Non Banking Financial Company · AMFI Mid cap (Jan–Jun 2026 band; ~₹77k Cr). */
+  LTF: { name: "L&T Finance", sector: "Non Banking Financial Company", subSector: "Diversified Retail NBFC", marketCap: "Mid cap", donutOrder: 55, risk: "Medium-high", stance: "Small hold / watch", oil: 2, flow: 4, quarter: "Constructive", color: "#c9893a" },
   AETHER: { name: "Aether Industries", sector: "Specialty Chemicals", subSector: "Specialty & Fine Chemicals", marketCap: "Small cap", donutOrder: 60, risk: "High", stance: "Small hold / watch", oil: 5, flow: 3, quarter: "Cautious", color: "#e6a11a" },
 } as const;
+
+/** Kite / exchange symbol aliases → canonical classification key. */
+export const securitySymbolAliases: Record<string, keyof typeof securityClassifications> = {
+  LTFINANCE: "LTF",
+  LTFH: "LTF",
+};
 
 export const holdings = [
   { symbol: "ICICIBANK", name: "ICICI Bank", sector: "Financials", marketCap: "Large cap", qty: 4, avg: 1350.3, price: 1411.5, value: 5646, pnl: 244.8, pnlPct: 4.53, dayPnl: 40.2, dayPct: 0.72, weight: 39.10, risk: "Medium", stance: "Core hold", oil: 3, flow: 5, quarter: "Constructive", color: "#2563a6" },
@@ -52,18 +60,18 @@ export const sectorAllocation = [
 ];
 
 export const newsletterDigest = [
-  { source: "Bay Area Times", time: "3:57 PM", title: "Meta kills Muse", summary: "AI product rationalisation remains rapid; platform spending and model portfolios are still being reprioritised." },
-  { source: "Morning Brew", time: "3:06 PM", title: "Apple of discord", summary: "Apple-related competitive and regulatory friction remains the lead global technology theme." },
-  { source: "Economic Times", time: "4:03 PM", title: "Trading ideas for a volatile week", summary: "The latest issue focuses on analyst-selected Nifty 50 opportunities under elevated market volatility." },
-  { source: "TLDR", time: "4:14 PM", title: "Apple sues OpenAI / Apple AI chips", summary: "AI litigation, custom silicon and codebase comprehension dominate the technology news cycle." },
-  { source: "TLDR Data", time: "3:39 PM", title: "Broken SQL benchmarks", summary: "Data-team themes include benchmark quality, faster experimentation and shifting controls earlier in development." },
+  { source: "Bay Area Times", time: "3:57 PM", title: "Meta kills Muse", summary: "AI product rationalisation remains rapid; platform spending and model portfolios are still being reprioritised.", bullets: ["Meta ended the Muse product effort amid broader AI portfolio pruning.", "Platform spending is still being reprioritised across model and product bets.", "Competitive pressure around AI assistants remains elevated.", "Source: Bay Area Times", "As of: 3:57 PM"] },
+  { source: "Morning Brew", time: "3:06 PM", title: "Apple of discord", summary: "Apple-related competitive and regulatory friction remains the lead global technology theme.", bullets: ["Apple competitive and regulatory friction led the technology tape.", "Device and services narratives remain intertwined with AI positioning.", "Policy scrutiny of large platforms continues as a cross-market theme.", "Source: Morning Brew", "As of: 3:06 PM"] },
+  { source: "Economic Times", time: "4:03 PM", title: "Trading ideas for a volatile week", summary: "The latest issue focuses on analyst-selected Nifty 50 opportunities under elevated market volatility.", bullets: ["Coverage centres on analyst-selected Nifty 50 ideas.", "Elevated market volatility frames the trading-week setup.", "Ideas are sourced from the newsletter body, not broker confirmation.", "Source: Economic Times", "As of: 4:03 PM"] },
+  { source: "TLDR", time: "4:14 PM", title: "Apple sues OpenAI / Apple AI chips", summary: "AI litigation, custom silicon and codebase comprehension dominate the technology news cycle.", bullets: ["AI litigation headlines include Apple versus OpenAI coverage.", "Custom silicon and on-device AI remain a recurring chip narrative.", "Codebase comprehension tools are a secondary developer-theme.", "Source: TLDR", "As of: 4:14 PM"] },
+  { source: "TLDR Data", time: "3:39 PM", title: "Broken SQL benchmarks", summary: "Data-team themes include benchmark quality, faster experimentation and shifting controls earlier in development.", bullets: ["SQL benchmark quality is questioned as a reliability signal.", "Faster experimentation remains a data-team priority.", "Controls are shifting earlier in the development lifecycle.", "Source: TLDR Data", "As of: 3:39 PM"] },
 ];
 
 export const axisResearchDigest = [
-  { time: "8:46 AM", title: "Sector Seasonality: Week 29", summary: "Historical seasonal tendencies for NSE sectors; the email provides a report link but no sector table in the message body." },
-  { time: "8:51 AM", title: "Daily Morning Note", summary: "Featured Rainbow Children's (BUY), LTIMindtree (BUY) and Avenue Supermarts (BUY). Asian markets were lower on renewed US-Iran tension and GIFT Nifty indicated a weaker open." },
-  { time: "10:44 AM", title: "Q1 FY27 Result Updates", summary: "Avenue Supermarts: BUY, TP INR 4,845, 19% indicated upside. LTIMindtree: BUY, TP INR 4,560, supported by the Lakshya 31 AI-led growth plan." },
-  { time: "2:17 PM", title: "Axis Alpha: R Systems", summary: "BUY at CMP INR 247, target INR 272, stop INR 235 and 30-day duration. Thesis: digital engineering scale, repeat revenue, Blackstone backing and AI capability." },
+  { time: "8:46 AM", title: "Sector Seasonality: Week 29", summary: "Historical seasonal tendencies for NSE sectors; the email provides a report link but no sector table in the message body.", bullets: ["Axis flagged historical seasonal tendencies for NSE sectors.", "The message body points to a report link rather than embedding the full table.", "No sector matrix was readable in the plain-text body.", "Source: Axis Research", "As of: 8:46 AM"] },
+  { time: "8:51 AM", title: "Daily Morning Note", summary: "Featured Rainbow Children's (BUY), LTIMindtree (BUY) and Avenue Supermarts (BUY). Asian markets were lower on renewed US-Iran tension and GIFT Nifty indicated a weaker open.", bullets: ["Rainbow Children's featured as BUY in the morning note.", "LTIMindtree featured as BUY in the morning note.", "Avenue Supermarts featured as BUY in the morning note.", "Asian markets were lower on renewed US-Iran tension.", "GIFT Nifty indicated a weaker open."] },
+  { time: "10:44 AM", title: "Q1 FY27 Result Updates", summary: "Avenue Supermarts: BUY, TP INR 4,845, 19% indicated upside. LTIMindtree: BUY, TP INR 4,560, supported by the Lakshya 31 AI-led growth plan.", bullets: ["Avenue Supermarts: BUY, TP INR 4,845 (19% indicated upside in the mail).", "LTIMindtree: BUY, TP INR 4,560.", "LTIMindtree thesis references the Lakshya 31 AI-led growth plan.", "Source: Axis Research result-update mail", "As of: 10:44 AM"] },
+  { time: "2:17 PM", title: "Axis Alpha: R Systems", summary: "BUY at CMP INR 247, target INR 272, stop INR 235 and 30-day duration. Thesis: digital engineering scale, repeat revenue, Blackstone backing and AI capability.", bullets: ["R Systems Axis Alpha call: BUY at CMP INR 247.", "Target INR 272 with stop INR 235.", "Stated duration: 30 days.", "Thesis cites digital engineering scale and repeat revenue.", "Thesis also cites Blackstone backing and AI capability."] },
 ];
 
 export const riskAxes = ["Valuation", "Sector", "Liquidity", "Volatility", "Event", "Leverage"] as const;
@@ -80,8 +88,10 @@ export const portfolioRiskProfiles: RiskProfile[] = [
   { symbol: "ETERNAL", name: "Eternal", color: "#42c878", scores: [5, 4, 2, 4, 4, 1] },
   { symbol: "BHARTIARTL", name: "Bharti Airtel", color: "#b38cff", scores: [3, 2, 1, 2, 3, 4] },
   { symbol: "ADANIGREEN", name: "Adani Green Energy", color: "#21b5c5", scores: [4, 4, 3, 5, 4, 5] },
+  { symbol: "AXISBANK", name: "Axis Bank", color: "#4c8fff", scores: [2, 4, 1, 2, 4, 3] },
   { symbol: "AETHER", name: "Aether Industries", color: "#e3b844", scores: [4, 4, 4, 5, 4, 2] },
   { symbol: "JSWENERGY", name: "JSW Energy", color: "#ff7f6e", scores: [4, 3, 3, 4, 4, 5] },
+  { symbol: "LTF", name: "L&T Finance", color: "#c9893a", scores: [3, 4, 3, 4, 3, 4] },
 ];
 
 export const axisRecommendations = [
@@ -176,7 +186,7 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "PAT", value: "₹7,114 Cr", change: "+23% YoY", tone: "green" },
     { label: "Gross / net NPA", value: "1.28% / 0.39%", change: "GNPA improved YoY", tone: "green" },
   ], summary: "Profit and NII advanced while gross asset quality improved. Net credit cost was 0.63%, providing a useful risk check alongside margin progression.", source: "https://www.moneycontrol.com/news/business/earnings/axis-bank-q1-profit-rises-23-to-rs-7-114-crore-nii-grows-8-asset-quality-improves-13977302.html" },
-  { date: "20 Jul", day: "20", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "PAT", "AUM", "Net interest margin") },
+  { date: "30 Jul", day: "30", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "PAT", "AUM", "Net interest margin"), summary: "Q1 FY27 KPIs remain blank. Exchange-linked coverage places the board meeting to approve unaudited results on 30 Jul 2026, with the analyst call scheduled for 31 Jul — not yet a published result.", source: "https://www.sahi.com/news/irfc-schedules-q1-earnings-call-for-july-31-at-11-am-2880-PE1_COR" },
   { date: "20 Jul", day: "20", symbol: "ULTRACEMCO", name: "UltraTech Cement", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
     { label: "Sales volume", value: "41.31 Mt", change: "+12.2% YoY", tone: "green" },
     { label: "Revenue", value: "₹24,648 Cr", change: "+15.9% YoY", tone: "green" },
@@ -201,15 +211,42 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "Revenue", value: "₹1,59,479 Cr", change: "+23.1% YoY standalone", tone: "green" },
     { label: "PAT", value: "Loss ₹3,962 Cr", change: "Standalone · consol. loss ₹1,873 Cr", tone: "red" },
   ], summary: "Revenue rose on higher fuel realisations, but suppressed marketing margins and LPG under-recoveries swung the quarter into a standalone loss despite stronger refining support.", source: "https://energy.economictimes.indiatimes.com/news/oil-and-gas/bpcl-reports-1873-crore-loss-in-q1-fy27-due-to-weak-fuel-marketing-margins/132555664" },
-  { date: "22 Jul", day: "22", symbol: "ADANIGREEN", name: "Adani Green Energy", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+  { date: "22 Jul", day: "22", symbol: "ADANIGREEN", name: "Adani Green Energy", state: "Reported · portfolio catalyst", portfolio: true, period: "Q1 FY27", reported: true, kpis: [
     { label: "Operational capacity", value: "20,142 MW", change: "+27% YoY", tone: "green" },
     { label: "Energy sales", value: "13,657 MU", change: "+30% YoY", tone: "green" },
     { label: "EBITDA (power supply)", value: "₹4,122 Cr", change: "+33% YoY · 94% margin", tone: "green" },
     { label: "Cash profit", value: "₹2,225 Cr", change: "+28% YoY", tone: "green" },
   ], summary: "Crossed 20 GW operational capacity with record power-supply EBITDA. Revenue from power supply was ₹4,280 crore (+29% YoY); BESS installed capacity reached 3,551 MWh after 1,972 MWh commissioned at Khavda in the quarter.", source: "https://www.ndtvprofit.com/markets/adani-green-energy-q1-ebitda-rises-to-record-rs-4-122-crore-as-capacity-crosses-20-gw-11805479" },
-  { date: "23 Jul", day: "23", symbol: "INFY", name: "Infosys", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Revenue / CC growth", "Operating margin", "Large-deal TCV", "FY27 guidance") },
-  { date: "24 Jul", day: "24", symbol: "TATACONSUM", name: "Tata Consumer Products", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Revenue growth", "EBITDA margin", "India growth", "International growth") },
-  { date: "24 Jul", day: "24", symbol: "BANKBARODA", name: "Bank of Baroda", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "Net interest margin", "PAT", "GNPA / credit cost") },
+  { date: "22 Jul", day: "22", symbol: "ADANIPOWER", name: "Adani Power", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Reported revenue", value: "₹19,322 Cr", change: "+32.6% YoY", tone: "green" },
+    { label: "Reported EBITDA", value: "₹8,369 Cr", change: "+36% YoY", tone: "green" },
+    { label: "PAT", value: "₹4,867 Cr", change: "+47.2% YoY", tone: "green" },
+    { label: "Power sales", value: "28.8 BU", change: "+16.9% YoY · PLF 77.9%", tone: "green" },
+  ], summary: "Highest-ever quarterly operating and financial print: continuing EBITDA ₹6,983 crore (+21.6% YoY), installed capacity 18,330 MW, and power dispatch 28.8 BU on strong summer demand.", source: "https://www.bseindia.com/xml-data/corpfiling/AttachLive/0a67308a-1037-45a4-ab3c-4593628d851a.pdf" },
+  { date: "22 Jul", day: "22", symbol: "ETERNAL", name: "Eternal", state: "Reported · portfolio catalyst", portfolio: true, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Adj. revenue", value: "₹20,648 Cr", change: "+173% YoY · +17% QoQ", tone: "green" },
+    { label: "Adj. EBITDA", value: "₹555 Cr", change: "+223% YoY · +29% QoQ", tone: "green" },
+    { label: "PAT", value: "₹92 Cr", change: "+268% YoY · -47% QoQ", tone: "amber" },
+    { label: "B2C NOV", value: "₹31,120 Cr", change: "+54% YoY", tone: "green" },
+  ], summary: "Blinkit-led scale lifted adjusted revenue and EBITDA sharply; consol. PAT of ₹92 crore rose YoY but missed Street estimates and fell sequentially. Food-delivery NOV was ₹10,769 crore and Blinkit NOV ₹17,132 crore (+86% YoY).", source: "https://www.eternal.com/blog/q1fy27/" },
+  { date: "23 Jul", day: "23", symbol: "INFY", name: "Infosys", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Revenue / CC growth", value: "$5,082m · +2.4% YoY CC", change: "+1.0% QoQ CC · ₹48,211 Cr", tone: "green" },
+    { label: "Operating margin", value: "21.1%", change: "+20 bps QoQ · +30 bps YoY", tone: "green" },
+    { label: "Large-deal TCV", value: "$3.6bn", change: "61% net new", tone: "green" },
+    { label: "FY27 guidance", value: "1.5%–3.0% CC", change: "OM retained 20%–22%", tone: "amber" },
+  ], summary: "Q1 revenue $5,082m with resilient 21.1% operating margin and $3.6bn large-deal TCV. Management trimmed the upper end of FY27 CC revenue guidance to 1.5%–3.0% while retaining the 20%–22% margin band; AI revenues were 8.2% of the quarter.", source: "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q1.html" },
+  { date: "24 Jul", day: "24", symbol: "TATACONSUM", name: "Tata Consumer Products", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Revenue growth", value: "+12% YoY · ₹5,349 Cr", change: "+9% CC · PAT ₹427 Cr (+28% YoY)", tone: "green" },
+    { label: "Operating margin", value: "10.56%", change: "Improved YoY · softer QoQ", tone: "amber" },
+    { label: "India growth", value: "+13%", change: "Volume-backed India business", tone: "green" },
+    { label: "International growth", value: "+5%", change: "Non-branded −10%", tone: "amber" },
+  ], summary: "Double-digit consolidated revenue growth with India +13% and international +5%. PAT rose ~28% YoY to ₹427 crore; operating margin improved YoY to 10.56% while easing sequentially. Published EBITDA margin was not cited in the primary press coverage used here.", source: "https://economictimes.indiatimes.com/markets/stocks/earnings/tata-consumer-q1-results-net-profit-rises-28-yoy-to-rs-427-crore-revenue-up-12/articleshow/132603103.cms" },
+  { date: "24 Jul", day: "24", symbol: "BANKBARODA", name: "Bank of Baroda", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Net interest income", value: "₹12,524 Cr", change: "+9.5% YoY", tone: "green" },
+    { label: "PAT", value: "₹1,278 Cr", change: "-72% YoY · NMC settlement", tone: "red" },
+    { label: "Gross NPA", value: "1.99%", change: "vs 2.24% YoY", tone: "green" },
+    { label: "Net NPA", value: "0.5%", change: "vs 0.6% prior", tone: "green" },
+  ], summary: "PAT fell 72% YoY to ₹1,278 crore after absorbing the ~₹5,700 crore out-of-court NMC Health settlement. NII still rose 9.5% YoY to ₹12,524 crore; GNPA improved to 1.99% and NNPA to 0.5%. NIM and credit cost were not cited in the Moneycontrol primary coverage used here, so those slots are omitted rather than fabricated.", source: "https://www.moneycontrol.com/news/business/earnings/bank-of-baroda-q1-net-profit-falls-72-to-rs-1-278-crore-on-nmc-settlement-13982781.html" },
 ];
 
 export const analystCalls = [
@@ -264,6 +301,11 @@ export const sources = [
   { label: "AP: renewed US-Iran attacks and Hormuz uncertainty", url: "https://apnews.com/article/iran-us-hormuz-strait-war-july-13-2026-6c2c44cfdd089d6393d18fa5930ed620" },
   { label: "AP: oil and market reaction", url: "https://apnews.com/article/stocks-markets-iran-trump-ai-2d6744b09c68b5473d0bc8584b89e60e" },
   { label: "Moneycontrol: 10 Jul FII/DII provisional flows", url: "https://www.moneycontrol.com/news/business/markets/fiis-net-buy-shares-worth-rs-2-604-crore-diis-add-rs-2-020-crore-on-july-10-13971189.html" },
+  { label: "NSE: FII/FPI & DII trading activity reports", url: "https://www.nseindia.com/reports/fii-dii" },
+  { label: "CNBC TV18: 24 Jul FII −₹3,892.77cr / DII +₹5,453.55cr", url: "https://www.cnbctv18.com/market/fiis-keep-selling-diis-continue-to-hold-the-fort-19953570.htm" },
+  { label: "CNBC TV18: 23 Jul FII −₹2,999.23cr / DII +₹2,947.14cr", url: "https://www.cnbctv18.com/market/fiis-sell-shares-worth-%e2%82%b93000-crore-diis-nearly-offset-outflows-with-fresh-buying-19952623.htm" },
+  { label: "Kotak Neo: FII/DII cash activity table", url: "https://www.kotakneo.com/share-market-today/fii-dii-data/" },
+  { label: "Moneycontrol: FII/DII trading activity hub", url: "https://www.moneycontrol.com/markets/fii-dii-data/" },
   { label: "NSE Market Pulse: domestic ownership and FPI positioning", url: "https://nsearchives.nseindia.com/web/mediaattachment/2026-05/Market_Pulse_May_2026.pdf" },
   { label: "Moneycontrol: Bharti Airtel / Nomura", url: "https://www.moneycontrol.com/news/business/markets/nomura-reiterates-buy-on-bharti-airtel-raises-target-price-to-rs-2-355-13961831.html" },
   { label: "Moneycontrol: Eternal MSCI scenario", url: "https://www.moneycontrol.com/news/business/markets/eternal-rises-3-as-stock-could-be-restored-to-full-weight-in-msci-august-review-here-s-why-13969664.html" },
@@ -273,11 +315,11 @@ export const sources = [
 ];
 
 export const podcastNotes = [
-  ["Bloomberg Daybreak US", "Renewed strikes and conflicting claims over Hormuz keep shipping and energy risk elevated."],
-  ["Prof G Markets", "SpaceX pricing highlights analyst-conflict and target-setting risk, relevant to how broker targets should be weighted."],
-  ["Bloomberg Daybreak Europe", "Hormuz remains binary; the macro channel is energy inflation and policy uncertainty."],
-  ["FT News Briefing", "Bank fee strength contrasts with geopolitical risk; US-Iran strikes remain a global risk premium."],
-  ["Economist World in Brief", "Missile and drone attacks confirm that a durable reopening of Hormuz is not established."],
-  ["Bloomberg Daybreak Asia", "Higher oil may keep inflation and rates elevated, tightening financial conditions in Asia."],
-  ["The Daily Brief", "Cult.fit IPO and AI disruption are useful sentiment gauges, but not direct portfolio catalysts."],
+  ["Bloomberg Daybreak US", "Renewed strikes and conflicting claims over Hormuz keep shipping and energy risk elevated.", ["Hormuz risk remains elevated after renewed strike claims.", "Shipping disruption risk is the immediate macro channel.", "Energy-price volatility is the linked market transmission.", "Source: Bloomberg Daybreak US", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["Prof G Markets", "SpaceX pricing highlights analyst-conflict and target-setting risk, relevant to how broker targets should be weighted.", ["SpaceX pricing discussion highlights analyst-conflict risk.", "Target-setting incentives remain a watchpoint for broker notes.", "Useful framing for how Axis and other house targets should be weighted.", "Source: Prof G Markets", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["Bloomberg Daybreak Europe", "Hormuz remains binary; the macro channel is energy inflation and policy uncertainty.", ["Hormuz remains a binary geopolitical risk.", "Energy inflation is the primary macro transmission.", "Policy uncertainty compounds the market risk premium.", "Source: Bloomberg Daybreak Europe", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["FT News Briefing", "Bank fee strength contrasts with geopolitical risk; US-Iran strikes remain a global risk premium.", ["Bank fee strength contrasts with geopolitical risk headlines.", "US-Iran strike risk remains a global risk premium.", "Risk-off tone can coexist with selected financials strength.", "Source: FT News Briefing", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["Economist World in Brief", "Missile and drone attacks confirm that a durable reopening of Hormuz is not established.", ["Missile and drone attacks remain part of the Hormuz evidence set.", "A durable reopening of Hormuz is not established.", "Energy logistics risk stays in the active watchlist.", "Source: Economist World in Brief", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["Bloomberg Daybreak Asia", "Higher oil may keep inflation and rates elevated, tightening financial conditions in Asia.", ["Higher oil can keep inflation elevated across Asia.", "Higher rates expectations tighten regional financial conditions.", "Asia risk premium remains tied to energy and policy paths.", "Source: Bloomberg Daybreak Asia", "Fallback digest until Apple Podcasts refresh succeeds."]],
+  ["The Daily Brief", "Cult.fit IPO and AI disruption are useful sentiment gauges, but not direct portfolio catalysts.", ["Cult.fit IPO chatter is treated as a sentiment gauge.", "AI disruption narratives remain a secondary theme.", "Neither is treated as a direct portfolio catalyst here.", "Source: The Daily Brief", "Fallback digest until Apple Podcasts refresh succeeds."]],
 ];

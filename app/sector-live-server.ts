@@ -1,18 +1,24 @@
+import { spawn } from "node:child_process";
+import path from "node:path";
 import { callKiteTool } from "./kite-live-server";
 import { sectorCompanies } from "./sector-company-data";
 import type { SectorCompanyMarket, SectorMarketSnapshot, SectorReturnHorizon } from "./sector-live-types";
+
+const root = process.cwd();
+const yfinanceScript = path.join(root, "scripts/fetch-sector-quotes-yfinance.py");
+const flaskPython = path.join(root, ".venv-flask/bin/python");
 
 type JsonObject = Record<string, unknown>;
 type HistoryEntry = { date: string; returns: Record<Exclude<SectorReturnHorizon, "day">, number | null> };
 type SectorRuntimeState = {
   history: Map<string, HistoryEntry>;
   lastGood: Map<string, SectorMarketSnapshot>;
-  publicFallback: Map<string, { expiresAt: number; snapshot: SectorMarketSnapshot }>;
+  yfinanceCache: Map<string, { expiresAt: number; snapshot: SectorMarketSnapshot }>;
 };
 
 const globalState = globalThis as typeof globalThis & { __sectorRuntime?: SectorRuntimeState };
-const state = globalState.__sectorRuntime ??= { history: new Map(), lastGood: new Map(), publicFallback: new Map() };
-state.publicFallback ??= new Map();
+const state = globalState.__sectorRuntime ??= { history: new Map(), lastGood: new Map(), yfinanceCache: new Map() };
+state.yfinanceCache ??= new Map();
 
 let rateLimitedUntil = 0;
 let authProbeCache: { valid: boolean; expiresAt: number } | undefined;
@@ -71,6 +77,15 @@ function permissionFailure(message: string) {
   return new Error(`${CONNECT_MARKET_DATA_MESSAGE} ${message}`);
 }
 
+function asOfLabel(date = new Date()) {
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(date);
+}
+
+function resolvePythonBin() {
+  return process.env.PORTFOLIO_SECTOR_PYTHON
+    ?? (process.env.PORTFOLIO_FLASK_VENV ? path.join(process.env.PORTFOLIO_FLASK_VENV, "bin/python") : flaskPython);
+}
+
 export async function kiteAuthLikelyValid() {
   if (authProbeCache && authProbeCache.expiresAt > Date.now()) return authProbeCache.valid;
   try {
@@ -113,19 +128,19 @@ export async function loadKiteQuotes(instruments: string[]) {
 }
 
 function quoteMap(raw: unknown) {
-  const root = object(raw);
-  const data = Object.keys(object(root.data)).length ? object(root.data) : root;
+  const rootObj = object(raw);
+  const data = Object.keys(object(rootObj.data)).length ? object(rootObj.data) : rootObj;
   return data;
 }
 
 function candles(raw: unknown) {
-  const root = object(raw);
+  const rootObj = object(raw);
   const candidates = Array.isArray(raw)
     ? raw
-    : Array.isArray(root.candles)
-      ? root.candles
-      : Array.isArray(object(root.data).candles)
-        ? object(root.data).candles as unknown[]
+    : Array.isArray(rootObj.candles)
+      ? rootObj.candles
+      : Array.isArray(object(rootObj.data).candles)
+        ? object(rootObj.data).candles as unknown[]
         : [];
 
   return candidates.map((item) => {
@@ -206,128 +221,144 @@ async function addHistory(rows: Array<SectorCompanyMarket & { instrumentToken: n
   return enriched;
 }
 
-
-type YahooChartResponse = {
-  chart?: {
-    result?: Array<{
-      meta?: { regularMarketPrice?: number; chartPreviousClose?: number };
-      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
-    }>;
-  };
-};
-
-async function publicCompanyMarket(symbol: string): Promise<SectorCompanyMarket> {
-  const yahooSymbol = `${symbol}.NS`;
-  const response = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=6mo&interval=1d`, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) throw new Error(`Public market fallback returned HTTP ${response.status} for ${symbol}.`);
-  const payload = await response.json() as YahooChartResponse;
-  const result = payload.chart?.result?.[0];
-  const closes = (result?.indicators?.quote?.[0]?.close ?? []).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  const price = numberOrNull(result?.meta?.regularMarketPrice) ?? closes.at(-1) ?? null;
-  const previousClose = closes.length > 1 ? closes.at(-2) ?? null : numberOrNull(result?.meta?.chartPreviousClose);
-  const at = (sessions: number) => closes.length > sessions ? closes[closes.length - 1 - sessions] : closes[0] ?? null;
-  return {
-    symbol,
-    price,
-    previousClose,
-    returns: {
-      day: percent(price, previousClose),
-      week: percent(price, at(5)),
-      month: percent(price, at(21)),
-      quarter: percent(price, at(63)),
-    },
-  };
+function parseYfinanceCompanies(raw: unknown): SectorCompanyMarket[] {
+  const rootObj = object(raw);
+  const list = Array.isArray(rootObj.companies) ? rootObj.companies : [];
+  return list.map((item) => {
+    const company = object(item);
+    const returns = object(company.returns);
+    return {
+      symbol: String(company.symbol ?? ""),
+      price: numberOrNull(company.price),
+      previousClose: numberOrNull(company.previousClose),
+      returns: {
+        day: numberOrNull(returns.day),
+        week: numberOrNull(returns.week),
+        month: numberOrNull(returns.month),
+        quarter: numberOrNull(returns.quarter),
+      },
+    };
+  }).filter((company) => company.symbol);
 }
 
-export async function getPublicSectorMarketSnapshot(sectorId: string, reason: string): Promise<SectorMarketSnapshot> {
-  const cached = state.publicFallback.get(sectorId);
-  if (cached && cached.expiresAt > Date.now()) return cached.snapshot;
-  const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
-  const companies: SectorCompanyMarket[] = [];
-  for (let index = 0; index < universe.length; index += 4) {
-    companies.push(...await Promise.all(universe.slice(index, index + 4).map(async (company) => {
-      try {
-        return await publicCompanyMarket(company.symbol);
-      } catch {
-        return { symbol: company.symbol, price: null, previousClose: null, returns: { day: null, week: null, month: null, quarter: null } };
+function runYfinanceScript(symbols: string[]) {
+  const pythonBin = resolvePythonBin();
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(pythonBin, [yfinanceScript], {
+      env: {
+        ...process.env,
+        PYTHONPYCACHEPREFIX: "/tmp/portfolio-sector-pycache",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("yfinance sector quote fetch timed out after 90s."));
+    }, 90_000);
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
       }
-    })));
+      reject(new Error(stderr.trim() || stdout.trim() || `yfinance exited with code ${code ?? "unknown"}`));
+    });
+    child.stdin.write(JSON.stringify({ symbols }));
+    child.stdin.end();
+  });
+}
+
+export async function loadYfinanceSectorQuotes(symbols: string[]) {
+  const { stdout, stderr } = await runYfinanceScript(symbols);
+  const payload = JSON.parse(stdout) as unknown;
+  const companies = parseYfinanceCompanies(payload);
+  if (!companies.some((company) => company.price !== null)) {
+    throw new Error(stderr.trim() || "yfinance returned no sector prices.");
   }
-  if (!companies.some((company) => company.price !== null)) throw new Error("Public market fallback could not load any sector prices.");
+  return companies;
+}
+
+export async function getYfinanceSectorMarketSnapshot(sectorId: string): Promise<SectorMarketSnapshot> {
+  const cached = state.yfinanceCache.get(sectorId);
+  if (cached && cached.expiresAt > Date.now()) return cached.snapshot;
+
+  const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
+  const companies = await loadYfinanceSectorQuotes(universe.map((company) => company.symbol));
+  const bySymbol = new Map(companies.map((company) => [company.symbol, company]));
+  const ordered = universe.map((company) => bySymbol.get(company.symbol) ?? {
+    symbol: company.symbol,
+    price: null,
+    previousClose: null,
+    returns: { day: null, week: null, month: null, quarter: null },
+  });
+
+  if (!ordered.some((company) => company.price !== null)) {
+    throw new Error("yfinance returned no sector prices.");
+  }
+
   const snapshot: SectorMarketSnapshot = {
-    status: "public_delayed",
+    status: "live",
     sectorId,
-    asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
-    message: `Public delayed market fallback (Yahoo Finance). ${CONNECT_MARKET_DATA_MESSAGE} Kite detail: ${reason}`,
-    companies,
+    asOf: asOfLabel(),
+    message: "Live yfinance NSE quotes; multi-period returns use daily closes. Kite paid market-data is optional for sector snapshots.",
+    companies: ordered,
   };
-  state.publicFallback.set(sectorId, { expiresAt: Date.now() + 5 * 60_000, snapshot });
+  state.yfinanceCache.set(sectorId, { expiresAt: Date.now() + 60_000, snapshot });
+  state.lastGood.set(sectorId, snapshot);
   return snapshot;
 }
 
-export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorMarketSnapshot> {
+async function getKiteSectorMarketSnapshot(sectorId: string): Promise<SectorMarketSnapshot> {
   const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
-  try {
-    const instruments = universe.map((company) => `NSE:${company.symbol}`);
-    const { raw, quoteMode } = await loadKiteQuotes(instruments);
-    const quotes = quoteMap(raw);
-    const rows = universe.map((company) => {
-      const quote = object(quotes[`NSE:${company.symbol}`]);
-      const ohlc = object(quote.ohlc);
-      const price = numberOrNull(quote.last_price);
-      const previousClose = numberOrNull(ohlc.close);
-      return {
-        symbol: company.symbol,
-        price,
-        previousClose,
-        instrumentToken: numberOrNull(quote.instrument_token),
-        returns: { day: percent(price, previousClose), week: null, month: null, quarter: null },
-      };
-    });
-    const companies = await addHistory(rows);
-    const snapshot: SectorMarketSnapshot = {
-      status: "live",
-      sectorId,
-      asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
-      message: `Live Kite ${quoteMode}; multi-period returns use the latest cached daily closes.`,
-      companies,
-    };
-    state.lastGood.set(sectorId, snapshot);
-    return snapshot;
-  } catch (error) {
-    const message = errorMessage(error);
-    const cached = state.lastGood.get(sectorId);
-    if (cached) {
-      const suffix = isRateLimitError(message) ? "Zerodha rate limit reached; retaining the last validated sector snapshot." : message;
-      return { ...cached, status: "cached", message: `Kite refresh failed. ${suffix}` };
-    }
-
-    const permissionDenied = isInsufficientPermissionError(message) || message.includes(CONNECT_MARKET_DATA_MESSAGE);
-    let authRequired = isAuthError(message);
-    if (!authRequired && !permissionDenied) {
-      authRequired = !(await kiteAuthLikelyValid());
-    }
-
-    try {
-      const fallbackReason = permissionDenied
-        ? CONNECT_MARKET_DATA_MESSAGE
-        : authRequired
-          ? `Kite authentication is required. ${message}`
-          : message;
-      return await getPublicSectorMarketSnapshot(sectorId, fallbackReason);
-    } catch {
-      // Preserve the explicit Kite state if the independent public source also fails.
-    }
-
+  const instruments = universe.map((company) => `NSE:${company.symbol}`);
+  const { raw, quoteMode } = await loadKiteQuotes(instruments);
+  const quotes = quoteMap(raw);
+  const rows = universe.map((company) => {
+    const quote = object(quotes[`NSE:${company.symbol}`]);
+    const ohlc = object(quote.ohlc);
+    const price = numberOrNull(quote.last_price);
+    const previousClose = numberOrNull(ohlc.close);
     return {
-      status: authRequired ? "auth_required" : "unavailable",
+      symbol: company.symbol,
+      price,
+      previousClose,
+      instrumentToken: numberOrNull(quote.instrument_token),
+      returns: { day: percent(price, previousClose), week: null, month: null, quarter: null },
+    };
+  });
+  const companies = await addHistory(rows);
+  return {
+    status: "live",
+    sectorId,
+    asOf: asOfLabel(),
+    message: `Live Kite ${quoteMode}; multi-period returns use the latest cached daily closes.`,
+    companies,
+  };
+}
+
+/** @deprecated Kept for route catch-all compatibility; prefer getYfinanceSectorMarketSnapshot. */
+export async function getPublicSectorMarketSnapshot(sectorId: string, reason: string): Promise<SectorMarketSnapshot> {
+  try {
+    const snapshot = await getYfinanceSectorMarketSnapshot(sectorId);
+    return {
+      ...snapshot,
+      message: `Live yfinance NSE quotes (route fallback). ${reason}`,
+    };
+  } catch (error) {
+    const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
+    return {
+      status: "unavailable",
       sectorId,
-      asOf: "Research universe reviewed · 16 Jul 2026",
-      message: authRequired ? "Authenticate Kite to populate live prices and return rankings." : message,
+      asOf: asOfLabel(),
+      message: `yfinance sector quotes unavailable. ${reason} Detail: ${errorMessage(error)}`,
       companies: universe.map((company) => ({
         symbol: company.symbol,
         price: null,
@@ -335,5 +366,49 @@ export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorM
         returns: { day: null, week: null, month: null, quarter: null },
       })),
     };
+  }
+}
+
+export async function getSectorMarketSnapshot(sectorId: string): Promise<SectorMarketSnapshot> {
+  const universe = sectorCompanies[sectorId] ?? sectorCompanies.pharma;
+
+  try {
+    return await getYfinanceSectorMarketSnapshot(sectorId);
+  } catch (yfinanceError) {
+    const yfinanceMessage = errorMessage(yfinanceError);
+
+    try {
+      const kiteSnapshot = await getKiteSectorMarketSnapshot(sectorId);
+      state.lastGood.set(sectorId, kiteSnapshot);
+      return kiteSnapshot;
+    } catch (kiteError) {
+      const message = errorMessage(kiteError);
+      const cached = state.lastGood.get(sectorId);
+      if (cached) {
+        const suffix = isRateLimitError(message)
+          ? "Zerodha rate limit reached; retaining the last validated sector snapshot."
+          : `yfinance: ${yfinanceMessage}. Kite: ${message}`;
+        return { ...cached, status: "cached", message: `Sector refresh failed. ${suffix}` };
+      }
+
+      const permissionDenied = isInsufficientPermissionError(message) || message.includes(CONNECT_MARKET_DATA_MESSAGE);
+      let authRequired = isAuthError(message);
+      if (!authRequired && !permissionDenied) {
+        authRequired = !(await kiteAuthLikelyValid());
+      }
+
+      return {
+        status: authRequired ? "auth_required" : "unavailable",
+        sectorId,
+        asOf: asOfLabel(),
+        message: `yfinance failed (${yfinanceMessage}). ${permissionDenied ? CONNECT_MARKET_DATA_MESSAGE : message}`,
+        companies: universe.map((company) => ({
+          symbol: company.symbol,
+          price: null,
+          previousClose: null,
+          returns: { day: null, week: null, month: null, quarter: null },
+        })),
+      };
+    }
   }
 }

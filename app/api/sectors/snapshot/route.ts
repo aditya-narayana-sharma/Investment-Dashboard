@@ -24,6 +24,6 @@ export async function GET(request: Request) {
   try {
     return Response.json(await getSectorMarketSnapshot(sectorId), { headers });
   } catch {
-    return Response.json(await getPublicSectorMarketSnapshot(sectorId, "Live Kite sector data is unavailable."), { headers });
+    return Response.json(await getPublicSectorMarketSnapshot(sectorId, "Primary sector quote path raised unexpectedly."), { headers });
   }
 }

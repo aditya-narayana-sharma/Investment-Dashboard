@@ -4,12 +4,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import sqlite3
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+from health_date_policy import IST, health_target_context
 
 
 TYPE_PREFIX = "HKQuantityTypeIdentifier"
@@ -68,6 +72,10 @@ METRICS = [
 ]
 
 CATEGORY_TONES = {"Activity": "green", "Sleep": "blue", "Heart": "red", "Respiratory": "blue", "Mobility": "amber", "Nutrition": "green"}
+CATEGORY_TYPES: Dict[str, set[str]] = defaultdict(set)
+for metric_category, _, metric_type, *_ in METRICS:
+    CATEGORY_TYPES[metric_category].add(metric_type)
+CATEGORY_TYPES["Sleep"].add("SleepAnalysis")
 
 
 def parse_dt(value: str) -> datetime:
@@ -191,6 +199,126 @@ def sleep_hours(db: sqlite3.Connection, day: str, category_pattern: str = "Aslee
     return seconds / 3600 if seconds else None
 
 
+def _parse_delta_percent(delta: Optional[str]) -> Optional[float]:
+    if not delta:
+        return None
+    match = re.search(r"([+-]?\d+(?:\.\d+)?)\s*%", delta.replace(",", ""))
+    return float(match.group(1)) if match else None
+
+
+def build_metric_actions(
+    categories: List[dict],
+    completed: date,
+    missing: List[str],
+    has_partial: bool,
+    partial_export_day: str,
+) -> List[dict]:
+    """Derive wellness insights from completed-day metrics only — never invent values."""
+    higher = {
+        "Active energy", "Exercise minutes", "Stand time", "Steps", "Walking + running", "Stairs climbed",
+        "Time asleep", "Deep sleep", "REM sleep", "Core sleep", "Cardio fitness", "Walking speed",
+        "Step length", "Protein", "Fibre", "Potassium", "Water", "HRV",
+    }
+    lower = {"Resting heart rate", "Walking asymmetry", "Double support", "Awake", "Sodium", "Sugar", "Saturated fat"}
+    priority = [
+        "Active energy", "Steps", "Exercise minutes", "Time asleep", "Deep sleep", "REM sleep",
+        "Resting heart rate", "HRV", "Cardio fitness", "Dietary energy", "Protein", "Fibre", "Water",
+        "Walking asymmetry", "Blood oxygen",
+    ]
+    actions: List[dict] = []
+    if missing:
+        actions.append({
+            "tone": "amber",
+            "title": "Operational-day coverage gap",
+            "text": f"Missing source dates: {', '.join(missing)}.",
+        })
+    else:
+        actions.append({
+            "tone": "green",
+            "title": "Operational-day coverage",
+            "text": "The last seven target days are present.",
+        })
+
+    date_label = completed.strftime("%d %b %Y")
+    for category in categories:
+        ranked = sorted(
+            category.get("metrics", []),
+            key=lambda metric: priority.index(metric["label"]) if metric.get("label") in priority else 99,
+        )
+        emitted = 0
+        for metric in ranked:
+            weekly = (metric.get("averages") or {}).get("weekly") or {}
+            direction = weekly.get("direction")
+            if direction not in {"up", "down"}:
+                continue
+            delta_pct = _parse_delta_percent(weekly.get("delta"))
+            if delta_pct is None or abs(delta_pct) < 8:
+                continue
+            label = metric.get("label", "")
+            if label in higher:
+                tone = "green" if direction == "up" else "amber"
+            elif label in lower:
+                tone = "green" if direction == "down" else "amber"
+            else:
+                tone = "blue"
+            actions.append({
+                "tone": tone,
+                "title": f"{category.get('name')}: {label}",
+                "text": (
+                    f"{date_label} recorded {metric.get('value')} "
+                    f"({weekly.get('delta') or direction} vs 7-day average {weekly.get('value')}). "
+                    "Wellness signal only; not a diagnosis."
+                ),
+            })
+            emitted += 1
+            if emitted >= 2:
+                break
+
+    nutrition = next((item for item in categories if item.get("name") == "Nutrition"), None)
+    energy = next((metric for metric in (nutrition or {}).get("metrics", []) if metric.get("label") == "Dietary energy"), None)
+    if energy:
+        weekly = (energy.get("averages") or {}).get("weekly") or {}
+        delta_pct = _parse_delta_percent(weekly.get("delta"))
+        if delta_pct is not None and delta_pct <= -25:
+            actions.append({
+                "tone": "amber",
+                "title": "Nutrition log is incomplete by definition",
+                "text": (
+                    f"{date_label} logged dietary energy {energy.get('value')} "
+                    f"versus 7-day average {weekly.get('value')} ({weekly.get('delta')}). "
+                    "Logged nutrition is not verified total intake."
+                ),
+            })
+
+    actions.append({
+        "tone": "amber" if has_partial else "blue",
+        "title": "Partial export-day isolation",
+        "text": (
+            f"{partial_export_day} is excluded from completed-day KPIs."
+            if has_partial
+            else "No later partial export day is included in optimisation."
+        ),
+    })
+    actions.append({
+        "tone": "amber",
+        "title": "Livity / mirroring not verified",
+        "text": (
+            f"Livity, Lifesum and Guava were not mirrored for {date_label}. "
+            "Do not treat export-only HealthKit values as cross-app reconciled."
+        ),
+    })
+    # De-dupe by title while preserving order
+    seen: set[str] = set()
+    unique: List[dict] = []
+    for item in actions:
+        title = str(item.get("title", ""))
+        if title in seen:
+            continue
+        seen.add(title)
+        unique.append(item)
+    return unique[:10]
+
+
 def fmt(value: Union[float, Tuple[float, float]], unit: str) -> str:
     def one(number: float) -> str:
         if unit in {"", "floors", "bpm", "ms", "min", "kcal", "mg", "ml", "m"}:
@@ -236,12 +364,21 @@ def replace_current(values: List[float], current: Union[float, Tuple[float, floa
     return [float(current_point), *values]
 
 
-def build_snapshot(db: sqlite3.Connection, export_date: str, relevant: int, overrides: Optional[dict[str, Any]] = None) -> dict:
+def build_snapshot(
+    db: sqlite3.Connection,
+    export_date: str,
+    relevant: int,
+    overrides: Optional[dict[str, Any]] = None,
+    archive_state: Optional[dict[str, Any]] = None,
+    now: Optional[datetime] = None,
+) -> dict:
     overrides = overrides or {}
-    today = datetime.now().astimezone().date()
-    completed = today - timedelta(days=1)
-    export_day = parse_dt(export_date).date() if export_date else completed
-    completed = min(completed, export_day)
+    archive_state = archive_state or {}
+    now = (now or datetime.now(IST)).astimezone(IST)
+    target = health_target_context(now)
+    export_captured_at = parse_dt(export_date).astimezone(IST) if export_date else now
+    eligible = health_target_context(export_captured_at)
+    completed = min(target.target_date, eligible.target_date)
     categories: Dict[str, list] = defaultdict(list)
     coverage: Dict[str, dict] = {}
 
@@ -267,7 +404,7 @@ def build_snapshot(db: sqlite3.Connection, export_date: str, relevant: int, over
         categories[category].append({"label": label, "value": fmt(current, unit), "context": f"{metric_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": averages})
         first, last, count = db.execute(
             "SELECT MIN(day), MAX(day), COUNT(*) FROM records WHERE type=? AND day BETWEEN '2010-01-01' AND ?",
-            (metric_type, today.isoformat()),
+            (metric_type, export_captured_at.date().isoformat()),
         ).fetchone()
         coverage[label] = {"firstDate": first or "", "lastDate": last or "", "records": count, "weekly": len(week_values) >= 4, "monthly": len(month_values) >= 20}
 
@@ -294,25 +431,120 @@ def build_snapshot(db: sqlite3.Connection, export_date: str, relevant: int, over
         source_note = "Apple Health + iPhone Mirroring" if name in overridden_categories else "Apple Health export"
         ordered.append({"name": name, "note": f"{source_note} · completed through {completed.strftime('%d %b %Y')}", "tone": CATEGORY_TONES[name], "metrics": categories.get(name, [])})
 
-    has_partial = bool(db.execute("SELECT 1 FROM records WHERE day=? LIMIT 1", (today.isoformat(),)).fetchone())
+    partial_export_day = export_captured_at.date().isoformat() if export_captured_at.date() > completed else ""
+    has_partial = bool(
+        partial_export_day
+        and db.execute("SELECT 1 FROM records WHERE day=? LIMIT 1", (partial_export_day,)).fetchone()
+    )
     present_days = {row[0] for row in db.execute("SELECT DISTINCT day FROM records WHERE day BETWEEN ? AND ?", ((completed - timedelta(days=29)).isoformat(), completed.isoformat()))}
     missing = [(completed - timedelta(days=offset)).isoformat() for offset in range(7) if (completed - timedelta(days=offset)).isoformat() not in present_days]
+    category_coverage: Dict[str, dict] = {}
+    for name in ("Activity", "Sleep", "Heart", "Respiratory", "Mobility", "Nutrition"):
+        metric_types = sorted(CATEGORY_TYPES[name])
+        placeholders = ",".join("?" for _ in metric_types)
+        record_count = db.execute(
+            f"SELECT COUNT(*) FROM records WHERE day=? AND type IN ({placeholders})",
+            (completed.isoformat(), *metric_types),
+        ).fetchone()[0]
+        metric_count = len(categories.get(name, []))
+        category_coverage[name] = {
+            "date": completed.isoformat(),
+            "available": record_count > 0 and metric_count > 0,
+            "metricCount": metric_count,
+            "recordCount": record_count,
+        }
+
+    archive_status = str(archive_state.get("status", "verified_export"))
+    rejected_archive = str(archive_state.get("rejectedArchive", ""))
+    fallback_reason = str(archive_state.get("fallbackReason", ""))
+    target_has_records = bool(db.execute("SELECT 1 FROM records WHERE day=? LIMIT 1", (completed.isoformat(),)).fetchone())
+    complete_categories = all(item["available"] for item in category_coverage.values())
+    if not target_has_records:
+        snapshot_status = "unavailable"
+    elif eligible.target_date < target.target_date:
+        snapshot_status = "stale"
+    elif not complete_categories:
+        snapshot_status = "partial"
+    elif archive_status == "verified_latest":
+        snapshot_status = "live"
+    elif archive_status in {"cached_fallback", "verified_export", "invalid_latest"}:
+        snapshot_status = "cached"
+    else:
+        snapshot_status = "unavailable"
+
+    status_detail = {
+        "live": f"Operational Health target {target.target_date.isoformat()} is verified from the newest archive.",
+        "partial": f"Operational Health target {target.target_date.isoformat()} has incomplete category coverage.",
+        "cached": f"Operational Health target {target.target_date.isoformat()} is served from a validated fallback export.",
+        "stale": f"Health data is eligible through {eligible.target_date.isoformat()}; the current operational target is {target.target_date.isoformat()}.",
+        "unavailable": f"No usable Health records were found for {completed.isoformat()}.",
+    }[snapshot_status]
+    archive_message = str(archive_state.get("message", "")).strip()
+    message_parts = [
+        f"Streaming import of {relevant:,} relevant Apple Health records.",
+        status_detail,
+        f"Policy: {target.label}.",
+    ]
+    if has_partial:
+        message_parts.append(f"{partial_export_day} is partial and excluded from completed-day KPIs.")
+    if archive_message:
+        message_parts.append(archive_message)
+
+    sources = [
+        {
+            "source": "Apple Health export",
+            "status": "Verified" if snapshot_status in {"live", "cached"} else "Fallback",
+            "detail": f"export.xml parsed incrementally; eligible through {eligible.target_date.isoformat()}",
+            "tone": "green" if snapshot_status in {"live", "cached"} else "amber",
+        },
+        *([{"source": "iPhone Mirroring", "status": "Verified", "detail": override_meta.get("detail", f"Final operational-day values verified for {completed.isoformat()}"), "tone": "green"}] if override_meta else [{
+            "source": "iPhone Mirroring",
+            "status": "Unavailable",
+            "detail": f"No iPhone Mirroring overrides for operational target {completed.isoformat()}; export values stand alone.",
+            "tone": "amber",
+        }]),
+        *([{"source": " Health Daily Note", "status": "Read", "detail": override_meta.get("noteDetail", f"Exact note contains a {completed.isoformat()} shortcut snapshot; direct Health values take precedence"), "tone": "amber"}] if override_meta else []),
+        {
+            "source": "Livity",
+            "status": "Unavailable" if not override_meta.get("livity") else "Verified",
+            "detail": override_meta.get("livityDetail", f"Livity was not mirrored for {completed.isoformat()}; do not invent Livity values."),
+            "tone": "amber" if not override_meta.get("livity") else "green",
+        },
+        {
+            "source": "Lifesum",
+            "status": "Unavailable" if not override_meta.get("lifesum") else "Verified",
+            "detail": override_meta.get("lifesumDetail", f"Lifesum was not mirrored for {completed.isoformat()}."),
+            "tone": "amber" if not override_meta.get("lifesum") else "green",
+        },
+        {
+            "source": "Guava",
+            "status": "Unavailable" if not override_meta.get("guava") else "Verified",
+            "detail": override_meta.get("guavaDetail", f"Guava was not mirrored for {completed.isoformat()}."),
+            "tone": "amber" if not override_meta.get("guava") else "green",
+        },
+    ]
+    if archive_state:
+        sources.append({
+            "source": "Latest Apple Health ZIP",
+            "status": "Rejected" if rejected_archive else ("Verified" if archive_status == "verified_latest" else "Fallback"),
+            "detail": archive_message or "Archive validation completed.",
+            "tone": "red" if rejected_archive else ("green" if archive_status == "verified_latest" else "amber"),
+        })
+
     return {
-        "schemaVersion": 1, "status": "live", "source": "Apple Health", "dataDate": completed.isoformat(),
-        "completedThrough": completed.isoformat(), "partialToday": has_partial, "missingDates": missing,
-        "capturedAt": datetime.now().astimezone().isoformat(), "exportDate": export_date,
-        "message": f"Streaming import of {relevant:,} relevant Apple Health records. Complete through {completed.isoformat()}; {today.isoformat()} is {'partial' if has_partial else 'not present'}.{(' Final ' + completed.isoformat() + ' values were reconciled through iPhone Mirroring.') if override_meta else ''}",
-        "coverage": coverage, "categories": ordered,
-        "sources": [
-            {"source": "Apple Health export", "status": "Verified", "detail": f"export.xml parsed incrementally; complete through {completed.isoformat()}", "tone": "green"},
-            *([{"source": "iPhone Mirroring", "status": "Verified", "detail": override_meta.get("detail", f"Final completed-day values verified for {completed.isoformat()}"), "tone": "green"}] if override_meta else []),
-            *([{"source": " Health Daily Note", "status": "Read", "detail": override_meta.get("noteDetail", f"Exact note contains a {completed.isoformat()} shortcut snapshot; direct Health values take precedence"), "tone": "amber"}] if override_meta else []),
-        ],
-        "actions": [
-            {"tone": "green" if not missing else "amber", "title": "Completed-day coverage", "text": "The last seven completed days are present." if not missing else f"Missing source dates: {', '.join(missing)}."},
-            {"tone": "amber", "title": "Current day remains partial", "text": "Today is separated from the completed-day baseline and is not used for optimisation."},
-            {"tone": "blue", "title": "Trend interpretation", "text": "Use the direction-aware 7-day and 30-day comparisons; logged nutrition is not verified total intake."},
-        ],
+        "schemaVersion": 1, "status": snapshot_status, "source": "Apple Health", "dataDate": completed.isoformat(),
+        "completedThrough": completed.isoformat(), "partialToday": has_partial,
+        "partialExportDay": partial_export_day if has_partial else "", "missingDates": missing,
+        "capturedAt": now.isoformat(), "exportDate": export_date,
+        "exportCapturedAt": export_captured_at.isoformat(),
+        "targetDate": target.target_date.isoformat(), "targetPolicy": target.policy, "targetLabel": target.label,
+        "requiredThrough": target.target_date.isoformat(), "eligibleThrough": eligible.target_date.isoformat(),
+        "archiveStatus": archive_status, "activeArchive": archive_state.get("activeArchive", ""),
+        "rejectedArchive": rejected_archive, "fallbackReason": fallback_reason,
+        "message": " ".join(message_parts),
+        "coverage": coverage, "categoryCoverage": category_coverage, "categories": ordered,
+        "sources": sources,
+        "actions": build_metric_actions(ordered, completed, missing, has_partial, partial_export_day),
     }
 
 
@@ -321,15 +553,19 @@ def main() -> None:
     parser.add_argument("--xml", required=True, type=Path)
     parser.add_argument("--db", required=True, type=Path)
     parser.add_argument("--snapshot", required=True, type=Path)
+    parser.add_argument("--archive-state", type=Path)
     parser.add_argument("--overrides", type=Path)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     db = setup_database(args.db)
     export_date, relevant, imported = import_xml(args.xml, db, args.force)
     overrides = json.loads(args.overrides.read_text(encoding="utf-8")) if args.overrides and args.overrides.exists() else {}
-    snapshot = build_snapshot(db, export_date, relevant, overrides)
+    archive_state = json.loads(args.archive_state.read_text(encoding="utf-8")) if args.archive_state and args.archive_state.exists() else {}
+    snapshot = build_snapshot(db, export_date, relevant, overrides, archive_state)
+    if archive_state:
+        snapshot["archive"] = archive_state
     args.snapshot.parent.mkdir(parents=True, exist_ok=True)
-    temporary = args.snapshot.with_suffix(".tmp")
+    temporary = args.snapshot.with_name(f".{args.snapshot.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(args.snapshot)
     print(json.dumps({"status": "ok", "imported": imported, "relevantRecords": relevant, "dataDate": snapshot["dataDate"], "partialToday": snapshot["partialToday"]}))

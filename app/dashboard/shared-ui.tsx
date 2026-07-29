@@ -73,7 +73,7 @@ export function HealthMetricComparison({ metric, averagePeriod }: { metric: Heal
 }
 
 
-export function HealthMasonryGrid({ categories }: { categories: HealthLiveSnapshot["categories"] }) {
+export function HealthMasonryGrid({ categories, compact = false }: { categories: HealthLiveSnapshot["categories"]; compact?: boolean }) {
   const [averagePeriod, setAveragePeriod] = useState<HealthAveragePeriod>("weekly");
   const [averagePeriodHydrated, setAveragePeriodHydrated] = useState(false);
 
@@ -91,21 +91,21 @@ export function HealthMasonryGrid({ categories }: { categories: HealthLiveSnapsh
   }, [averagePeriod, averagePeriodHydrated]);
 
   return <>
-    <section className="health-average-toolbar" aria-label="Health metric average comparison controls">
-      <div><b>Default comparison</b><span>Applied to every KPI below</span></div>
+    <section className={`health-average-toolbar${compact ? " compact" : ""}`} aria-label="Health metric average comparison controls">
+      <div><b>Vital cadence</b><span>Weekly or month-to-date rhythm for every KPI below</span></div>
       <div className="segmented health-average-toggle" role="group" aria-label="Compare health metrics with weekly or monthly average">
         <button type="button" className={averagePeriod === "weekly" ? "active" : ""} aria-pressed={averagePeriod === "weekly"} onClick={() => setAveragePeriod("weekly")}>Weekly</button>
         <button type="button" className={averagePeriod === "monthly" ? "active" : ""} aria-pressed={averagePeriod === "monthly"} onClick={() => setAveragePeriod("monthly")}>Monthly (MTD)</button>
       </div>
       <p><span className="trend-good-key">Green · favourable direction</span><span className="trend-moderate-key">Gold · context dependent</span><span className="trend-bad-key">Red · unfavourable direction</span><span>— Average unavailable</span><em>Direction-aware wellness context, not a diagnosis.</em></p>
     </section>
-    <section className="health-category-grid">
+    <section className={`health-category-grid${compact ? " compact" : ""}`}>
       {categories.map(category=><article className={`panel health-category ${category.tone}`} key={category.name}><div className="health-category-title"><div><HealthCategoryIcon name={category.name}/><span><h3>{category.name}</h3><p>{category.note}</p></span></div><span className={`dot ${category.tone}`}/></div><div className="health-kpi-grid">{category.metrics.map(metric=><div className={`health-kpi-tile ${metric.tone ?? ""}`} key={`${category.name}-${metric.label}`}><span>{metric.label}</span><b>{metric.value}</b><HealthMetricComparison metric={metric} averagePeriod={averagePeriod}/><small>{metric.context ?? ""}</small></div>)}</div></article>)}
     </section>
   </>;
 }
 
-export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthIncognito, healthCurrent }: { active: WorkspaceKey; onChange: (workspace: WorkspaceKey) => void; kiteLive: boolean; contentLive: boolean; healthIncognito: boolean; healthCurrent: boolean }) {
+export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthIncognito, healthStatus }: { active: WorkspaceKey; onChange: (workspace: WorkspaceKey) => void; kiteLive: boolean; contentLive: boolean; healthIncognito: boolean; healthStatus: HealthLiveSnapshot["status"] }) {
   const tabsRef = useRef<Array<HTMLButtonElement | null>>([]);
   const selectByIndex = (index: number) => {
     const normalized = (index + workspaces.length) % workspaces.length;
@@ -127,7 +127,23 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     <div className="workspace-tabs" role="tablist" aria-orientation="horizontal">
       {workspaces.map((workspace, index) => {
         const Icon = workspace.icon;
-        const badge = workspace.key === "investment" ? (kiteLive ? "LIVE" : "KITE") : workspace.key === "sectors" ? (contentLive ? "FRESH" : "SYNC") : healthIncognito ? "INCOGNITO" : healthCurrent ? "SYNCED" : "STALE";
+        const badge = workspace.key === "investment"
+          ? (kiteLive ? "LIVE" : "KITE")
+          : workspace.key === "sectors"
+            ? "S-2"
+            : workspace.key === "intelligence"
+              ? (contentLive ? "FRESH" : "SYNC")
+              : healthIncognito
+                ? "INCOGNITO"
+                : healthStatus === "live"
+                  ? "SYNCED"
+                  : healthStatus === "cached"
+                    ? "CACHED"
+                    : healthStatus === "partial"
+                      ? "PARTIAL"
+                      : healthStatus === "stale"
+                        ? "STALE"
+                        : "UNAVAILABLE";
         return <button
           ref={(node) => { tabsRef.current[index] = node; }}
           id={`workspace-tab-${workspace.key}`}
@@ -228,8 +244,8 @@ export function DailyKanbanBoard({ workspace }: { workspace: KanbanWorkspace }) 
   const items = kanbanItems[workspace];
   const toggle = (id: string) => setState((current) => ({ ...current, completed: current.completed.includes(id) ? current.completed.filter((item) => item !== id) : [...current.completed, id] }));
   const lanes = [{ key: "today", label: "To do today" }, { key: "monitor", label: "Monitor" }, { key: "done", label: "Completed today" }] as const;
-  return <section className="kanban-board">
-    <div className="kanban-summary"><div><Target size={18}/><span><b>Daily action board</b><small>{items.length} active · {state.completed.length} completed · resets at local midnight</small></span></div><em>{localDateKey()}</em></div>
+  return <section className="kanban-board canonical-action-board">
+    <div className="kanban-summary"><div><Target size={18}/><span><b>Daily action board</b><small>{Math.max(items.length - state.completed.length, 0)} active · {state.completed.length} completed · resets at local midnight</small></span></div><em>{localDateKey()}</em></div>
     <div className="kanban-lanes">{lanes.map((lane) => {
       const laneItems = items.filter((item) => lane.key === "done" ? state.completed.includes(item.id) : item.lane === lane.key && !state.completed.includes(item.id));
       return <article className={`kanban-lane ${lane.key} ${laneItems.length ? "" : "empty"}`} key={lane.key}><header><b>{lane.label}</b><span>{laneItems.length}</span></header><div>{laneItems.map((item) => {

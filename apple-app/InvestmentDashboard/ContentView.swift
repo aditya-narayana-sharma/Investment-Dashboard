@@ -24,7 +24,12 @@ struct ContentView: View {
 
     private var workspace: Binding<DashboardWorkspace> {
         Binding(
-            get: { DashboardWorkspace(rawValue: workspaceRawValue) ?? .investment },
+            get: {
+                if workspaceRawValue == "market-intelligence" {
+                    return .intelligence
+                }
+                return DashboardWorkspace(rawValue: workspaceRawValue) ?? .investment
+            },
             set: { workspaceRawValue = $0.rawValue }
         )
     }

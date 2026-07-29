@@ -10,13 +10,15 @@ const exportRoot = process.env.APPLE_HEALTH_EXPORT_DIR ?? `${process.env.HOME}/L
 export const healthSnapshotPath = process.env.PORTFOLIO_HEALTH_SNAPSHOT_PATH ?? path.join(root, "artifacts/private/health-snapshot.json");
 
 export async function refreshAppleHealth(): Promise<HealthLiveSnapshot> {
-  await execFileAsync("/usr/bin/env", ["PYTHONPYCACHEPREFIX=/tmp/portfolio-health-pycache", "/usr/bin/python3",
-    path.join(root, "scripts/import_apple_health.py"),
-    "--xml", path.join(exportRoot, "export.xml"),
-    "--db", path.join(root, "artifacts/private/apple-health.sqlite3"),
-    "--snapshot", healthSnapshotPath,
-    "--overrides", path.join(root, "artifacts/private/health-overrides.json"),
-  ], { timeout: 30 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 });
+  await execFileAsync("/bin/bash", [path.join(root, "scripts/refresh-apple-health.sh")], {
+    timeout: 30 * 60 * 1000,
+    maxBuffer: 4 * 1024 * 1024,
+    env: {
+      ...process.env,
+      APPLE_HEALTH_EXPORT_DIR: exportRoot,
+      PORTFOLIO_HEALTH_SNAPSHOT_PATH: healthSnapshotPath,
+    },
+  });
   return JSON.parse(await readFile(healthSnapshotPath, "utf8")) as HealthLiveSnapshot;
 }
 

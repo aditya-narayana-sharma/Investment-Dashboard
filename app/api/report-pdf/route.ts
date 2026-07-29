@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   if (preparedPdfs.size > 4) preparedPdfs.delete(preparedPdfs.keys().next().value!);
 
   return Response.json(
-    { downloadUrl: `/api/report-pdf?id=${encodeURIComponent(id)}`, filename, savedToDownloads: true },
+    { downloadUrl: `/api/report-pdf?id=${encodeURIComponent(id)}`, filename, savedToDownloads: false },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

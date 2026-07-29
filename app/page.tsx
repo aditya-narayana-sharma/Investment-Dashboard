@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, RefreshCw, ShieldAlert } from "lucide-react";
+import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, RefreshCw } from "lucide-react";
 import { analystCalls, axisRecommendations, portfolioRiskProfiles, type RiskProfile } from "./portfolio-data";
 import type { HealthLiveSnapshot } from "./health-live-types";
-import { emptySnapshot, type KiteSnapshot } from "./live-types";
+import { emptySnapshot, type KiteAuthStatus, type KiteSnapshot } from "./live-types";
 import { sortDonutHoldings } from "./portfolio-donut";
 import type { ContentDigestSnapshot, MailRecommendation } from "./content-types";
 import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
 import { sectorCompanies } from "./sector-company-data";
-import { emptySectorSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
-import type { MacroBandKey, MacroEventKey, StartupAudit, WorkspaceKey } from "./dashboard/types";
+import { emptyBenchmarkSnapshot, emptySectorSnapshot, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
+import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
 import {
   analysisWindowLabel,
   exposureContext,
@@ -26,13 +26,14 @@ import {
 import { DashboardTabs, HealthIncognitoToggle } from "./dashboard/shared-ui";
 import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
+import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
 
 export default function Home() {
   const [workspace, setWorkspace] = useState<WorkspaceKey>("investment");
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
-  const [view, setView] = useState<"holdings" | "activity">("holdings");
+  const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls">("holdings");
   const [snapshot, setSnapshot] = useState<KiteSnapshot>(emptySnapshot);
   const [content, setContent] = useState<ContentDigestSnapshot>(fallbackContent);
   const [contentError, setContentError] = useState("");
@@ -42,13 +43,14 @@ export default function Home() {
   const [healthError, setHealthError] = useState("");
   const [refreshing, setRefreshing] = useState(true);
   const [sourceFreshness, setSourceFreshness] = useState<SourceFreshness[]>([]);
-  const [startupAudit, setStartupAudit] = useState<StartupAudit | null>(null);
   const [portfolioRisk, setPortfolioRisk] = useState("ICICIBANK");
   const [axisRisk, setAxisRisk] = useState("RSYSTEMS");
   const [healthIncognito, setHealthIncognito] = useState(false);
   const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
+  const [clockMs, setClockMs] = useState(0);
   const [sectorMarket, setSectorMarket] = useState<SectorMarketSnapshot>(() => emptySectorSnapshot("pharma"));
   const [sectorMarketById, setSectorMarketById] = useState<Record<string, SectorMarketSnapshot>>({});
+  const [sectorBenchmarks, setSectorBenchmarks] = useState<SectorBenchmarkSnapshot>(emptyBenchmarkSnapshot);
   const selectedSectorRef = useRef<string[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const { asOf } = snapshot;
@@ -56,6 +58,39 @@ export default function Home() {
   const isPartial = snapshot.status === "partial";
   const isSnapshot = snapshot.status === "snapshot";
   const hasPortfolio = isLive || isPartial || isSnapshot;
+  // Prefer explicit authStatus from the API; never treat retained/cached holdings as a live session.
+  const kiteAuthStatus: KiteAuthStatus = snapshot.authStatus
+    ?? (snapshot.status === "live"
+      ? "authenticated"
+      : snapshot.status === "partial"
+        ? "partial"
+        : snapshot.status === "auth_required"
+          ? "unauthenticated"
+          : snapshot.status === "snapshot"
+            ? "unknown"
+            : "unavailable");
+  const tokenExpiresAtMs = snapshot.tokenExpiresAt ? Date.parse(snapshot.tokenExpiresAt) : Number.NaN;
+  const hoursUntilTokenExpiry = Number.isFinite(tokenExpiresAtMs) && clockMs > 0
+    ? (tokenExpiresAtMs - clockMs) / (60 * 60 * 1000)
+    : Number.NaN;
+  const tokenExpiryLabel = Number.isFinite(tokenExpiresAtMs)
+    ? new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(new Date(tokenExpiresAtMs))
+    : undefined;
+  const nearTokenExpiry = Number.isFinite(hoursUntilTokenExpiry) && hoursUntilTokenExpiry >= 0 && hoursUntilTokenExpiry <= 2;
+  // Badge tracks session/token truth from authStatus — not mere presence of cached holdings.
+  // Cached/snapshot rows must never show "Kite authenticated", even if get_profile still works.
+  const kiteAuthControl =
+    isSnapshot || kiteAuthStatus === "unknown"
+      ? (snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired"
+          ? "authenticate"
+          : "cached")
+      : kiteAuthStatus === "authenticated" && isLive
+        ? "authenticated"
+        : kiteAuthStatus === "partial" || (kiteAuthStatus === "authenticated" && isPartial)
+          ? "partial"
+          : snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired"
+            ? "authenticate"
+            : "unavailable";
   const healthCurrent = healthSnapshot.status === "live" && healthSnapshot.dataDate >= latestCompletedHealthDateKey();
   const healthRequiredDate = latestCompletedHealthDateKey();
   const healthMissingDates = useMemo(() => missingHealthDateKeys(healthSnapshot.dataDate, healthRequiredDate), [healthSnapshot.dataDate, healthRequiredDate]);
@@ -103,7 +138,7 @@ export default function Home() {
       );
       const total = Object.values(rawScores).reduce((sum, score) => sum + score, 0) / exposureFactors.length;
       return {
-        symbol: holding.symbol.replace("ICICIBANK", "ICICI").replace("BHARTIARTL", "AIRTEL").replace("JSWENERGY", "JSW"),
+        symbol: holding.symbol.replace("ICICIBANK", "ICICI").replace("BHARTIARTL", "AIRTEL").replace("JSWENERGY", "JSW").replace("MAXHEALTHCARE", "MAX"),
         fullSymbol: holding.symbol,
         total: Number(total.toFixed(1)),
         rawScores,
@@ -114,14 +149,7 @@ export default function Home() {
   }, [snapshot.holdings]);
 
   const applyHealthSnapshot = useCallback((data: HealthLiveSnapshot) => {
-    const current = data.dataDate >= latestCompletedHealthDateKey();
-    setHealthSnapshot({
-      ...data,
-      status: current ? "live" : "stale",
-      message: current
-        ? `Latest completed-day HealthKit data is available through ${data.dataDate}.`
-        : `HealthKit data currently stops at ${data.dataDate}; latest completed day is ${latestCompletedHealthDateKey()}.`,
-    });
+    setHealthSnapshot(data);
     setHealthError("");
   }, []);
 
@@ -136,7 +164,21 @@ export default function Home() {
         }
         const data = await response.json() as KiteSnapshot;
         if (!response.ok) throw new Error(data.message || `Kite refresh returned ${response.status}`);
-        setSnapshot(data);
+        // Harden older/partial payloads that omit authStatus so the UI cannot
+        // keep claiming Authenticated from a bare `status: "live"` cache.
+        setSnapshot({
+          ...data,
+          authStatus: data.authStatus
+            ?? (data.status === "live"
+              ? "authenticated"
+              : data.status === "partial"
+                ? "partial"
+                : data.status === "auth_required"
+                  ? "unauthenticated"
+                  : data.status === "snapshot"
+                    ? "unknown"
+                    : "unavailable"),
+        });
         return;
       } catch (error) {
         lastError = error;
@@ -144,8 +186,15 @@ export default function Home() {
       }
     }
 
+    // Downgrade live/partial → snapshot + unknown auth so a failed refresh cannot
+    // leave the "Kite authenticated" badge stuck on after the session dies.
     setSnapshot((current) => current.status === "live" || current.status === "partial" || current.status === "snapshot"
-      ? { ...current, message: `${current.message} Latest refresh failed; retaining the last validated values.` }
+      ? {
+          ...current,
+          status: "snapshot",
+          authStatus: "unknown",
+          message: `${current.message} Latest refresh failed; retaining the last validated values.`,
+        }
       : { ...emptySnapshot, message: lastError instanceof Error ? lastError.message : "Could not load live Kite data." });
   }, []);
 
@@ -221,9 +270,14 @@ export default function Home() {
     if (refreshInFlightRef.current) return refreshInFlightRef.current;
     const run = (async () => {
       setRefreshing(true);
+      // Surface Kite quickly; the bundled refresh can wait on Mail/content.
+      const kiteEarly = loadKite();
       try {
         try {
-          const response = await fetch(`/api/dashboard/refresh?refresh=${Date.now()}`, { cache: "no-store" });
+          const response = await fetch(`/api/dashboard/refresh?refresh=${Date.now()}`, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(90_000),
+          });
           const result = await response.json() as DashboardRefreshResult;
           if (!response.ok) throw new Error(`Complete refresh returned ${response.status}`);
           setSourceFreshness(result.sources);
@@ -231,10 +285,12 @@ export default function Home() {
           if (result.content) { setContent(result.content); setContentError(""); }
           if (result.earnings) { setEarningsSnapshot(result.earnings); setEarningsError(""); }
           if (result.health) applyHealthSnapshot(result.health);
+          if (result.benchmarks) setSectorBenchmarks(result.benchmarks);
         } catch (error) {
           setContentError(error instanceof Error ? error.message : "Complete refresh failed; source adapters are retrying.");
-          await Promise.allSettled([loadKite(), loadContent(), loadEarnings(), loadHealth()]);
+          await Promise.allSettled([kiteEarly, loadContent(), loadEarnings(), loadHealth()]);
         }
+        await kiteEarly;
         const selectedIds = selectedSectorRef.current;
         const primaryId = selectedIds[selectedIds.length - 1];
         if (primaryId) await loadSectorMarket(primaryId);
@@ -277,9 +333,18 @@ export default function Home() {
   }, [loadSectorMarket]);
 
   useEffect(() => {
+    const tick = () => setClockMs(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     const fromUrl = () => {
       const value = new URL(window.location.href).searchParams.get("view");
-      const next = workspaces.some((item) => item.key === value) ? value as WorkspaceKey : "investment";
+      const next = value === "market-intelligence"
+        ? "intelligence"
+        : workspaces.some((item) => item.key === value) ? value as WorkspaceKey : "investment";
       setWorkspace(next);
       if (value !== next) {
         const url = new URL(window.location.href);
@@ -323,30 +388,6 @@ export default function Home() {
     };
   }, [refreshAll]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch("/_startup/audit", { cache: "no-store" });
-        const data = await response.json() as StartupAudit;
-        if (!cancelled) setStartupAudit(data);
-      } catch {
-        if (!cancelled) {
-          setStartupAudit({
-            status: "unavailable",
-            failures: -1,
-            message: "The startup refresh audit could not be loaded.",
-          });
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const showStartupAuditBanner = Boolean(
-    startupAudit && (startupAudit.status === "failed" || (typeof startupAudit.failures === "number" && startupAudit.failures > 0)),
-  );
-
   return (
     <main className="dashboard-app">
       <a className="skip-link" href="#dashboard-workspace-panel">Skip to workspace content</a>
@@ -360,26 +401,38 @@ export default function Home() {
           <div><Activity size={16}/><span>Kite snapshot</span><b className={snapshot.status}>{isLive ? "Live" : isPartial ? "Partial" : isSnapshot ? "Snapshot" : snapshot.status === "auth_required" ? "Authenticate" : "Unavailable"}</b></div>
           <small>As of {asOf}</small>
           <HealthIncognitoToggle active={healthIncognito} onChange={setHealthIncognito}/>
-          <a href="/report?export=1"><FileText size={15}/> Refresh &amp; Export PDF</a>
+          <a href="/report?export=1"><FileText size={15}/> Export Report</a>
         </div>
       </header>
 
       <section className={`live-feed-banner ${snapshot.status}`}>
         <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite snapshot" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{snapshot.message}</small></span></div>
         <div className="live-feed-actions">
-          {isLive
-            ? <button className="kite-auth-control authenticated" type="button" disabled title="Kite is already authenticated"><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
-            : snapshot.authUrl
-              ? <a className="kite-auth-control" href={snapshot.authUrl} target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>
-              : <button className="kite-auth-control unavailable" type="button" disabled title="The Kite login link is not available yet"><LogIn size={15}/><span>Kite login unavailable</span></button>}
+          {kiteAuthControl === "authenticated"
+            ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
+            : kiteAuthControl === "partial"
+              ? <>
+                  <button className="kite-auth-control partial" type="button" disabled title="Kite session is valid but some portfolio sections failed to refresh"><Activity size={15}/><span>Kite partial</span></button>
+                  {(snapshot.reauthSuggested || snapshot.authUrl) && <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title="Clear the daily Kite token and open a fresh Zerodha login"><LogIn size={15}/><span>Re-auth Kite</span><ExternalLink size={13}/></a>}
+                </>
+              : kiteAuthControl === "authenticate" && (snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired")
+                ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
+                : kiteAuthControl === "cached"
+                  ? <>
+                      <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
+                      <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>
+                    </>
+                  : snapshot.authUrl
+                    ? <a className="kite-auth-control" href={snapshot.authUrl} target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>
+                    : <a className="kite-auth-control" href="/api/kite/login?force=1&redirect=1" target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>}
+          {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
           <button onClick={()=>void refreshAll()} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
           <em>All sources · 5 min</em>
         </div>
       </section>
-      {showStartupAuditBanner && <section className="startup-audit-banner" role="status"><ShieldAlert size={17}/><span><b>Startup refresh audit failed</b><small>{startupAudit?.message ?? "One or more startup sources failed validation."}</small>{Array.isArray(startupAudit?.failedSources) && startupAudit.failedSources.length > 0 && <small className="startup-audit-failures">{startupAudit.failedSources.join(" · ")}</small>}{(startupAudit?.failedSources ?? []).some((item) => /kite/i.test(item)) && snapshot.authUrl && <a className="startup-audit-auth" href={snapshot.authUrl} target="_blank" rel="noreferrer">Authenticate Kite to clear portfolio and sector failures <ExternalLink size={12}/></a>}</span></section>}
       {sourceFreshness.length>0&&<section className="source-freshness-strip" aria-label="Complete dashboard source freshness">{sourceFreshness.map((source)=><div key={source.source} title={source.message}><i className={source.state}/><span><b>{source.source}</b><small>{source.state.replaceAll("_"," ")} · {source.period}</small></span></div>)}</section>}
 
-      <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthCurrent={healthCurrent}/>
+      <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status}/>
 
       <section id="dashboard-workspace-panel" className="workspace-panel" role="tabpanel" aria-labelledby={`workspace-tab-${workspace}`}>
 
@@ -412,13 +465,20 @@ export default function Home() {
 
       {workspace === "sectors" && <SectorsWorkspace
         content={content}
-        contentError={contentError}
-        mailWindow={mailWindow}
         selectedSectorIds={selectedSectorIds}
         onToggleSector={toggleSector}
         sectorMarket={sectorMarket}
         sectorMarketById={sectorMarketById}
         holdings={snapshot.holdings}
+        earningsSnapshot={earningsSnapshot}
+        earningsError={earningsError}
+        benchmarks={sectorBenchmarks}
+      />}
+
+      {workspace === "intelligence" && <IntelligenceWorkspace
+        content={content}
+        contentError={contentError}
+        mailWindow={mailWindow}
         earningsSnapshot={earningsSnapshot}
         earningsError={earningsError}
       />}
@@ -431,11 +491,13 @@ export default function Home() {
         healthError={healthError}
         healthRequiredDate={healthRequiredDate}
         healthMissingDates={healthMissingDates}
+        healthNote={content.healthNote}
+        healthNoteSource={content.sources.healthNote}
       />}
 
       </section>
 
-      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice; no orders were placed.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate}${healthCurrent ? " (latest completed day)" : " (stale)"}.`}</p></footer>
+      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice; no orders were placed.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
     </main>
   );
 }

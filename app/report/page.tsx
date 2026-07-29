@@ -45,6 +45,61 @@ const signalMark: Record<ImpactSignal, { mark: string; label: string; tone: stri
 
 type PrintableSlice = { name: string; weight: number; color: string };
 
+async function choosePdfSaveHandle(filename: string) {
+  const savePicker = (window as Window & {
+    showSaveFilePicker?: (options: {
+      suggestedName?: string;
+      types?: Array<{ description: string; accept: Record<string, string[]> }>;
+    }) => Promise<FileSystemFileHandle>;
+  }).showSaveFilePicker;
+  if (typeof savePicker !== "function") return null;
+  try {
+    return await savePicker({
+      suggestedName: filename,
+      types: [{ description: "PDF document", accept: { "application/pdf": [".pdf"] } }],
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return "cancelled" as const;
+    return null;
+  }
+}
+
+async function promptPdfDownload(downloadUrl: string, filename: string) {
+  const chosen = await choosePdfSaveHandle(filename);
+  if (chosen === "cancelled") return "cancelled" as const;
+
+  if (chosen) {
+    const response = await fetch(downloadUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not fetch the prepared PDF for download.");
+    const blob = await response.blob();
+    const writable = await chosen.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return "picker" as const;
+  }
+
+  // Fallbacks force a download (not a PDF preview tab) via attachment / download attr.
+  const response = await fetch(downloadUrl, { cache: "no-store" });
+  if (!response.ok) {
+    window.location.assign(downloadUrl);
+    return "navigate" as const;
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
+  return "anchor" as const;
+}
+
 function polarPoint(radius: number, angle: number) {
   const radians = angle * Math.PI / 180;
   return { x: 180 + radius * Math.cos(radians), y: 180 + radius * Math.sin(radians) };
@@ -82,7 +137,8 @@ function PrintNestedDonut({ holdings, marketCap, sectors, subSectors, value, pnl
   const marketSegments = ringSegments(marketCap);
   const sectorSegments = ringSegments(sectors);
   const subSectorSegments = ringSegments(subSectors);
-  const holdingSegments = ringSegments(donutHoldings.map((holding, index) => ({ ...holding, name: holding.symbol, color: holding.pnl >= 0 ? ["#0f704f", "#178c61", "#23a472", "#39b785", "#63c99e"][index % 5] : "#bd3d43" })));
+  const gainShades = ["#0f704f", "#178c61", "#23a472", "#39b785", "#63c99e", "#4db88a", "#2d9b6c"];
+  const holdingSegments = ringSegments(donutHoldings.map((holding, index) => ({ ...holding, name: holding.symbol, color: holding.pnl >= 0 ? gainShades[index % gainShades.length] : "#bd3d43" })));
   const signed = (amount: number) => `${amount >= 0 ? "+" : ""}${amount.toFixed(1)}%`;
 
   return <div className={styles.printDonutWrap}>
@@ -103,7 +159,7 @@ export default function Report() {
   const [content, setContent] = useState<ContentDigestSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
-  const [preparedDownload, setPreparedDownload] = useState<{ filename: string; savedToDownloads: boolean; url: string } | null>(null);
+  const [preparedDownload, setPreparedDownload] = useState<{ filename: string; url: string } | null>(null);
   const autoExported = useRef(false);
 
   const refreshLatest = useCallback(async (downloadAfterRefresh = false) => {
@@ -123,10 +179,22 @@ export default function Report() {
       const mailReady = latestContent.sources.axisResearch.status === "live" && latestContent.sources.newsletters.status === "live";
       if (!mailReady) throw new Error("Current Axis Research and Newsletters mail must refresh before the report can be generated.");
       const reportSources = new Map(complete.sources.map((source) => [source.source, source.state]));
-      const reportSourcesReady = reportSources.get("Kite") === "live"
-        && reportSources.get("Apple Calendar") === "live"
-        && reportSources.get("Earnings") === "verified";
-      if (!reportSourcesReady) throw new Error("Kite, Calendar and Earnings must pass their freshness contracts before the investment PDF can be labelled latest.");
+      const kiteFresh = reportSources.get("Kite");
+      const calendarFresh = reportSources.get("Apple Calendar");
+      const earningsFresh = reportSources.get("Earnings");
+      const failedFreshness = [
+        kiteFresh === "live" ? null : `Kite=${kiteFresh ?? "unavailable"}`,
+        calendarFresh === "live" ? null : `Calendar=${calendarFresh ?? "unavailable"}`,
+        earningsFresh === "verified" ? null : `Earnings=${earningsFresh ?? "unavailable"}`,
+      ].filter((item): item is string => Boolean(item));
+      if (failedFreshness.length) {
+        const authHint = latest.status === "auth_required" || latest.authStatus === "unauthenticated" || latest.authStatus === "expired"
+          ? " Authenticate Kite, then retry."
+          : latest.status === "partial"
+            ? ` Kite session is active but incomplete${latest.unavailableSections?.length ? ` (${latest.unavailableSections.join(", ")} unavailable)` : ""}; a full live snapshot is required.`
+            : "";
+        throw new Error(`Kite, Calendar and Earnings must pass their freshness contracts before the investment PDF can be labelled latest (${failedFreshness.join(", ")}).${authHint}`);
+      }
       if (downloadAfterRefresh && latest.status !== "live") throw new Error(latest.message || "A live Kite session is required before PDF export.");
       if (downloadAfterRefresh && sectorResponses.some((sectorResponse) => !sectorResponse.ok)) throw new Error("At least one sector universe failed to refresh. The PDF was not exported with mixed-freshness data.");
       if (downloadAfterRefresh) {
@@ -188,9 +256,13 @@ export default function Report() {
         const prepared = await upload.json() as { downloadUrl?: string; error?: string; filename?: string; savedToDownloads?: boolean };
         if (!upload.ok) throw new Error(prepared.error || `Could not prepare the PDF download (${upload.status}).`);
         if (!prepared.downloadUrl) throw new Error("The PDF download link was not returned.");
-        const savedToDownloads = prepared.savedToDownloads === true;
-        flushSync(() => setPreparedDownload({ filename: prepared.filename || filename, savedToDownloads, url: prepared.downloadUrl! }));
-        if (!savedToDownloads) window.location.assign(prepared.downloadUrl);
+        const downloadName = prepared.filename || filename;
+        flushSync(() => setPreparedDownload({ filename: downloadName, url: prepared.downloadUrl! }));
+        const downloadResult = await promptPdfDownload(prepared.downloadUrl, downloadName);
+        if (downloadResult === "cancelled") {
+          // Keep the prepared download link so the user can retry the save dialog.
+          return;
+        }
       }
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Could not refresh the latest Kite session.");
@@ -211,19 +283,64 @@ export default function Report() {
 
   const investmentMailReady = content?.sources.axisResearch.status === "live" && content?.sources.newsletters.status === "live";
   if (!snapshot || snapshot.status !== "live" || !investmentMailReady) {
-    const authUrl = snapshot?.authUrl;
+    const authUrl = snapshot?.authUrl || (snapshot?.reauthSuggested || snapshot?.status === "auth_required" || snapshot?.authStatus === "unauthenticated" || snapshot?.authStatus === "expired"
+      ? "/api/kite/login?force=1&redirect=1"
+      : undefined);
+    const authStatus = snapshot?.authStatus;
+    const needsAuth = Boolean(
+      snapshot?.status === "auth_required"
+      || authStatus === "unauthenticated"
+      || authStatus === "expired"
+      || (snapshot?.authUrl && snapshot?.status !== "partial" && snapshot?.status !== "live"),
+    );
+    const isPartialSession = snapshot?.status === "partial" || authStatus === "partial";
+    const navLabel = refreshing
+      ? "Latest Kite session required before PDF generation"
+      : needsAuth
+        ? "Kite authentication required before PDF generation"
+        : isPartialSession
+          ? "Complete live Kite snapshot required before PDF generation"
+          : snapshot && snapshot.status === "live" && !investmentMailReady
+            ? "Current Mail research required before PDF generation"
+            : "Latest Kite session required before PDF generation";
+    const title = refreshing
+      ? "Refreshing Kite and current Mail research"
+      : needsAuth
+        ? authStatus === "expired"
+          ? "Kite session expired — re-authenticate before generating the PDF"
+          : "Authenticate Kite before generating the PDF"
+        : isPartialSession
+          ? "Kite is signed in, but the live snapshot is incomplete"
+          : snapshot && snapshot.status === "live" && !investmentMailReady
+            ? "Refresh current Mail research"
+            : "Fresh live Kite data required before PDF generation";
+    const detail = error
+      || (needsAuth
+        ? (snapshot?.message
+          || "Zerodha Kite access tokens expire once per day around 06:00 IST. Complete login, return here, then press Retry.")
+        : isPartialSession
+          ? (snapshot?.message || `Holdings are available, but ${snapshot?.unavailableSections?.join(", ") || "secondary Kite sections"} must succeed for a full live snapshot.`)
+          : snapshot?.message
+            || "The printable report remains locked until fresh live holdings and the exact iCloud Axis Research and Newsletters mailboxes are refreshed.");
+    const retryLabel = refreshing
+      ? "Refreshing"
+      : needsAuth
+        ? "Retry after login"
+        : isPartialSession
+          ? "Retry full Kite refresh"
+          : "Retry latest session";
     return <main className={styles.report}>
-      <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span>Latest Kite session required before PDF generation</span></nav>
+      <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span>{navLabel}</span></nav>
       <section className={`${styles.page} ${styles.reportGate}`}>
-        <div className={styles.gateIcon}>{refreshing ? <RefreshCw className={styles.spin} size={30}/> : <LogIn size={30}/>}</div>
+        <div className={styles.gateIcon}>{refreshing ? <RefreshCw className={styles.spin} size={30}/> : needsAuth ? <LogIn size={30}/> : <RefreshCw size={30}/>}</div>
         <p className={styles.gateEyebrow}>LIVE REPORT CONTROL</p>
-        <h1>{refreshing ? "Refreshing Kite and current Mail research" : snapshot?.status !== "live" ? "Authenticate Kite before generating the PDF" : "Refresh current Mail research"}</h1>
-        <p>{error || snapshot?.message || "The printable report remains locked until fresh live holdings and the exact iCloud Axis Research and Newsletters mailboxes are refreshed."}</p>
+        <h1>{title}</h1>
+        <p>{detail}</p>
         <div className={styles.gateActions}>
-          {authUrl && <a href={authUrl} target="_blank" rel="noreferrer"><LogIn size={16}/> Authenticate Kite <ExternalLink size={13}/></a>}
-          <button type="button" onClick={() => void refreshLatest()} disabled={refreshing}><RefreshCw className={refreshing ? styles.spin : ""} size={16}/>{refreshing ? "Refreshing" : "Retry latest session"}</button>
+          {authUrl && <a href={authUrl} target="_blank" rel="noreferrer"><LogIn size={16}/> {needsAuth ? (authStatus === "expired" ? "Re-authenticate Kite" : "Authenticate Kite") : "Re-auth Kite"} <ExternalLink size={13}/></a>}
+          <button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><RefreshCw className={refreshing ? styles.spin : ""} size={16}/>{retryLabel}</button>
         </div>
-        <small>Stale portfolio or Mail-backed investment pages are intentionally not rendered or printable.</small>
+        <small>Zerodha requires a fresh Kite Connect login each trading day (~06:00 IST expiry). That is expected broker behavior, not a dashboard bug. After overnight expiry: Authenticate/Re-auth → complete Zerodha login → Retry. Also use Re-auth when margins keeps failing on a partial refresh.</small>
       </section>
     </main>;
   }
@@ -254,9 +371,9 @@ export default function Report() {
   };
 
   return <main className={styles.report}>
-    <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span className={styles.liveStamp}><CheckCircle2 size={15}/> Live Kite · {asOf}</span><button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><Download size={15}/>{refreshing ? "Refreshing complete dashboard & generating PDF" : "Refresh & Export PDF"}</button></nav>
+    <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span className={styles.liveStamp}><CheckCircle2 size={15}/> Live Kite · {asOf}</span><button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><Download size={15}/>{refreshing ? "Exporting report" : "Export Report"}</button></nav>
     {error && <p className={`${styles.noPrint} ${styles.exportError}`} role="alert">{error}</p>}
-    {preparedDownload && <p className={`${styles.noPrint} ${styles.downloadReady}`}><span>{preparedDownload.savedToDownloads ? `Saved to Downloads as ${preparedDownload.filename}` : "Latest-session PDF prepared for browser download."}</span><a href={preparedDownload.url} download={preparedDownload.filename}><Download size={15}/> {preparedDownload.savedToDownloads ? "Download again" : "Download prepared PDF"}</a></p>}
+    {preparedDownload && <p className={`${styles.noPrint} ${styles.downloadReady}`}><span>Report PDF ready as {preparedDownload.filename}. Choose where to save it if the download dialog is still open.</span><a href={preparedDownload.url} download={preparedDownload.filename} onClick={(event) => { event.preventDefault(); void promptPdfDownload(preparedDownload.url, preparedDownload.filename); }}><Download size={15}/> Download prepared PDF</a></p>}
 
     <div className={styles.pdfPages} data-pdf-pages>
 
