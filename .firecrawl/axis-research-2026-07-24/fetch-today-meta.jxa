@@ -1,0 +1,43 @@
+const Mail = Application("Mail");
+function exactAccount(name) {
+  const account = Mail.accounts().find((c) => String(c.name()) === name);
+  if (!account) throw new Error('Mail account missing: ' + name);
+  return account;
+}
+function exactMailbox(account, name) {
+  const mailbox = account.mailboxes().find((c) => String(c.name()) === name);
+  if (!mailbox) throw new Error('Mailbox missing: ' + name);
+  return mailbox;
+}
+const account = exactAccount("iCloud");
+const mailbox = exactMailbox(account, "Axis Research");
+const cutoff = new Date("2026-07-24T00:00:00+05:30");
+const end = new Date("2026-07-25T00:00:00+05:30");
+const recent = mailbox.messages.whose({ _and: [
+  { dateReceived: { _greaterThan: cutoff } },
+  { dateReceived: { _lessThan: end } },
+] })();
+// Also grab latest 5 overall for as-of evidence
+const allRecentCutoff = new Date("2026-07-22T00:00:00+05:30");
+const nearby = mailbox.messages.whose({ dateReceived: { _greaterThan: allRecentCutoff } })();
+const nearbyMeta = nearby.map((message) => {
+  const p = message.properties();
+  return {
+    subject: String(p.subject || ""),
+    sender: String(p.sender || ""),
+    received: p.dateReceived.toISOString(),
+  };
+}).sort((a,b) => new Date(b.received) - new Date(a.received)).slice(0, 10);
+JSON.stringify({
+  checkedAt: new Date().toISOString(),
+  todayCount: recent.length,
+  todayMessages: recent.map((message) => {
+    const p = message.properties();
+    return {
+      subject: String(p.subject || ""),
+      sender: String(p.sender || ""),
+      received: p.dateReceived.toISOString(),
+    };
+  }),
+  latestNearby: nearbyMeta,
+});

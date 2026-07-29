@@ -1,0 +1,48 @@
+const Mail = Application("Mail");
+function exactAccount(name) {
+  const account = Mail.accounts().find((candidate) => String(candidate.name()) === name);
+  if (!account) throw new Error('Mail account "' + name + '" was not found');
+  return account;
+}
+function exactMailbox(account, name) {
+  const mailbox = account.mailboxes().find((candidate) => String(candidate.name()) === name);
+  if (!mailbox) throw new Error('Mailbox "' + name + '" was not found under iCloud');
+  return mailbox;
+}
+const account = exactAccount("iCloud");
+const mailbox = exactMailbox(account, "Axis Research");
+// Today Asia/Kolkata: 2026-07-24
+const cutoff = new Date("2026-07-24T00:00:00+05:30");
+const end = new Date("2026-07-25T00:00:00+05:30");
+const recent = mailbox.messages.whose({ _and: [
+  { dateReceived: { _greaterThan: cutoff } },
+  { dateReceived: { _lessThan: end } },
+] })();
+const totalCount = recent.length;
+const messages = recent.map((message) => {
+  const properties = message.properties();
+  let source = "";
+  try {
+    source = String(message.source() || "").slice(0, 250000);
+  } catch (e) {
+    source = "SOURCE_ERROR: " + String(e);
+  }
+  return {
+    subject: String(properties.subject || "Untitled message"),
+    sender: String(properties.sender || "Unknown sender"),
+    received: properties.dateReceived.toISOString(),
+    id: String(properties.messageId || properties.id || ""),
+    content: String(properties.content || "").slice(0, 50000),
+    source: source,
+  };
+}).sort((left, right) => new Date(right.received) - new Date(left.received));
+JSON.stringify({ totalCount, messages: messages.map(m => ({
+  subject: m.subject,
+  sender: m.sender,
+  received: m.received,
+  id: m.id,
+  contentLen: m.content.length,
+  sourceLen: m.source.length,
+  content: m.content,
+  source: m.source,
+})) });

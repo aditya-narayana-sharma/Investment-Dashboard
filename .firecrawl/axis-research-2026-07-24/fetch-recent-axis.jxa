@@ -1,0 +1,34 @@
+const Mail = Application("Mail");
+function exactAccount(name) {
+  const account = Mail.accounts().find((c) => String(c.name()) === name);
+  if (!account) throw new Error('Mail account "' + name + '" was not found');
+  return account;
+}
+function exactMailbox(account, name) {
+  const mailbox = account.mailboxes().find((c) => String(c.name()) === name);
+  if (!mailbox) throw new Error('Mailbox "' + name + '" was not found under iCloud');
+  return mailbox;
+}
+const account = exactAccount("iCloud");
+const mailbox = exactMailbox(account, "Axis Research");
+const cutoff = new Date("2026-07-20T00:00:00+05:30");
+const end = new Date("2026-07-26T00:00:00+05:30");
+const recent = mailbox.messages.whose({ _and: [
+  { dateReceived: { _greaterThan: cutoff } },
+  { dateReceived: { _lessThan: end } },
+] })();
+const messages = recent.map((message) => {
+  const p = message.properties();
+  return {
+    subject: String(p.subject || "Untitled"),
+    sender: String(p.sender || "Unknown"),
+    received: p.dateReceived.toISOString(),
+    contentPreview: String(p.content || "").slice(0, 200),
+  };
+}).sort((a,b) => new Date(b.received) - new Date(a.received));
+JSON.stringify({
+  mailboxName: String(mailbox.name()),
+  accountName: String(account.name()),
+  totalInWindow: recent.length,
+  messages,
+});

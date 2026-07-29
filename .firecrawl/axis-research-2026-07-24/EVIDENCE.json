@@ -1,0 +1,80 @@
+{
+  "question": "Did you go through ALL Axis research Emails from today, AND READ ALL Read Report LINKS through EACH MAIL?",
+  "machineNowIST": "2026-07-24 02:04:59 UTC+05:30",
+  "calendarDay": "2026-07-24",
+  "timezone": "Asia/Kolkata",
+  "mailbox": "iCloud \u2192 Axis Research",
+  "method": [
+    "Mail.app JXA via osascript (exact mailbox iCloud/Axis Research)",
+    "dateReceived filter [2026-07-24T00:00:00+05:30, 2026-07-25T00:00:00+05:30)",
+    "Mail check for new mail + second query",
+    "Jul 20\u201325 nearby listing for as-of context only"
+  ],
+  "todayMailCount": 0,
+  "todayMessages": [],
+  "readReportLinksFound": [],
+  "readReportLinksOpened": [],
+  "emailsWithZeroReadReportLinks": [],
+  "failures": [],
+  "completeForToday": true,
+  "completeReason": "Mailbox query returned 0 messages for calendar day 2026-07-24 IST after Mail sync; therefore 0 Read Report links existed to open.",
+  "nearbyContextNotInScope": [
+    {
+      "receivedIST": "2026-07-23 14:29:58 IST",
+      "subject": "RBI State of Economy report flags resilience amid global risks",
+      "sender": "Moneycontrol Pro Panorama <alerts@mailer.moneycontrol.com>",
+      "note": "Present in mailbox but NOT calendar-day 2026-07-24; excluded from today scope."
+    },
+    {
+      "receivedIST": "2026-07-23 11:22:40 IST",
+      "subject": "Join Us Today: Live Webinar on Options Trading",
+      "sender": "Axis Direct <Services@axisdirect.in>",
+      "note": "Present in mailbox but NOT calendar-day 2026-07-24; excluded from today scope."
+    },
+    {
+      "receivedIST": "2026-07-23 09:05:49 IST",
+      "subject": "Daily Morning Note & Trade Setup for the Day - July 23, 2026",
+      "sender": "Axis Direct <Services@axisdirect.in>",
+      "note": "Present in mailbox but NOT calendar-day 2026-07-24; excluded from today scope."
+    },
+    {
+      "receivedIST": "2026-07-23 08:43:11 IST",
+      "subject": "Daily Technical Outlook",
+      "sender": "Axis Direct <Services@axisdirect.in>",
+      "note": "Present in mailbox but NOT calendar-day 2026-07-24; excluded from today scope."
+    }
+  ],
+  "dashboard": {
+    "status": "live",
+    "asOf": "24 Jul 2026, 2:04 am",
+    "axisResearchSource": {
+      "status": "live",
+      "count": 17,
+      "displayedCount": 8
+    },
+    "axisDisplayedCount": 8,
+    "latestDisplayedTitles": [
+      {
+        "time": "23 Jul, 9:05 am",
+        "title": "Daily Morning Note & Trade Setup for the Day - July 23, 2026"
+      },
+      {
+        "time": "23 Jul, 8:43 am",
+        "title": "Daily Technical Outlook"
+      },
+      {
+        "time": "22 Jul, 1:26 pm",
+        "title": "Q1FY27 Result Updates - July 22, 2026"
+      },
+      {
+        "time": "22 Jul, 9:24 am",
+        "title": "Axis Alpha - Hit Stop Loss - Bandhan Bank Ltd"
+      },
+      {
+        "time": "22 Jul, 8:57 am",
+        "title": "Daily Morning Note & Trade Setup for the Day - July 22, 2026"
+      }
+    ],
+    "note": "Digest uses a multi-day analysis window; latest items remain Jul 23 because no Jul 24 Axis Research mail exists yet."
+  }
+}
