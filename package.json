@@ -23,10 +23,11 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "prestart": "./scripts/ensure-kite-server.sh && ./scripts/ensure-pdf-download-server.sh && ./scripts/ensure-content-digest-server.sh",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start --hostname 127.0.0.1",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/freshness-and-isolation.test.mjs tests/health-date-policy.test.mjs && python3 -m unittest discover -s tests -p 'test_health_import.py'",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/calendar-earnings-reconciliation.test.mjs tests/freshness-and-isolation.test.mjs tests/health-date-policy.test.mjs tests/phase3-content-automation.test.mjs && python3 -m unittest discover -s tests -p 'test_health_import.py'",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "flask:service": "./scripts/start-flask-app.sh"
+    "flask:service": "./scripts/start-flask-app.sh",
+    "content:refresh": "./scripts/refresh-content-digest.sh"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

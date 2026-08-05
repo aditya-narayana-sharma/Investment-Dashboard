@@ -1,311 +1,287 @@
-<div align="center">
+# Investment Dashboard
 
-# 📊 Investment Dashboard
+## Startup data refresh
 
-**A private, local-first portfolio intelligence platform for Indian equities**
+Every dashboard service start runs `scripts/refresh-dashboard-data.sh` after the Flask gateway is ready. The audit refreshes or verifies Kite, Mail and Podcasts, earnings, HealthKit operational-date coverage, and every configured sector. Health rolls to day D at 8:00 PM IST, remains anchored to that date through 1:59 AM, and uses D-1 from 2:00 AM through 7:59 PM. Results are written to `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`; failures remain visible in the compact per-source freshness strip and affected sections as stale, cached, or unavailable data instead of being presented as live. The dashboard intentionally does not show a separate persistent startup-audit failure banner.
 
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20iOS-black?style=flat-square&logo=apple)
-![Node](https://img.shields.io/badge/node-%3E%3D22.13.0-339933?style=flat-square&logo=node.js&logoColor=white)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Swift](https://img.shields.io/badge/iOS-SwiftUI-FA7343?style=flat-square&logo=swift&logoColor=white)
-![Privacy](https://img.shields.io/badge/data-localhost%20only-success?style=flat-square&logo=lock)
+Persistent source and freshness rules for future maintenance are in `AGENTS.md`.
 
-</div>
+A local dark-theme portfolio dashboard running on
+[vinext](https://github.com/cloudflare/vinext). It combines live Zerodha Kite
+portfolio data with the latest Axis Research brief, newsletter digest, analyst
+calls, macro scenarios, and local podcast notes.
 
-Investment Dashboard combines a live 🔴 **Zerodha Kite** portfolio feed with
-📰 Axis Research briefs, a newsletter digest, 🏭 sector/earnings analytics,
-🌍 macro scenarios, and a private 🩺 health & wellness workspace — served
-from a Mac and mirrored to a native iPhone app over Tailscale.
+## Prerequisites
 
-> 🔒 **Nothing leaves your machine.** Kite credentials, Mail, Podcasts, and
-> Health data are all read and stored server-side on `localhost`.
+- Node.js `>=22.13.0`
+- Python 3.10 or newer for the private Flask app gateway
 
-<p align="center">
-  <img src="artifacts/design-qa/dashboard-desktop.png" width="70%" alt="Investment Dashboard — desktop view" />
-</p>
-<p align="center">
-  <img src="artifacts/design-qa/dashboard-mobile.png" width="24%" alt="Investment Dashboard — mobile view" />
-</p>
-
----
-
-## ✨ What it does
-
-| | |
-|---|---|
-| 📈 **Live Kite portfolio** | Holdings, positions, orders, GTTs, and margins pulled through a server-only MCP session, refreshed every 5 minutes |
-| 📰 **Research digest** | The latest Axis Research brief and an Apple Mail newsletter digest, scoped to exactly the `Axis Research` and `Newsletters` mailboxes, promos stripped out |
-| 🏭 **Sector & earnings analytics** | Industry benchmarks, a decision lab (PESTEL / Porter's / macro triggers), and a full earnings calendar matched against holdings |
-| 🩺 **Health & wellness** | A private HealthKit-backed workspace (Activity, Sleep, Heart, Respiratory, Mobility, Nutrition) with 7-day/30-day comparisons |
-| 🧾 **PDF reporting** | One-click export of the full Investment Brief |
-| 📱 **Native iPhone app** | A SwiftUI shell with a persistent WKWebView, its own onboarding, offline recovery, and HealthKit sync |
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-flowchart TD
-    A["📱 Native iOS app<br/>SwiftUI + WKWebView"] -->|Tailscale HTTPS| B["🌐 Flask gateway<br/>Mac · localhost:5050<br/>wraps the Vinext server"]
-    B --> C["⚛️ Vinext / Next.js app<br/>localhost:3000<br/>app/: workspaces, APIs"]
-    C -->|MCP, server-only| D["🔌 Kite MCP server (Go)<br/>adjacent repo"]
-
-    style A fill:#1a1a2e,stroke:#0f3460,color:#fff
-    style B fill:#16213e,stroke:#0f3460,color:#fff
-    style C fill:#0f3460,stroke:#e94560,color:#fff
-    style D fill:#533483,stroke:#e94560,color:#fff
-```
-
-The Vinext/Next.js app is the core of the dashboard. The Flask gateway wraps
-it as a local macOS background service and is what the native app and PWA
-actually connect to. Everything binds to `localhost`; Tailscale Serve is the
-only way the iPhone reaches it remotely, so nothing is exposed to the open
-internet.
-
----
-
-## ✅ Prerequisites
-
-- 🟢 Node.js `>=22.13.0`
-- 🐍 Python 3.10+ (for the private Flask gateway)
-- 🔑 A Zerodha Kite Connect account and API credentials
-- 🍎 macOS, for the Mail/Podcasts/Reminders/Calendar/Health integrations and
-  the native app build
-- 🛰️ [Tailscale](https://tailscale.com/) for private remote/mobile access
-  (optional, but required for the iPhone app off your home Wi-Fi)
-
----
-
-## 🚀 Quick start
+## Quick Start
 
 ```bash
 npm install
-npm run dev      # local development server
-npm run build     # verify the production build
+npm run dev
+npm run build
 ```
 
-To run the full dashboard as a private macOS + iPhone app via Flask:
+To run the complete dashboard as a private macOS and iPhone app through Flask:
 
 ```bash
-npm run flask:setup   # creates an isolated .venv-flask environment
-npm run iphone         # starts the local-only background service
+npm run flask:setup
+npm run iphone
 ```
 
-Install the Mac Dock app once with `npm run desktop`, or open
-`http://localhost:5050/` in Safari and use **File → Add to Dock**. For iPhone,
-`npm run iphone` prints an install URL (Tailscale if signed in, otherwise
-same-Wi-Fi LAN) — open it in Safari and **Share → Add to Home Screen**, or
-install the native SwiftUI app (see below). A setup guide is also served at
-`/install`.
+The first command creates an isolated `.venv-flask` environment. The launcher
+starts a local-only macOS background job for the current login session. Vinext
+and Flask/Waitress bind to localhost, so private dashboard data is not exposed
+to other devices or network interfaces.
+The local-only launcher restores the Mac dashboard at `http://localhost:5050/` without exposing private data to the LAN. Tailscale Serve provides private iPhone and mobile-data access without exposing port `5050` to the public internet.
 
-### 📱 Native iPhone app (recommended)
+Install the Mac Dock app once with `npm run desktop` (creates `~/Applications/Portfolio Intelligence.app` and pins it). Alternatively open `http://localhost:5050/` in Safari and choose **File → Add to Dock**. For iPhone, run `npm run iphone` (Tailscale when signed in, otherwise same-Wi-Fi LAN), open the printed Install URL in Safari, then **Share → Add to Home Screen**. The guide is also at `/install`.
 
-The primary iPhone client is the SwiftUI project at
+The primary full-featured iPhone client is the SwiftUI app in
 `apple-app/InvestmentDashboard.xcodeproj`. It provides native onboarding,
-workspace navigation, source-freshness/connection status, operational-day
-HealthKit upload, offline recovery, and PDF sharing around one persistent
-WKWebView. Full build, install, and TestFlight instructions are in
-[`apple-app/README.md`](apple-app/README.md).
+Investment/Sectoral/Market Intelligence/Health workspace navigation, source freshness and connection
+status, operational-day HealthKit upload, offline recovery, and PDF sharing around one
+persistent WKWebView. The Safari PWA remains a fallback installation path.
+See `apple-app/README.md` for physical-device and TestFlight instructions.
 
-After installing it, pair HealthKit once from the Mac:
+After installing the native app, generate its single-use HealthKit pairing code
+on the Mac:
 
 ```bash
 npm run iphone:pair
 ```
 
-The upload token lives in the iPhone Keychain; the Mac stores only its hash.
-The app refreshes every dashboard source on foreground, on reconnect, on
-manual refresh, and every 5 minutes while active — Mac-side changes show up
-without reinstalling.
+The paired upload token is stored in the iPhone Keychain; the Mac stores only
+its hash in the ignored private artifacts directory.
 
-### 🛰️ Remote / mobile-data access
+The iPhone refreshes all dashboard sources when it opens or returns to the
+foreground, when connectivity returns, when **Refresh now** is pressed, and
+every five minutes while active. Mac-side updates therefore appear on iPhone
+without reinstalling the app. Keep the Mac awake. The Mac
+remains the private application server; Kite credentials, Mail, Podcasts, Health
+data, and MCP calls remain server-side.
 
-Install Tailscale on both the Mac and iPhone, sign into the same tailnet,
-then:
+## Workspace and filtering behavior
 
-```bash
-npm run remote
-```
+The dashboard has four persistent workspaces:
 
-This prints the Mac's stable Tailscale address and configures Tailscale Serve
-for the Flask gateway. The native app defaults to that private tailnet URL.
+- **Investment** (`?view=investment`): action board, live Kite portfolio snapshot,
+  macro scenarios, analyst calls, portfolio/Axis risk views, and Axis
+  recommendations.
+- **Sectoral Analytics** (`?view=sectors`): scrollable, full-width collapsible
+  sections for S-1 Action Board, S-2 Industry Analytics, S-3 Benchmarks &
+  Decision Lab. Each analytical section keeps its
+  accessible local view selector; URLs such as
+  `?view=sectors&section=s2&page=companies`, Back/Forward, reload, keyboard
+  navigation, and selected analytical state are preserved.
+- **Market Intelligence** (`?view=intelligence`, alias `?view=market-intelligence`):
+  four URL-aware full-content sections: M-1 Action Board, M-2 Live Intelligence
+  (Newsletters, Axis Research, Podcasts), M-3 Earnings Calendar, and M-4
+  Calendar + Reminders.
+- **Health & Wellness** (`?view=health`): a private, non-scrolling three-panel
+  console for H-1 Action Board, H-2 Daily Optimism, and H-3 Vital Metrics.
+  Opening a section uses a viewport-fitted paged view such as
+  `?view=health&section=h3&page=heart`. Nutrition is split across two metric
+  pages so desktop and iPhone views remain scroll-free. Incognito gates every
+  overview tile and drill-down, including Health values and source metadata.
+  Vital Metrics arranges KPIs into four direction columns while keeping each
+  tile’s Health category colour.
 
----
+Every workspace action board uses the same complete three-lane contract:
+`To Do Today`, `Monitor`, and `Completed Today`. Actions are clickable, completed
+items move to the third lane with strike-through styling, and completion state
+is retained for the day before resetting at local midnight. Sectoral S-1 and
+Health H-1 always open the complete board rather than separate lane pages.
+The Investment board is the canonical visual contract: all workspaces use the
+same summary header, lane headers, card anatomy, spacing, empty state, and
+completed-state treatment. Compact, single-lane, or workspace-specific action
+board variants are not supported.
 
-## 🗂️ Workspaces
+The industry selector in **S-2 Sectoral Analytics** is deliberately scoped to
+S-2. Selecting an industry filters or dims only S-2 matrices, charts, rankings,
+company composition, and linked analytical panels.
 
-The dashboard has four persistent workspaces, each reachable via a `?view=`
-query param and mirrored 1:1 in the native app:
+The following sections are always outside that filter boundary:
 
-| Workspace | Route | Contents |
-|---|---|---|
-| 💼 **Investment** | `?view=investment` | Action board, live Kite snapshot, macro scenarios, analyst calls, risk views, Axis recommendations |
-| 🏭 **Sectoral Analytics** | `?view=sectors` | A 2×2 console: Action Board, Industry Analytics, Benchmarks & Decision Lab, Earnings Calendar |
-| 📰 **Market Intelligence** | `?view=intelligence` | Daily action board plus the full digest — newsletters, Axis Research, calendar/action feeds, Reminders, Notes, Podcasts |
-| 🩺 **Health & Wellness** | `?view=health` | A private 2×2 console: Action Board, Health Status, Daily Guidance, Vital Metrics (incognito-gated) |
+- **Market Intelligence** always shows complete refreshed Newsletter, Axis
+  Research, Podcast, Calendar, Reminder, and earnings-calendar content in its
+  dedicated M-1–M-4 sections. M-3 exclusively owns earnings; M-4 excludes the
+  Earnings source calendar. It must not show an
+  industry-filter banner or exclude unmatched industries. Sectoral Analytics
+  must not host a digest or Market Intelligence cross-link.
+- **S-3 Benchmarks & Decision Lab** uses its own local sector selector. Its
+  benchmark, investability, PESTEL, Porter, and macro-trigger pages do not read
+  or mutate S-2 filtering.
+- **M-3 Earnings Calendar** always keeps every tracked earnings event visible,
+  enabled, and selectable. Counts, details, and KPI rows are scoped to the
+  visible month; stars are matched dynamically against current Kite holdings,
+  and an event outside the visible month cannot leak into the detail panel.
 
-Every action board shares the same three-lane contract (`To Do Today` /
-`Monitor` / `Completed Today`) and visual language — the Investment board is
-the canonical layout that the others match.
+This boundary is covered by rendered-dashboard tests. Any future sector filter
+change must preserve full Market Intelligence / M-3 visibility on desktop,
+iPhone, and PDF flows.
 
-> ⚠️ **Filtering boundary:** the industry selector inside Sectoral Analytics
-> only ever filters that workspace. Market Intelligence always shows the
-> complete, unfiltered digest (including the earnings calendar), and the
-> Earnings Calendar always keeps every tracked event visible regardless of
-> any sector filter. This boundary is covered by the rendered-dashboard
-> tests — see [`AGENTS.md`](AGENTS.md) for the full behavioral contract.
+### Access over mobile data
 
----
+Install Tailscale on the Mac and iPhone and sign in to the same tailnet. Run
+`npm run remote`; the launcher prints the Mac's stable `100.x.y.z` address
+when Tailscale is connected. The native app defaults to the private Tailscale
+Serve address `https://adis-mbp.tailfd8d7f.ts.net/`. The dashboard remains private to the tailnet instead
+of being published to the open internet.
 
-## 🔑 Kite authentication
+## Project Layout
 
-The dashboard starts the local Kite MCP server automatically and reads
-holdings, positions, margins, orders, and GTTs through a server-only MCP
-session. Holdings are treated as the critical live read; the other endpoints
-fail gracefully so one flaky Kite call can't blank the portfolio view. When
-live Kite is unavailable, the UI falls back to the last validated snapshot and
-never presents it as live.
+- `app/`: dashboard workspaces, report route, live APIs, and data definitions
+- `scripts/`: macOS launchers plus Kite, Mail, podcast, PDF, and Tailscale helpers
+- `apple-app/InvestmentDashboard.xcodeproj`: native macOS and iOS wrapper app
+- `integrations/kite-connect-mcp-typescript/`: retained TypeScript Kite MCP prototype
+- `artifacts/reports/`: generated report artifacts retained with the project
+- `notion/`: project summary and file-organization history
 
-Use the **Authenticate Kite** action only when a session genuinely needs it.
-After one login, the access token is valid until Zerodha's daily ~06:00 IST
-regulatory cutover — not a fixed 12-hour window. Avoid extra same-day logins,
-since a new login can invalidate the previous token for the same API key. PDF
-export needs a live post-login snapshot.
+The production Kite integration remains the adjacent Go project at
+`/Users/adityasharma/Documents/GitHub/kite-mcp-server`. Set
+`KITE_MCP_PROJECT_DIR` to override that location.
+
+The dashboard starts the local Kite MCP server automatically, then reads holdings,
+positions, margins, orders, and GTTs through a server-only MCP session. The
+browser refreshes `/api/kite/snapshot` immediately and every five minutes.
+Holdings are the critical live read; positions, margins, orders, and GTTs use
+failure-tolerant reads so one secondary Kite endpoint cannot blank the portfolio.
+When live Kite is unavailable, the UI explicitly switches to the last validated
+Kite snapshot and never labels it as live.
+
+Use the dashboard's **Authenticate Kite** action only when the existing session
+genuinely requires authentication. Complete the Zerodha login, return to the
+dashboard, and press **Refresh now**. After one successful login, the daily
+access token is kept until the next ~06:00 IST boundary (Zerodha's once-per-day
+regulatory rule — documented by Kite Connect as expiring at 6 AM on the next
+day). This is **not** a fixed 12-hour timer: if you log in around the evening,
+the next 06:00 IST cutover can feel like "~12 hours," but morning logins last
+closer to a full trading day. The dashboard and local Kite MCP server reuse that
+token across restarts and MCP session rotations; avoid additional same-day
+logins because Zerodha can invalidate the previous access token for the same
+API key. PDF export requires a live post-login snapshot — after the overnight
+boundary, re-auth once, then retry export.
+
+## Research Sources
+
+- Primary knowledge base: `/Users/adityasharma/Downloads/Axis Research`
+- Backbone: latest prior `Investment_Brief_YYYY-MM-DD` and
+  `Newsletter_Digest_YYYY-MM-DD`
+- Live source of truth: Kite holdings, positions, orders, GTTs, and margins
+- Supplemental context: public web sources, Apple Mail digests, Apple Podcasts,
+  and the local earnings calendar
+
+Apple Mail summaries use exactly the iCloud `Newsletters` and `Axis Research`
+mailboxes. Displayed digests omit promotions, ads, registration or purchase
+calls to action, follow/subscribe requests, contact details, phone numbers,
+email addresses, and website links. Podcast items are deduplicated by episode
+title and identify whether their evidence came from a locally available
+transcript or only the episode description.
+
+Health refresh validates the newest iCloud Apple Health ZIP before importing
+`apple_health_export/export.xml`. A corrupt or incomplete newest ZIP is reported
+as a fallback source and the last validated extracted export remains in use, so
+a failed archive cannot overwrite a valid Health snapshot. The archive ExportDate
+is evaluated with the same 8 PM policy, and records after its eligible-through
+date are excluded from KPI cards and comparisons.
+
+The current baked research snapshot lives in `app/portfolio-data.ts`; live prices
+and broker state are never sourced from that file while Kite is healthy.
+
+Optional overrides:
 
 ```bash
 KITE_MCP_PROJECT_DIR=/path/to/kite-mcp-server npm run dev
 KITE_MCP_URL=http://127.0.0.1:8080/mcp npm run dev
 ```
 
-The active integration is the Go MCP server in the adjacent `kite-mcp-server`
-repository (set `KITE_MCP_PROJECT_DIR` if it lives elsewhere).
-`integrations/kite-connect-mcp-typescript/` is an earlier TypeScript
-prototype, kept for reference but not started by the dashboard.
+This starter does not use `wrangler.jsonc`.
 
----
+## Included Shape
 
-## 📚 Research sources
+- edit site code under `app/`
+- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
+- `vite.config.ts` simulates declared bindings for local development
+- `db/schema.ts` starts intentionally empty
+- `examples/d1/` contains an optional D1 example surface
+- `drizzle.config.ts` supports local migration generation when needed
 
-- 📁 Primary knowledge base: local Axis Research folder (path configured per
-  machine)
-- 🗞️ Backbone: the latest prior Investment Brief and Newsletter Digest
-- 📡 Live source of truth: Kite holdings, positions, orders, GTTs, margins
-- 🌐 Supplemental: public web sources, Apple Mail digests, Apple Podcasts,
-  the local earnings calendar
+## Workspace Auth Headers
 
-Apple Mail summaries are drawn from exactly the iCloud `Newsletters` and
-`Axis Research` mailboxes, with promotions, calls-to-action, and contact
-details stripped from what's displayed. Podcast items are deduplicated by
-episode title and labeled as transcript- or description-sourced. Health
-refresh validates the newest iCloud Apple Health export before importing it;
-a corrupt archive falls back to the last validated snapshot rather than
-overwriting it. Full source-freshness and refresh-contract details are in
-[`AGENTS.md`](AGENTS.md).
+OpenAI workspace sites can read the current user's email from
+`oai-authenticated-user-email`.
 
----
+SIWC-authenticated workspace sites may also receive
+`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
+`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
+`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
 
-## 📁 Project layout
+Treat the full name as optional and fall back to email when it is absent:
 
-```
-app/                                        dashboard workspaces, report route, live APIs, data definitions
-apple-app/InvestmentDashboard.xcodeproj/    native macOS/iOS wrapper app
-scripts/                                    macOS launchers + Kite/Mail/podcast/PDF/Tailscale helpers
-integrations/kite-connect-mcp-typescript/   retained TypeScript Kite MCP prototype
-artifacts/reports/                          generated report artifacts kept with the project
-artifacts/design-qa/                        visual QA reference screenshots
-notion/                                     project summary and file-organization history
-db/, drizzle/                               optional local D1 schema and migrations
-tests/                                       Node and Python test suites
-```
+```tsx
+import { headers } from "next/headers";
 
----
+export default async function Home() {
+  const requestHeaders = await headers();
+  const email = requestHeaders.get("oai-authenticated-user-email");
+  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
+  const fullName =
+    encodedFullName &&
+    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
+      "percent-encoded-utf-8"
+      ? decodeURIComponent(encodedFullName)
+      : null;
 
-## ⚙️ Useful commands
-
-| Command | Description |
-|---|---|
-| `npm run dev` | ▶️ Start local development |
-| `npm run build` | 🏗️ Verify the production build |
-| `npm run flask:setup` | 🐍 Create the private Python env and install Flask |
-| `npm run flask` / `npm run flask:stop` | 🟢🔴 Start/stop the local macOS background service |
-| `npm run iphone` | 📱 Start the same local-only service, printing install URLs |
-| `npm run iphone:native` | 🔨 Build and install the native app on a connected iPhone |
-| `npm run iphone:pair` | 🔗 Generate a one-time HealthKit pairing code |
-| `npm run remote` | 🛰️ Start the gateway and print the private Tailscale URL |
-| `npm run desktop` | 🖥️ Install the Mac Dock app |
-| `npm test` | ✅ Build and run the rendered-dashboard test suite |
-| `npm run lint` | 🧹 Run ESLint |
-| `npm run db:generate` | 🗃️ Generate Drizzle migrations after schema changes |
-
----
-
-## 🧪 Testing
-
-```bash
-npm test
-# or individually:
-node --test tests/rendered-html.test.mjs
-node --experimental-strip-types --test tests/freshness-and-isolation.test.mjs tests/health-date-policy.test.mjs
-python3 -m unittest discover -s tests -p 'test_health_import.py'
+  const displayName = fullName ?? email;
+  // ...
+}
 ```
 
-`tests/rendered-html.test.mjs` specifically covers workspace structure and the
-Sectoral/Market-Intelligence filter isolation described above — any change to
-that filtering logic should keep this suite green.
+## Optional Dispatch-Owned ChatGPT Sign-In
 
----
+Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
+optional or required ChatGPT sign-in:
 
-## 🔐 Security & privacy
+- Use `getChatGPTUser()` for optional signed-in UI.
+- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
+  anonymous visitors through Sign in with ChatGPT.
+- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
+  browser links or actions.
+- Pass a same-origin relative `returnTo` path for the destination after sign-in
+  or sign-out. The helper validates and safely encodes it.
+- Mark protected pages with `export const dynamic = "force-dynamic"` because
+  they depend on per-request identity headers.
 
-- 🚫 Broker credentials, Mail, Podcasts, and Health data never leave the Mac.
-- 🏠 The Vinext server and Flask gateway bind to `localhost` only; Tailscale
-  Serve is the sole remote-access path, and it's tailnet-private, not public.
-- 🔑 HealthKit upload tokens are per-install, stored in the iPhone Keychain,
-  and the server keeps only a hash.
-- 🙈 Private artifacts and token registries are git-ignored.
-- 👤 This is a personal tool, not intended for public deployment or
-  distribution (see the TestFlight checklist in `apple-app/README.md`).
+Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
+OAuth cookies, and identity header injection. Do not implement app routes for
+those reserved paths. Routes that do not import and call the helper remain
+anonymous-compatible.
 
----
+SIWC establishes identity only; it does not prove workspace membership. Use the
+Sites hosting platform's access policy controls for workspace-wide restrictions,
+or enforce explicit server-side membership or allowlist checks.
 
-## 🧹 Repo hygiene note
+Use SIWC for account pages, user-specific dashboards, saved records, and write
+actions tied to the current ChatGPT user. Leave public content anonymous.
 
-`.firecrawl/` is listed in `.gitignore`, but ~2,000 files from an earlier
-`firecrawl-cli` install (mostly its `node_modules/`) were committed before
-that rule was added and are still tracked (commit `0c71858`, "Firecrawl
-Integration"). Nothing sensitive lives in there — the one credential-shaped
-file, `.firecrawl/fii-dii/nse-cookies.txt`, is an empty curl-generated
-placeholder in every commit it appears in — but it's ~17 MB of dependency
-code that doesn't belong in version control. Worth a `git rm -r --cached
-.firecrawl` cleanup commit when convenient; no history rewrite needed since
-no real secret was ever committed there.
+## Useful Commands
 
----
+- `npm run dev`: start local development
+- `npm run flask:setup`: create the private Python environment and install Flask
+- `npm run flask`: start the local-only macOS dashboard background job
+- `npm run flask:stop`: stop the local-only dashboard background job
+- `npm run iphone`: start the same local-only dashboard job
+- `npm run remote`: start the gateway and print the private Tailscale URL
+- `npm run build`: verify the vinext build output
+- `npm test`: build and verify rendered dashboard behavior
+- `node --test tests/rendered-html.test.mjs`: verify workspace structure,
+  S-2 filter isolation, and exclusive Market Intelligence M-3 earnings ownership
+- `npm run db:generate`: generate Drizzle migrations after schema changes
 
-## 🏚️ Scaffolding notes
+## Learn More
 
-This project started from a Vinext/Next.js "site creator" starter template
-([vinext](https://github.com/cloudflare/vinext)), which is why
-`.openai/hosting.json`, `vite.config.ts`, and `app/chatgpt-auth.ts` still exist
-for optional D1/R2 bindings and ChatGPT sign-in support. None of that
-scaffolding is used by the dashboard itself — it's kept only in case those
-hosting paths are needed later.
-
----
-
-## 📖 Learn more
-
-- 📘 [vinext documentation](https://github.com/cloudflare/vinext)
-- 📗 [Drizzle D1 guide](https://orm.drizzle.team/docs/get-started/d1-new)
-- 📄 [`AGENTS.md`](AGENTS.md) — the full data-freshness and refresh-contract spec
-- 📱 [`apple-app/README.md`](apple-app/README.md) — native app build/install/TestFlight guide
-
-<div align="center">
-
----
-
-Made for personal use by Aditya · 🇮🇳 tracking Indian equities, one refresh at a time
-
-_✅ MCP verification: this line was committed and pushed by a custom `github_mcp` server (branch → commit → PR), not edited by hand._
-
-</div>
+- [vinext Documentation](https://github.com/cloudflare/vinext)
+- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)

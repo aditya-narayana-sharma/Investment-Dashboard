@@ -73,6 +73,7 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
     const now = new Date().toISOString();
     const indices: SectorBenchmarkIndex[] = registry.map((item) => {
       const row = byId.get(item.id);
+      const hasTicker = Boolean(item.ticker);
       const available = Boolean(row?.level && row.indexedHistory?.length);
       return {
         id: item.id,
@@ -87,20 +88,38 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
         source: available ? "Yahoo Finance delayed NSE index history" : "NSE Indices canonical definition",
         sourceUrl: factsheetUrl,
         observedAt: row?.observedAt ?? now,
-        period: available ? "Up to one year of daily closes" : "Definition configured; exact market series unavailable",
+        period: available
+          ? "Up to one year of daily closes"
+          : hasTicker
+            ? "Configured ticker returned no exact market series"
+            : "Definition only · no exact public Yahoo series (ETF proxies not substituted)",
         freshness: available ? "public_delayed" : "unavailable",
       };
     });
-    const available = indices.filter((index) => index.level !== null).length;
+    const tickerBacked = registry.filter((item) => Boolean(item.ticker));
+    const availableTickerBacked = tickerBacked.filter((item) => {
+      const index = indices.find((candidate) => candidate.id === item.id);
+      return Boolean(index?.level !== null && index.indexedHistory.length);
+    }).length;
+    const definitionOnly = registry.filter((item) => !item.ticker).map((item) => item.officialName);
+    const status: SectorBenchmarkSnapshot["status"] = availableTickerBacked === tickerBacked.length && tickerBacked.length > 0
+      ? "live"
+      : availableTickerBacked > 0
+        ? "partial"
+        : "unavailable";
     const snapshot: SectorBenchmarkSnapshot = {
-      status: available === indices.length ? "live" : available ? "partial" : "unavailable",
+      status,
       asOf: now,
-      message: `${available}/${indices.length} exact index histories available. Strategy indices without an exact public series remain unavailable; ETF proxies are not substituted.`,
+      message: status === "live"
+        ? `${availableTickerBacked}/${tickerBacked.length} ticker-backed index histories live. Definition-only residual gap (no exact public series; ETF proxies not substituted): ${definitionOnly.join(", ")}.`
+        : status === "partial"
+          ? `${availableTickerBacked}/${tickerBacked.length} ticker-backed histories available. Failed or empty series demote freshness; definition-only indices remain ${definitionOnly.join(", ")}.`
+          : `No ticker-backed NSE index histories available. Definition-only indices: ${definitionOnly.join(", ")}.`,
       indices,
     };
     state.snapshot = snapshot;
     state.expiresAt = Date.now() + 5 * 60_000;
-    if (available) state.lastGood = snapshot;
+    if (availableTickerBacked) state.lastGood = snapshot;
     return snapshot;
   } catch (error) {
     if (state.lastGood) return { ...state.lastGood, status: "cached", message: `Benchmark refresh failed; preserving last validated snapshot. ${String(error)}` };

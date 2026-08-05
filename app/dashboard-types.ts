@@ -18,6 +18,8 @@ export type SourceFreshness = {
 export type DashboardRefreshResult = {
   status: "current" | "partial" | "unavailable";
   refreshedAt: string;
+  /** Latest successful exact iCloud → Axis Research mailbox read. */
+  axisResearchLastFetchedAt?: string;
   analysisDate: string;
   completedHealthThrough: string;
   partialToday: boolean;

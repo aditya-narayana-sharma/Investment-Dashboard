@@ -217,8 +217,8 @@ export function EarningsMonthCalendar({
         </div>
         {monthCandidates.length > 1 && (
           <div className="earnings-month-nav" role="group" aria-label="Select earnings month">
-            <button type="button" disabled={monthIndexInCandidates <= 0} onClick={() => selectMonth(monthCandidates[monthIndexInCandidates - 1])} aria-label="Previous month">‹</button>
-            <button type="button" disabled={monthIndexInCandidates >= monthCandidates.length - 1} onClick={() => selectMonth(monthCandidates[monthIndexInCandidates + 1])} aria-label="Next month">›</button>
+            {monthIndexInCandidates > 0 && <button type="button" onClick={() => selectMonth(monthCandidates[monthIndexInCandidates - 1])} aria-label="Previous month">‹</button>}
+            {monthIndexInCandidates < monthCandidates.length - 1 && <button type="button" onClick={() => selectMonth(monthCandidates[monthIndexInCandidates + 1])} aria-label="Next month">›</button>}
           </div>
         )}
       </div>
@@ -254,6 +254,7 @@ export function EarningsMonthCalendar({
                     <li key={earningsEventKey(event)} style={{ "--dot": meta.color } as CSSProperties}>
                       <i aria-hidden="true"/>
                       <em>{event.name}{event.portfolio ? " ★" : ""}</em>
+                      {Boolean(event.holidayConflicts?.length) && <span className="market-conflict-badge">HOLIDAY</span>}
                     </li>
                   );
                 })}
@@ -308,6 +309,11 @@ export function EarningsMonthCalendar({
                       <td>
                         <b>{event.name}{event.portfolio ? " ★" : ""}</b>
                         <small>{meta.name} · {event.symbol}</small>
+                        {event.holidayConflicts?.map((conflict) => (
+                          <span className="market-conflict-badge" key={`${conflict.market}-${conflict.holiday}`}>
+                            {conflict.market} HOLIDAY · {conflict.holiday}
+                          </span>
+                        ))}
                       </td>
                       {columns.map((column) => {
                         const kpi = event.kpis[column.index];
@@ -355,7 +361,10 @@ export function EarningsMonthCalendar({
             const bullets = earningsEventBullets(event);
             return (
               <div key={`${earningsEventKey(event)}-summary`} className="earnings-day-summary-item">
-                <h5>{event.name}{event.portfolio ? " ★" : ""} <small>{event.symbol} · {event.period}</small></h5>
+                <h5>
+                  {event.name}{event.portfolio ? " ★" : ""} <small>{event.symbol} · {event.period}</small>
+                  {Boolean(event.holidayConflicts?.length) && <span className="market-conflict-badge">HOLIDAY CONFLICT</span>}
+                </h5>
                 <ul className="digest-summary-bullets">
                   {bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
                 </ul>

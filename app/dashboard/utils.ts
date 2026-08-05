@@ -1,6 +1,12 @@
 import { CircleDollarSign, HeartPulse, Layers3, Newspaper } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
-import { healthActions, healthCategories, healthSources, type HealthMetric } from "../health-data";
+import {
+  healthActions,
+  healthCategories,
+  healthSources,
+  type HealthAveragePeriod,
+  type HealthMetric,
+} from "../health-data";
 import { healthTargetDateKey } from "../health-date-policy";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { ContentDigestSnapshot } from "../content-types";
@@ -8,6 +14,7 @@ import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
 import { sectorCompanies } from "../sector-company-data";
 import { earningsEventDateKey } from "../earnings-verify";
+import { calendarSchedulingMetadata, exactEarningsCalendarItems } from "../calendar-earnings";
 import type { MacroBandKey, MacroEventKey, KanbanItem, KanbanWorkspace, WorkspaceKey, DonutLabelProps } from "./types";
 
 export const DIGEST_PAGE_SIZE = 40;
@@ -190,16 +197,17 @@ export function earningsEventMonthLabel(dateLabel: string) {
   return (match?.[1] ?? "Jul").slice(0, 3).toUpperCase();
 }
 
-function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
-  const knownSymbols = new Set(existing.map((event) => event.symbol.toLowerCase()));
-  return content.calendar.filter((item) => item.topic === "Earnings").flatMap((item) => {
+/** Convert every row from the exact Earnings calendar into pending scheduling evidence. */
+export function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
+  const events: EarningsEvent[] = [];
+  for (const item of exactEarningsCalendarItems(content.calendar)) {
     const identity = resolveEarningsIdentity(item.title, existing);
-    if (knownSymbols.has(identity.symbol.toLowerCase())) return [];
-    const parsed = new Date(item.startsAt);
-    if (Number.isNaN(parsed.getTime())) return [];
-    knownSymbols.add(identity.symbol.toLowerCase());
-    const day = new Intl.DateTimeFormat("en-IN", { day: "2-digit", timeZone: "Asia/Kolkata" }).format(parsed);
-    const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(parsed);
+    const schedule = calendarSchedulingMetadata(item);
+    const dateKey = schedule.dateKey;
+    if (!dateKey) continue;
+    const dateAtNoon = new Date(`${dateKey}T12:00:00+05:30`);
+    const day = dateKey.slice(8, 10);
+    const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(dateAtNoon);
     const banking = /bank|finance|nbfc|insurance/i.test(`${identity.name} ${item.title}`);
     const technology = /tech|software|digital|infosys|tcs|wipro/i.test(`${identity.name} ${item.title}`);
     const kpiLabels = banking
@@ -207,19 +215,23 @@ function calendarEarningsEvents(content: ContentDigestSnapshot, existing: Earnin
       : technology
         ? ["Revenue / CC growth", "Operating margin", "Deal wins", "Guidance"]
         : ["Revenue", "Profit", "Operating margin", "Management guidance"];
-    return [{
+    events.push({
       date,
+      dateKey,
       day,
       symbol: identity.symbol,
       name: identity.name,
       state: "Pending · Apple Calendar",
       portfolio: false,
-      period: "Latest quarter",
-      reported: false,
+      period: schedule.period,
+      reported: schedule.reported,
       kpis: kpiLabels.map((label) => ({ label, value: "", change: "" })),
       summary: item.notes || "Calendar event imported from Apple Calendar. KPI fields remain blank until a cited company or exchange result is available.",
-    }];
-  });
+      calendarEventId: schedule.calendarEventId,
+      eventKind: schedule.eventKind,
+    });
+  }
+  return events;
 }
 
 export function canonicalEarningsSymbol(raw: string) {
@@ -231,24 +243,68 @@ export function mergeEarningsCalendarEvents(snapshot: EarningsSnapshot, content:
   const held = new Set(holdings.map((holding) => canonicalEarningsSymbol(holding.symbol)));
   const hasLiveHoldingIdentity = holdings.length > 0;
   const analysisDate = snapshot.analysisDate || currentIstDateKey();
-  const deduplicated = new Map<string, EarningsEvent>();
+  const deduplicated = new Map<string, EarningsEvent[]>();
 
   for (const event of [...baseEvents, ...calendarEarningsEvents(content, baseEvents)]) {
     const symbol = canonicalEarningsSymbol(event.symbol);
     const dateKey = earningsEventDateKey(event, analysisDate) ?? event.date;
-    const key = `${symbol}|${event.period.trim().toLowerCase()}|${dateKey}`;
-    const normalized = { ...event, symbol, portfolio: hasLiveHoldingIdentity ? held.has(symbol) : event.portfolio };
-    const previous = deduplicated.get(key);
-    if (!previous || (!previous.reported && normalized.reported) || (!previous.source && normalized.source)) {
-      deduplicated.set(key, normalized);
+    const eventKind = event.eventKind ?? "results";
+    const key = `${symbol}|${eventKind}|${dateKey}`;
+    const normalized = { ...event, symbol, eventKind, portfolio: hasLiveHoldingIdentity ? held.has(symbol) : event.portfolio };
+    const candidates = deduplicated.get(key) ?? [];
+    const period = normalized.period.trim().toLowerCase();
+    const duplicateIndex = candidates.findIndex((candidate) => {
+      const candidatePeriod = candidate.period.trim().toLowerCase();
+      return candidatePeriod === period || candidatePeriod === "latest quarter" || period === "latest quarter";
+    });
+    if (duplicateIndex < 0) {
+      deduplicated.set(key, [...candidates, normalized]);
+      continue;
     }
+    const previous = candidates[duplicateIndex]!;
+    const preferred = (!previous.reported && normalized.reported) || (!previous.source && normalized.source)
+      ? normalized
+      : previous;
+    candidates[duplicateIndex] = {
+      ...preferred,
+      dateKey: preferred.dateKey ?? normalized.dateKey ?? previous.dateKey,
+      calendarEventId: preferred.calendarEventId ?? normalized.calendarEventId ?? previous.calendarEventId,
+    };
+    deduplicated.set(key, candidates);
   }
 
-  return [...deduplicated.values()].sort((left, right) => {
+  return [...deduplicated.values()].flat().sort((left, right) => {
     const leftDate = earningsEventDateKey(left, analysisDate) ?? left.date;
     const rightDate = earningsEventDateKey(right, analysisDate) ?? right.date;
     return leftDate.localeCompare(rightDate) || left.symbol.localeCompare(right.symbol);
   });
+}
+
+export function earningsReconciliationStats(
+  snapshot: EarningsSnapshot,
+  content: ContentDigestSnapshot,
+  holdings: LiveHolding[] = [],
+  mergedEvents = mergeEarningsCalendarEvents(snapshot, content, holdings),
+) {
+  const calendarEvents = calendarEarningsEvents(content, snapshot.events.length ? snapshot.events : earningsCalendar);
+  const baseEvents = mergeEarningsCalendarEvents(snapshot, { ...content, calendar: [] }, holdings);
+  const analysisDate = snapshot.analysisDate || currentIstDateKey();
+  const baseKeys = new Set(baseEvents.map((event) => (
+    `${canonicalEarningsSymbol(event.symbol)}|${event.eventKind ?? "results"}|${earningsEventDateKey(event, analysisDate) ?? event.date}`
+  )));
+  const reconciledCalendarEvents = mergedEvents.filter((event) => event.calendarEventId);
+  const updated = reconciledCalendarEvents.filter((event) => baseKeys.has(
+    `${canonicalEarningsSymbol(event.symbol)}|${event.eventKind ?? "results"}|${earningsEventDateKey(event, analysisDate) ?? event.date}`,
+  )).length;
+  const rawCalendarRows = content.calendar.filter((item) => item.calendar.trim().toLowerCase() === "earnings").length;
+  return {
+    discovered: rawCalendarRows,
+    newlyAdded: reconciledCalendarEvents.length - updated,
+    updated,
+    deduplicated: Math.max(rawCalendarRows - calendarEvents.length, 0) + Math.max(baseEvents.length + calendarEvents.length - mergedEvents.length, 0),
+    verifiedReported: mergedEvents.filter((event) => event.reported).length,
+    pendingUpcoming: mergedEvents.filter((event) => !event.reported).length,
+  };
 }
 
 export const fallbackHealth: HealthLiveSnapshot = {
@@ -383,9 +439,9 @@ export function labelPoint({ cx, cy, midAngle, innerRadius, outerRadius }: Donut
 export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" | "same") {
   if (direction === "same") return "moderate";
   const higherIsGenerallyFavourable = new Set([
-    "Active energy", "Exercise minutes", "Stand", "Steps", "Walking + running", "Stairs climbed",
+    "Active energy", "Exercise minutes", "Stand", "Stand time", "Steps", "Walking + running", "Stairs climbed",
     "Time asleep", "Deep sleep", "REM sleep", "Core sleep", "Cardio recovery", "Cardio fitness",
-    "Walking speed", "Step length", "Protein", "Fibre", "Potassium",
+    "Walking speed", "Step length", "Protein", "Fibre", "Potassium", "Water", "HRV",
   ]);
   const lowerIsGenerallyFavourable = new Set([
     "Resting heart rate", "Walking asymmetry", "Double support", "Awake", "Sodium", "Sugar", "Saturated fat",
@@ -393,6 +449,106 @@ export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" |
   if (higherIsGenerallyFavourable.has(metric.label)) return direction === "up" ? "good" : "bad";
   if (lowerIsGenerallyFavourable.has(metric.label)) return direction === "down" ? "good" : "bad";
   return "moderate";
+}
+
+/** Direction-column bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
+export type HealthDirectionBucket = "good" | "moderate" | "bad" | "unavailable";
+
+export const HEALTH_DIRECTION_COLUMNS: Array<{
+  id: HealthDirectionBucket;
+  title: string;
+  shortLabel: string;
+  className: string;
+}> = [
+  { id: "good", title: "Favourable direction", shortLabel: "Favourable", className: "direction-good" },
+  { id: "moderate", title: "Context dependent", shortLabel: "Context", className: "direction-moderate" },
+  { id: "bad", title: "Unfavourable direction", shortLabel: "Unfavourable", className: "direction-bad" },
+  { id: "unavailable", title: "Average unavailable", shortLabel: "Unavailable", className: "direction-unavailable" },
+];
+
+export function healthMetricDirectionBucket(
+  metric: HealthMetric,
+  averagePeriod: HealthAveragePeriod,
+): HealthDirectionBucket {
+  const average = metric.averages?.[averagePeriod];
+  if (!average) return "unavailable";
+  return healthTrendTone(metric, average.direction);
+}
+
+/** Stable Health category order for deterministic column packing (Body Measurements / Hearing excluded). */
+export const HEALTH_CATEGORY_ORDER = [
+  "Activity",
+  "Sleep",
+  "Heart",
+  "Respiratory",
+  "Mindfulness",
+  "Mobility",
+  "Nutrition",
+] as const;
+
+const EXCLUDED_HEALTH_CATEGORIES = new Set(["Body Measurements", "Hearing", "Body measurements", "Medications", "Medication"]);
+
+export function healthCategoryAccentClass(categoryName: string): string {
+  switch (categoryName) {
+    case "Heart":
+      return "health-cat-heart";
+    case "Activity":
+      return "health-cat-activity";
+    case "Nutrition":
+      return "health-cat-nutrition";
+    case "Respiratory":
+    case "Mindfulness":
+      return "health-cat-respiratory";
+    case "Sleep":
+      return "health-cat-sleep";
+    case "Mobility":
+      return "health-cat-mobility";
+    default:
+      return "health-cat-other";
+  }
+}
+
+export type HealthDirectionMetricEntry = {
+  categoryName: string;
+  categoryAccent: string;
+  metric: HealthMetric;
+  categoryIndex: number;
+  metricIndex: number;
+};
+
+/** Flatten enabled Health categories into direction columns with stable category→metric order. */
+export function groupHealthMetricsByDirection(
+  categories: Array<{ name: string; metrics: HealthMetric[] }>,
+  averagePeriod: HealthAveragePeriod,
+): Record<HealthDirectionBucket, HealthDirectionMetricEntry[]> {
+  const columns: Record<HealthDirectionBucket, HealthDirectionMetricEntry[]> = {
+    good: [],
+    moderate: [],
+    bad: [],
+    unavailable: [],
+  };
+  const ranked = categories
+    .filter((category) => !EXCLUDED_HEALTH_CATEGORIES.has(category.name))
+    .map((category, fallbackIndex) => {
+      const orderIndex = HEALTH_CATEGORY_ORDER.indexOf(category.name as typeof HEALTH_CATEGORY_ORDER[number]);
+      return { category, categoryIndex: orderIndex < 0 ? HEALTH_CATEGORY_ORDER.length + fallbackIndex : orderIndex };
+    })
+    .sort((left, right) => left.categoryIndex - right.categoryIndex || left.category.name.localeCompare(right.category.name));
+
+  for (const { category, categoryIndex } of ranked) {
+    const accent = healthCategoryAccentClass(category.name);
+    category.metrics.forEach((metric, metricIndex) => {
+      const bucket = healthMetricDirectionBucket(metric, averagePeriod);
+      columns[bucket].push({
+        categoryName: category.name,
+        categoryAccent: accent,
+        metric,
+        categoryIndex,
+        metricIndex,
+      });
+    });
+  }
+  return columns;
 }
 
 export function localDateKey(date = new Date()) {

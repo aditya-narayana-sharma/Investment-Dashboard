@@ -384,6 +384,36 @@ def build_snapshot(
 
     for category, label, metric_type, mode, unit, tone in METRICS:
         prior_current = aggregate(db, metric_type, completed.isoformat(), mode)
+        first, last, count = db.execute(
+            "SELECT MIN(day), MAX(day), COUNT(*) FROM records WHERE type=? AND day BETWEEN '2010-01-01' AND ?",
+            (metric_type, export_captured_at.date().isoformat()),
+        ).fetchone()
+        metric_days = {
+            row[0] for row in db.execute(
+                "SELECT DISTINCT day FROM records WHERE type=? AND day BETWEEN ? AND ?",
+                (metric_type, (completed - timedelta(days=29)).isoformat(), completed.isoformat()),
+            )
+        }
+        missing_week = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(7)
+            if (completed - timedelta(days=offset)).isoformat() not in metric_days
+        ]
+        missing_month = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(30)
+            if (completed - timedelta(days=offset)).isoformat() not in metric_days
+        ]
+        coverage[label] = {
+            "firstDate": first or "",
+            "lastDate": last or "",
+            "records": count,
+            "status": "available" if completed.isoformat() in metric_days else "missing_target",
+            "weekly": len(missing_week) <= 3,
+            "monthly": len(missing_month) <= 10,
+            "missingDates7": missing_week,
+            "missingDates30": missing_month,
+        }
         metric_override = override_value(overrides, completed, "metrics", metric_type)
         current = metric_override if metric_override is not None else prior_current
         if current is None:
@@ -402,14 +432,33 @@ def build_snapshot(
         if monthly: averages["monthly"] = monthly
         metric_source = "iPhone Mirroring" if metric_override is not None else "Apple Health export"
         categories[category].append({"label": label, "value": fmt(current, unit), "context": f"{metric_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": averages})
-        first, last, count = db.execute(
-            "SELECT MIN(day), MAX(day), COUNT(*) FROM records WHERE type=? AND day BETWEEN '2010-01-01' AND ?",
-            (metric_type, export_captured_at.date().isoformat()),
-        ).fetchone()
-        coverage[label] = {"firstDate": first or "", "lastDate": last or "", "records": count, "weekly": len(week_values) >= 4, "monthly": len(month_values) >= 20}
-
     sleep_metrics = []
     for label, pattern, tone in (("Time asleep", "Asleep", "blue"), ("Deep sleep", "AsleepDeep", "blue"), ("REM sleep", "AsleepREM", "blue"), ("Core sleep", "AsleepCore", "blue"), ("Awake", "Awake", "amber")):
+        sleep_days = {
+            day
+            for offset in range(30)
+            if sleep_hours(db, day := (completed - timedelta(days=offset)).isoformat(), pattern) is not None
+        }
+        missing_week = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(7)
+            if (completed - timedelta(days=offset)).isoformat() not in sleep_days
+        ]
+        missing_month = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(30)
+            if (completed - timedelta(days=offset)).isoformat() not in sleep_days
+        ]
+        coverage[label] = {
+            "firstDate": min(sleep_days) if sleep_days else "",
+            "lastDate": max(sleep_days) if sleep_days else "",
+            "records": len(sleep_days),
+            "status": "available" if completed.isoformat() in sleep_days else "missing_target",
+            "weekly": len(missing_week) <= 3,
+            "monthly": len(missing_month) <= 10,
+            "missingDates7": missing_week,
+            "missingDates30": missing_month,
+        }
         prior_value = sleep_hours(db, completed.isoformat(), pattern)
         sleep_override = override_value(overrides, completed, "sleep", pattern)
         value = sleep_override if sleep_override is not None else prior_value

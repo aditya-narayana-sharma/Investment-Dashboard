@@ -65,7 +65,11 @@ export type LiveGtt = {
   kind?: "gtt" | "tsl";
 };
 
-/** Session/token state — independent of data freshness (`status`). */
+/**
+ * Session/token state — independent of data freshness (`status`).
+ * `partial` is retained only for compatibility with older cached payloads;
+ * new partial snapshots report an authenticated session.
+ */
 export type KiteAuthStatus = "authenticated" | "partial" | "unauthenticated" | "expired" | "unknown" | "unavailable";
 
 export type KiteSnapshot = {

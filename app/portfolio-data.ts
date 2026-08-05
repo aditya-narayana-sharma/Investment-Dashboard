@@ -123,6 +123,8 @@ export const axisArchiveAudit = {
 export type EarningsKpi = { label: string; value: string; change: string; tone?: "green" | "amber" | "red" };
 export type EarningsEvent = {
   date: string;
+  /** Authoritative YYYY-MM-DD when supplied by a source calendar. */
+  dateKey?: string;
   day: string;
   symbol: string;
   name: string;
@@ -133,6 +135,17 @@ export type EarningsEvent = {
   kpis: EarningsKpi[];
   summary?: string;
   source?: string;
+  /** Stable Apple Calendar source identifier for scheduling evidence. */
+  calendarEventId?: string;
+  /** Distinguishes results, calls, and board meetings on the same date. */
+  eventKind?: string;
+  /** Scheduling warnings produced by canonical market-holiday overlap checks. */
+  holidayConflicts?: Array<{
+    eventKey: string;
+    date: string;
+    market: "NSE" | "US";
+    holiday: string;
+  }>;
 };
 
 export const earningsAsOf = new Intl.DateTimeFormat("en-IN", {
@@ -140,8 +153,6 @@ export const earningsAsOf = new Intl.DateTimeFormat("en-IN", {
   timeStyle: "short",
   timeZone: "Asia/Kolkata",
 }).format(new Date());
-
-const pendingKpis = (...labels: string[]): EarningsKpi[] => labels.map((label) => ({ label, value: "", change: "" }));
 
 export const earningsCalendar: EarningsEvent[] = [
   { date: "10 Jul", day: "10", symbol: "LTF", name: "L&T Finance", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
@@ -186,7 +197,12 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "PAT", value: "₹7,114 Cr", change: "+23% YoY", tone: "green" },
     { label: "Gross / net NPA", value: "1.28% / 0.39%", change: "GNPA improved YoY", tone: "green" },
   ], summary: "Profit and NII advanced while gross asset quality improved. Net credit cost was 0.63%, providing a useful risk check alongside margin progression.", source: "https://www.moneycontrol.com/news/business/earnings/axis-bank-q1-profit-rises-23-to-rs-7-114-crore-nii-grows-8-asset-quality-improves-13977302.html" },
-  { date: "30 Jul", day: "30", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "PAT", "AUM", "Net interest margin"), summary: "Q1 FY27 KPIs remain blank. Exchange-linked coverage places the board meeting to approve unaudited results on 30 Jul 2026, with the analyst call scheduled for 31 Jul — not yet a published result.", source: "https://www.sahi.com/news/irfc-schedules-q1-earnings-call-for-july-31-at-11-am-2880-PE1_COR" },
+  { date: "30 Jul", day: "30", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Net interest income", value: "₹1,970 Cr", change: "+9.8% YoY", tone: "green" },
+    { label: "PAT", value: "₹1,927.21 Cr", change: "+10.4% YoY", tone: "green" },
+    { label: "AUM", value: "₹4.79 Lakh Cr", change: "vs ₹4.85 Lakh Cr QoQ", tone: "amber" },
+    { label: "Net interest margin", value: "1.48%", change: "Annualised", tone: "green" },
+  ], summary: "IRFC reported its highest-ever quarterly total income of ₹8,391.34 crore and PAT of ₹1,927.21 crore while retaining a zero-NPA asset book. AUM moderated sequentially to ₹4.79 lakh crore.", source: "https://irfc.co.in/investors/financial-information" },
   { date: "20 Jul", day: "20", symbol: "ULTRACEMCO", name: "UltraTech Cement", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
     { label: "Sales volume", value: "41.31 Mt", change: "+12.2% YoY", tone: "green" },
     { label: "Revenue", value: "₹24,648 Cr", change: "+15.9% YoY", tone: "green" },

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "asOf": "2026-08-06T00:00:00.000Z",
+  "coverageStart": "2026-01-01",
+  "coverageEnd": "2026-12-31",
+  "sources": {
+    "NSE": {
+      "name": "NSE / Nifty Indices holiday calendar 2026",
+      "url": "https://www.niftyindices.com/resources/holiday-calendar"
+    },
+    "US": {
+      "name": "NYSE official hours and calendars",
+      "url": "https://www.nyse.com/markets/hours-calendars"
+    }
+  },
+  "holidays": [
+    { "market": "NSE", "date": "2026-01-15", "name": "Municipal Corporation Election - Maharashtra" },
+    { "market": "NSE", "date": "2026-01-26", "name": "Republic Day" },
+    { "market": "NSE", "date": "2026-03-03", "name": "Holi" },
+    { "market": "NSE", "date": "2026-03-26", "name": "Shri Ram Navami" },
+    { "market": "NSE", "date": "2026-03-31", "name": "Shri Mahavir Jayanti" },
+    { "market": "NSE", "date": "2026-04-03", "name": "Good Friday" },
+    { "market": "NSE", "date": "2026-04-14", "name": "Dr. Baba Saheb Ambedkar Jayanti" },
+    { "market": "NSE", "date": "2026-05-01", "name": "Maharashtra Day" },
+    { "market": "NSE", "date": "2026-05-28", "name": "Bakri Id" },
+    { "market": "NSE", "date": "2026-06-26", "name": "Muharram" },
+    { "market": "NSE", "date": "2026-09-14", "name": "Ganesh Chaturthi" },
+    { "market": "NSE", "date": "2026-10-02", "name": "Mahatma Gandhi Jayanti" },
+    { "market": "NSE", "date": "2026-10-20", "name": "Dussehra" },
+    { "market": "NSE", "date": "2026-11-10", "name": "Diwali-Balipratipada" },
+    { "market": "NSE", "date": "2026-11-24", "name": "Prakash Gurpurb Sri Guru Nanak Dev" },
+    { "market": "NSE", "date": "2026-12-25", "name": "Christmas" },
+    { "market": "US", "date": "2026-01-01", "name": "New Year's Day" },
+    { "market": "US", "date": "2026-01-19", "name": "Martin Luther King, Jr. Day" },
+    { "market": "US", "date": "2026-02-16", "name": "Washington's Birthday" },
+    { "market": "US", "date": "2026-04-03", "name": "Good Friday" },
+    { "market": "US", "date": "2026-05-25", "name": "Memorial Day" },
+    { "market": "US", "date": "2026-06-19", "name": "Juneteenth National Independence Day" },
+    { "market": "US", "date": "2026-07-03", "name": "Independence Day (Observed)" },
+    { "market": "US", "date": "2026-09-07", "name": "Labor Day" },
+    { "market": "US", "date": "2026-11-26", "name": "Thanksgiving Day" },
+    { "market": "US", "date": "2026-12-25", "name": "Christmas Day" }
+  ]
+}

@@ -4,6 +4,15 @@ import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clea
 import type { KiteAuthStatus, KiteSnapshot, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
 
 type JsonObject = Record<string, unknown>;
+export type KiteOrderRequest = {
+  symbol: string;
+  side: "BUY" | "SELL";
+  quantity: number;
+  product: "CNC" | "MIS" | "NRML" | "MTF";
+  orderType: "MARKET" | "LIMIT" | "SL" | "SL-M";
+  price?: number;
+  triggerPrice?: number;
+};
 type McpState = {
   sessionId?: string;
   authUrl?: string;
@@ -138,6 +147,38 @@ export async function callKiteTool(name: string, args: JsonObject = {}): Promise
   });
   kiteCallChain = scheduled.then(() => undefined, () => undefined);
   return scheduled;
+}
+
+/**
+ * Submit an explicitly confirmed order from the dashboard order ticket.
+ * The API route validates the human-entered confirmation phrase before this
+ * function is reachable; this function then re-validates the complete payload.
+ */
+export async function placeKiteOrder(order: KiteOrderRequest) {
+  const symbol = order.symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9&.-]{1,32}$/.test(symbol)) throw new Error("Invalid Kite trading symbol.");
+  if (!Number.isInteger(order.quantity) || order.quantity < 1 || order.quantity > 1_000_000) throw new Error("Quantity must be a positive whole number.");
+  if (!["BUY", "SELL"].includes(order.side)) throw new Error("Invalid transaction side.");
+  if (!["CNC", "MIS", "NRML", "MTF"].includes(order.product)) throw new Error("Invalid Kite product.");
+  if (!["MARKET", "LIMIT", "SL", "SL-M"].includes(order.orderType)) throw new Error("Invalid Kite order type.");
+  if ((order.orderType === "LIMIT" || order.orderType === "SL") && (!order.price || order.price <= 0)) throw new Error("A positive limit price is required.");
+  if ((order.orderType === "SL" || order.orderType === "SL-M") && (!order.triggerPrice || order.triggerPrice <= 0)) throw new Error("A positive trigger price is required.");
+
+  const result = await callKiteTool("place_order", {
+    variety: "regular",
+    exchange: "NSE",
+    tradingsymbol: symbol,
+    transaction_type: order.side,
+    quantity: order.quantity,
+    product: order.product,
+    order_type: order.orderType,
+    validity: "DAY",
+    price: order.price ?? 0,
+    trigger_price: order.triggerPrice ?? 0,
+    tag: "PI-DASHBOARD",
+  });
+  lastLiveAt = 0;
+  return result;
 }
 
 async function getLoginUrl(force = false) {
@@ -399,15 +440,19 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const ordersRaw = ordersResult.status === "fulfilled" ? ordersResult.value : [];
     const gttsRaw = gttsResult.status === "fulfilled" ? gttsResult.value : [];
     const marginsRaw = marginsResult.status === "fulfilled" ? marginsResult.value : {};
-    const unavailable = results
+    const unavailable: string[] = results
       .map((result, index) => result.status === "rejected" ? toolNames[index] : null)
       .filter((name): name is typeof toolNames[number] => name !== null);
     const marginsFailure = marginsResult.status === "rejected"
       ? (marginsResult.reason instanceof Error ? marginsResult.reason.message : String(marginsResult.reason))
       : "";
     const marginsApiFault = unavailable.includes("margins")
-      && /message build error|failed to execute get_margins|generalexception/i.test(marginsFailure);
+      && /message build error|failed to execute get_margins|generalexception|rms limits|unknown_request|request not registered|error parsing response/i.test(marginsFailure);
     const holdings = mapLiveHoldings(holdingsRaw as JsonObject[], positionsRaw as JsonObject[]);
+    const pendingClassifications = holdings
+      .filter((holding) => holding.classificationStatus === "pending")
+      .map((holding) => holding.symbol);
+    if (pendingClassifications.length) unavailable.push("classifications");
     const openPositions = mapOpenPositions(
       Array.isArray((positionsRaw as JsonObject)?.net)
         ? (positionsRaw as JsonObject).net as JsonObject[]
@@ -424,18 +469,22 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
       : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Auto-refreshes every five minutes.";
     if (marginsApiFault) {
-      partialMessage = `Partial Kite snapshot: session is authenticated and holdings are live, but Zerodha's margins API is returning an error (${marginsFailure || "Message build error"}). PDF export stays locked until margins succeed. Try one re-authentication, then refresh.`;
+      partialMessage = "Partial Kite snapshot: the session is authenticated and holdings are live, but Zerodha's margins endpoint rejected the request. Re-authentication is not required; retry the refresh, and inspect the Kite adapter if margins remains unavailable. PDF export stays locked until margins succeeds.";
     }
     const { expiresAt, label: expiryLabel } = kiteDailyExpiryHint();
     const snapshot: KiteSnapshot = {
       status: unavailable.length ? "partial" : "live",
-      authStatus: unavailable.length ? "partial" : "authenticated",
+      // Holdings succeeded with this session, so secondary endpoint failures
+      // affect completeness, not authentication.
+      authStatus: "authenticated",
       asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
       message: unavailable.length
         ? partialMessage
         : `${partialMessage} Session valid until ~${expiryLabel} (Zerodha daily ~06:00 IST boundary).`,
       tokenExpiresAt: expiresAt,
-      reauthSuggested: marginsApiFault,
+      // Login is offered only by auth_required/expired snapshots. A secondary
+      // adapter failure must never invalidate an otherwise working daily token.
+      reauthSuggested: false,
       // Do not auto-force a login URL here — that would clear a working daily token on every refresh.
       // UI uses /api/kite/login?force=1 when the user explicitly chooses Re-auth.
       unavailableSections: unavailable,
@@ -456,7 +505,7 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
         industryUrl: classificationSources.industryUrl,
         marketCapUrl: classificationSources.marketCapUrl,
         asOf: classificationSources.asOf,
-        pendingSymbols: holdings.filter((holding) => holding.classificationStatus === "pending").map((holding) => holding.symbol),
+        pendingSymbols: pendingClassifications,
       },
     };
     lastLiveSnapshot = snapshot;

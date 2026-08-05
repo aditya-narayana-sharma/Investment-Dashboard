@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
@@ -6,6 +7,20 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { isAxisResearchMail } from "./axis-mail-filter.mjs";
 import { extractAxisRecommendationsForTradingAsOf } from "./axis-recommendations.mjs";
+import {
+  classifyAxisTags,
+  classifyNewsletterSentiment,
+  podcastTimestampLinks,
+  reminderVisual,
+  transcriptTextFromTtml,
+} from "./content-automation.mjs";
+import { loadMarketCalendar } from "./market-calendar-adapter.mjs";
+import {
+  configuredPodcastSummarizer,
+  deduplicatePodcastEpisodes,
+  normalizeEpisodeTitle,
+  summarizePodcastTranscript,
+} from "./podcast-summarizer.mjs";
 import { formatIstDateLabel } from "./nse-trading-day.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -16,6 +31,7 @@ const PODCAST_DB = `${process.env.HOME}/Library/Group Containers/243LU875E5.grou
 const PODCAST_TTML_ROOT = `${process.env.HOME}/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache/Assets/TTML`;
 const REMINDERS_STORE_DIR = `${process.env.HOME}/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores`;
 const CALENDAR_DB = `${process.env.HOME}/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb`;
+const EARNINGS_CALENDAR_NAME = process.env.APPLE_EARNINGS_CALENDAR_NAME ?? "Earnings";
 const CORE_DATA_EPOCH = 978307200;
 const MAIL_CONTENT_CHARS = 4500;
 /** Enough body text to support ≥5 summary bullets per newsletter item. */
@@ -172,7 +188,7 @@ const messages = recent.map((message) => {
 JSON.stringify({ totalCount, messages });
 `;
 
-/** Incomplete from every list; completed capped later (Job/Earnings evidence + recent due-dated). */
+/** Read every active and completed reminder before dashboard exclusion/classification. */
 const remindersQuery = `
 SELECT
   hex(reminder.ZIDENTIFIER) AS id,
@@ -182,6 +198,9 @@ SELECT
   list.ZNAME AS list,
   reminder.ZDUEDATE AS dueCoreData,
   reminder.ZCOMPLETED AS completed,
+  coalesce(reminder.ZPRIORITY, 0) AS priority,
+  coalesce(reminder.ZFLAGGED, 0) AS flagged,
+  coalesce(reminder.ZISURGENTSTATEENABLEDFORCURRENTUSER, 0) AS urgent,
   reminder.ZCOMPLETIONDATE AS completionCoreData
 FROM ZREMCDREMINDER reminder
 JOIN ZREMCDBASELIST list ON list.Z_PK = reminder.ZLIST
@@ -190,8 +209,30 @@ WHERE coalesce(reminder.ZMARKEDFORDELETION, 0) = 0
 ORDER BY list.ZNAME, reminder.ZCOMPLETED ASC, reminder.ZCOMPLETIONDATE DESC, reminder.ZCREATIONDATE DESC;
 `;
 
-const REMINDER_COMPLETED_CAP = 300;
-const PRIORITY_REMINDER_LISTS = new Set(["🔍Job", "Job 🔍", "Earnings"]);
+function normalizeReminderListName(list = "") {
+  return String(list)
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function reminderListTextName(list = "") {
+  return normalizeReminderListName(list)
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isExcludedReminderList(list = "") {
+  const normalized = normalizeReminderListName(list);
+  if (normalized.replace(/[\s\uFE0F]/g, "") === "🇩🇪♾🇮🇳") return true;
+  return /^(?:watch\s*list|download(?:\s*list)?|downloads|wish\s*list)$/.test(reminderListTextName(list));
+}
+
+function isPriorityReminderList(list = "") {
+  return /^(?:job|earnings)$/.test(reminderListTextName(list));
+}
 
 /** REMCDRecurrenceRule rows live in ZREMCDOBJECT (Z_ENT=34); ZREMINDER4 → reminder PK. */
 const reminderRecurrenceQuery = `
@@ -212,16 +253,24 @@ SELECT
   coalesce(i.summary, 'Untitled event') AS title,
   coalesce(c.title, 'Unknown calendar') AS calendar,
   i.start_date AS startCoreData,
+  i.start_tz AS startTimeZone,
   i.end_date AS endCoreData,
+  i.end_tz AS endTimeZone,
+  coalesce(i.all_day, 0) AS allDay,
+  date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch') AS sourceDate,
   substr(coalesce(i.description, ''), 1, ${CALENDAR_NOTES_CHARS}) AS notes
 FROM CalendarItem i
 JOIN Calendar c ON c.ROWID = i.calendar_id
-WHERE date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') >= date('${ANALYSIS_WINDOW_START}')
-  AND date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') <= date('${CALENDAR_WINDOW_END}')
-  AND coalesce(c.title, '') NOT LIKE '%Birthday%'
+WHERE (
+    (
+      date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') >= date('${ANALYSIS_WINDOW_START}')
+      AND date(i.start_date + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') <= date('${CALENDAR_WINDOW_END}')
+    )
+    OR c.title = '${EARNINGS_CALENDAR_NAME.replaceAll("'", "''")}'
+  )
   AND coalesce(c.title, '') NOT LIKE '%Scheduled Reminders%'
-ORDER BY i.start_date ASC
-LIMIT 500;
+ORDER BY c.title COLLATE NOCASE ASC, i.start_date ASC, id ASC
+LIMIT 5000;
 `;
 
 const healthNoteScript = String.raw`
@@ -247,12 +296,17 @@ function podcastQuery(episodeColumns) {
   const description = legacyColumns.length
     ? `coalesce(d.ZPLAINTEXT, d.ZTEXT, ${legacyColumns.join(", ")}, '')`
     : `coalesce(d.ZPLAINTEXT, d.ZTEXT, '')`;
+  const episodeUrlColumns = ["ZWEBPAGEURL", "ZASSETURL", "ZENCLNSURL", "ZENCLOSUREURL", "ZGUID"]
+    .filter((column) => episodeColumns.has(column))
+    .map((column) => `nullif(e.${column}, '')`);
+  const episodeUrl = episodeUrlColumns.length ? `coalesce(${episodeUrlColumns.join(", ")}, '')` : "''";
   return `
 SELECT
   coalesce(p.ZTITLE, e.ZAUTHOR, 'Apple Podcasts') AS source,
   coalesce(e.ZTITLE, e.ZITUNESTITLE, 'Untitled episode') AS title,
   datetime(e.ZPUBDATE + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') AS published,
   ${description} AS description,
+  ${episodeUrl} AS episodeUrl,
   (
     SELECT m.ZTRANSCRIPTIDENTIFIER
     FROM ZMTMEDIAENCLOSURE m
@@ -282,7 +336,8 @@ function readLocalPodcastTranscript(transcriptIdentifier) {
     try {
       const raw = readFileSync(path, "utf8");
       if (!raw || raw.length < 40) continue;
-      const text = raw
+      const cueText = transcriptTextFromTtml(raw);
+      const text = cueText || raw
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<\/p>/gi, "\n")
         .replace(/<[^>]+>/g, " ")
@@ -295,21 +350,26 @@ function readLocalPodcastTranscript(transcriptIdentifier) {
         .replace(/\n{3,}/g, "\n\n")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
-      if (text.length >= 40) return text.slice(0, 12000);
+      if (text.length >= 40) return text;
     } catch {
-      // Missing cache entry — fall back to episode description.
+      // Missing cache entry — no transcript summary can be generated.
     }
   }
   return "";
 }
 
-function preferPodcastBody(transcript, description) {
-  const transcriptText = String(transcript ?? "").trim();
-  if (transcriptText.length >= 40) return { text: transcriptText, source: "transcript" };
-  const descriptionText = String(description ?? "").trim();
-  if (descriptionText.length >= 18) return { text: descriptionText, source: "description" };
-  return { text: "", source: "none" };
-}
+/** International/US-style phone numbers — beyond the India-only 10-digit mobile format. */
+const PHONE_INTL_PREFIX = /\+\d{1,3}[\s.-]?\(?\d{1,5}\)?(?:[\s.-]?\d{2,5}){1,4}\b/g;
+const PHONE_PARENS_AREA = /\(\d{2,4}\)[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g;
+const PHONE_TRIPLE_GROUP = /\b\d{3}[\s.-]\d{3}[\s.-]\d{4}\b/g;
+
+/**
+ * Bare domain tokens embedded mid-sentence (no scheme) — website links must never leak into
+ * content. Deliberately excludes ambiguous short suffixes ("in", "co") that collide with common
+ * English words when a sentence-ending period is glued to the next word without a space.
+ */
+const BARE_DOMAIN_INLINE =
+  /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){1,}(?:com|org|net|io|gov|edu|info|biz|ai|app|news|xyz|substack)\b(?:\/[^\s)]*)?/gi;
 
 function cleanText(value) {
   return String(value ?? "")
@@ -320,6 +380,10 @@ function cleanText(value) {
     .replace(/\[email redacted\]/gi, " ")
     .replace(/\b\w{1,12}@\w{2,}/g, " ")
     .replace(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}\b/g, " ")
+    .replace(PHONE_INTL_PREFIX, " ")
+    .replace(PHONE_PARENS_AREA, " ")
+    .replace(PHONE_TRIPLE_GROUP, " ")
+    .replace(BARE_DOMAIN_INLINE, " ")
     .replace(/\b(Client ID|Client Code|Account ID)\s*:\s*[A-Z0-9-]+/gi, "$1: [redacted]")
     .replace(/click here to unsubscribe[^.\n]*/gi, " ")
     .replace(/\s+/g, " ")
@@ -351,7 +415,7 @@ const BARE_NAME_LINE =
 
 /** Mail boilerplate + podcast CTA / promo / credit-roll — never used as content bullets. */
 const DIGEST_PROMO_OR_CTA =
-  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi/i;
+  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
 
 const PROMOTIONAL_MESSAGE =
   /\*{3,}\s*spam\s*\*{3,}|today(?:'|\u2019)s paper|daily newspaper is now ready|read complete epaper|micro investing|invest ₹?1,?000|start investing today|webinar|masterclass|workshop|wealth expo|wealth gathering|limited[- ]time offer|exclusive offer|special offer|register now|book your seat|buy now|shop now|unlock (?:your )?(?:wealth|investment)|gift city.{0,80}(?:summit|conference)|where the conversations shaping|axis mutual fund.{0,80}(?:invest|sip)|want to invest ₹/i;
@@ -418,6 +482,10 @@ function stripDigestChrome(text) {
     .replace(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g, " ")
     .replace(/\[email redacted\]/gi, " ")
     .replace(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}\b/g, " ")
+    .replace(PHONE_INTL_PREFIX, " ")
+    .replace(PHONE_PARENS_AREA, " ")
+    .replace(PHONE_TRIPLE_GROUP, " ")
+    .replace(BARE_DOMAIN_INLINE, " ")
     .replace(/\r\n?/g, "\n")
     .replace(/(?:^|\n)\s*(?:sign up|advertise|view online|shop|read online|read in browser)(?:\s*[|/]\s*(?:sign up|advertise|view online|shop|read online))*\s*(?:\n|$)/gi, "\n")
     .replace(/(?:^|\n)\s*(?:share this email|brought to you by|presented by|forward to your friends|tldr together with)[^\n]*/gi, "\n")
@@ -595,7 +663,7 @@ function mailItem(message, axis = false, includeDate = false) {
   const summary = bullets.length
     ? bullets.slice(0, 3).join(" ")
     : `Headline received from ${source}; this message has no readable plain-text body.`;
-  return {
+  const item = {
     source,
     time,
     receivedAt: message.received,
@@ -603,6 +671,9 @@ function mailItem(message, axis = false, includeDate = false) {
     summary,
     bullets,
   };
+  if (axis) item.tags = classifyAxisTags(`${title} ${summary} ${bullets.join(" ")}`);
+  else item.sentiment = classifyNewsletterSentiment(`${title} ${summary} ${bullets.join(" ")}`);
+  return item;
 }
 
 async function readNewsletterListing() {
@@ -676,6 +747,7 @@ async function readAxisResearch() {
   return {
     total: parsed.totalCount,
     items: uniqueMessages.map((message) => mailItem(message, true, true)),
+    fetchedAt: new Date().toISOString(),
   };
 }
 
@@ -707,34 +779,84 @@ async function readPodcasts() {
   const schema = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, "PRAGMA table_info(ZMTEPISODE);"], { timeout: 15000, maxBuffer: 2 * 1024 * 1024 });
   const columns = new Set(JSON.parse(schema.stdout || "[]").map((column) => column.name));
   const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, podcastQuery(columns)], { timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
-  const items = JSON.parse(stdout || "[]").map((episode) => {
+  const summarizer = configuredPodcastSummarizer();
+  const previousByTitle = new Map(
+    (lastSnapshot?.podcasts || []).map((item) => [normalizeEpisodeTitle(item.title), item]),
+  );
+  const items = [];
+  for (const episode of JSON.parse(stdout || "[]")) {
     const source = cleanText(episode.source);
     const title = cleanText(episode.title);
     const time = formatTime(`${episode.published.replace(" ", "T")}+05:30`);
     const transcript = readLocalPodcastTranscript(episode.transcriptIdentifier);
-    const body = preferPodcastBody(transcript, episode.description);
-    // Prefer transcript-derived takeaways when cached; else description content only (no CTAs).
-    const bullets = summaryBullets(body.text, { max: DIGEST_BULLET_MAX });
-    const contentBullets = bullets.filter((bullet) => !isDigestPromoOrNoise(bullet));
-    return {
+    const episodeUrl = String(episode.episodeUrl || "");
+    if (!transcript) {
+      items.push({
+        source,
+        time,
+        title,
+        summary: "Transcript unavailable — summary not generated.",
+        bullets: [],
+        keyTakeaways: [],
+        contentSource: "none",
+        summaryStatus: "unavailable",
+        summaryReason: "transcript_unavailable",
+        episodeUrl,
+        timestampLinks: [],
+      });
+      continue;
+    }
+
+    const transcriptFingerprint = createHash("sha256").update(transcript).digest("hex");
+    const previous = previousByTitle.get(normalizeEpisodeTitle(title));
+    const canReuse = previous?.summaryStatus === "generated"
+      && previous.contentSource === "transcript"
+      && previous.transcriptFingerprint === transcriptFingerprint
+      && Array.isArray(previous.keyTakeaways)
+      && previous.keyTakeaways.length >= 3;
+    const generated = canReuse
+      ? {
+          status: "generated",
+          bullets: previous.keyTakeaways,
+          model: previous.summaryModel ?? "cached transcript summary",
+          chunkCount: previous.summaryChunkCount ?? 0,
+        }
+      : await summarizePodcastTranscript(transcript, {
+          generate: summarizer.generate,
+          model: summarizer.model ?? "unconfigured",
+        });
+    // Defense-in-depth: re-apply the shared Mail/Podcast promo filter to LLM-generated
+    // takeaways so any sponsor/CTA/contact line the summarizer missed never reaches the UI.
+    const contentBullets = generated.status === "generated"
+      ? generated.bullets.map(cleanText).filter((bullet) => bullet && !isDigestPromoOrNoise(bullet) && isDigestContentWorthy(bullet))
+      : [];
+    items.push({
       source,
       time,
       title,
-      summary: contentBullets.slice(0, 4).join(" ") || "No content takeaways available from the local transcript or episode description.",
+      summary: contentBullets.join(" ") || (
+        generated.reason === "summarizer_not_configured"
+          ? "Transcript available — summary not generated because the local summarizer is not configured."
+          : generated.reason === "transcript_too_short"
+            ? "Transcript available but contained too little substantive content to summarize."
+          : "Transcript available — summary generation failed."
+      ),
       bullets: contentBullets,
-      contentSource: body.source,
-    };
-  });
-  const quality = (item) => (item.contentSource === "transcript" ? 1000 : item.contentSource === "description" ? 100 : 0) + item.bullets.length;
-  const unique = new Map();
-  for (const item of items) {
-    const key = normalizeBulletKey(item.title)
-      .replace(/^(?:special|bonus|rerun|encore)\s+/, "")
-      .replace(/\s+(?:special|rerun|encore)$/, "");
-    const existing = unique.get(key);
-    if (!existing || quality(item) > quality(existing)) unique.set(key, item);
+      keyTakeaways: contentBullets,
+      contentSource: "transcript",
+      summaryStatus: generated.status,
+      summaryReason: generated.reason ?? null,
+      summaryModel: generated.status === "generated" ? generated.model : null,
+      summaryGeneratedAt: generated.status === "generated"
+        ? canReuse ? previous.summaryGeneratedAt : new Date().toISOString()
+        : null,
+      summaryChunkCount: generated.chunkCount,
+      transcriptFingerprint,
+      episodeUrl,
+      timestampLinks: podcastTimestampLinks(transcript, episodeUrl),
+    });
   }
-  return [...unique.values()];
+  return deduplicatePodcastEpisodes(items);
 }
 
 function coreDataToIso(coreDataSeconds) {
@@ -754,8 +876,9 @@ function classifyTopic(title, detail = "", source = "") {
 
 function classifyReminderTopic(title, detail = "", list = "") {
   // List name wins for Job 🔍 / Earnings so title keywords do not mis-bucket actionable work items.
-  if (/^earnings$/i.test(list.trim())) return "Earnings";
-  if (PRIORITY_REMINDER_LISTS.has(list) || /job/i.test(list)) return "Work/Jobs";
+  const normalizedList = reminderListTextName(list);
+  if (normalizedList === "earnings") return "Earnings";
+  if (normalizedList === "job") return "Work/Jobs";
   return classifyTopic(title, detail, list);
 }
 
@@ -793,6 +916,7 @@ async function readReminders() {
     const detail = String(item.detail || "");
     const list = String(item.list || "Unknown list");
     const topic = classifyReminderTopic(title, detail, list);
+    const visual = reminderVisual(topic);
     const recurrence = recurrenceByPk.get(Number(item.pk));
     return {
       id: String(item.id || `${item.list}:${item.title}`),
@@ -802,36 +926,44 @@ async function readReminders() {
       dueAt,
       completed: Boolean(item.completed),
       completedAt,
+      priority: Number(item.priority) || 0,
+      flagged: Boolean(item.flagged),
+      urgent: Boolean(item.urgent),
       repeating: Boolean(recurrence),
       repeatsOn: recurrence?.repeatsOn ?? null,
       source: "Apple Reminders",
       topic,
+      ...visual,
       // Reminders never use 5-bullet digest padding — UI shows title + meta only.
     };
   });
 
-  const incomplete = mapped.filter((item) => !item.completed);
+  // These entertainment/download lists are intentionally absent from dashboard
+  // reminder data even though the source read covers every local list.
+  const allowed = mapped.filter((item) => !isExcludedReminderList(item.list));
+  const incomplete = allowed.filter((item) => !item.completed);
   // Prefer Job/Earnings evidence + due-dated completions (calendar Scheduled Reminders clones), then recent others.
-  const completed = mapped
+  const completed = allowed
     .filter((item) => item.completed)
     .sort((left, right) => {
-      const leftPriority = PRIORITY_REMINDER_LISTS.has(left.list) || Boolean(left.dueAt) ? 1 : 0;
-      const rightPriority = PRIORITY_REMINDER_LISTS.has(right.list) || Boolean(right.dueAt) ? 1 : 0;
+      const leftPriority = isPriorityReminderList(left.list) || Boolean(left.dueAt) ? 1 : 0;
+      const rightPriority = isPriorityReminderList(right.list) || Boolean(right.dueAt) ? 1 : 0;
       if (rightPriority !== leftPriority) return rightPriority - leftPriority;
       return new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime();
-    })
-    .slice(0, REMINDER_COMPLETED_CAP);
+    });
 
   return [...incomplete, ...completed];
 }
 
 async function readCalendar() {
   const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", CALENDAR_DB, calendarQuery], { timeout: 30000, maxBuffer: 12 * 1024 * 1024 });
-  return JSON.parse(stdout || "[]").map((item) => {
+  const mapped = JSON.parse(stdout || "[]").map((item) => {
     const title = String(item.title || "Untitled event");
     const calendar = String(item.calendar || "Unknown calendar");
     const startsAt = coreDataToIso(item.startCoreData);
     const endsAt = coreDataToIso(item.endCoreData);
+    const allDay = Boolean(item.allDay);
+    const sourceDate = String(item.sourceDate || "");
     const notes = String(item.notes || "");
     const topic = classifyTopic(item.title, item.notes, item.calendar);
     return {
@@ -840,11 +972,19 @@ async function readCalendar() {
       calendar,
       startsAt,
       endsAt,
+      allDay,
+      sourceDate,
+      startTimeZone: item.startTimeZone ? String(item.startTimeZone) : null,
+      endTimeZone: item.endTimeZone ? String(item.endTimeZone) : null,
       notes,
       topic,
       // Calendar events never use 5-bullet digest padding — UI shows title + schedule meta only.
     };
-  }).sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
+  });
+  return [...new Map(mapped.map((item) => [
+    `${item.calendar}\u0000${item.id}\u0000${item.sourceDate}`,
+    item,
+  ])).values()].sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
 }
 
 async function readHealthNote() {
@@ -863,7 +1003,7 @@ async function settle(task) {
 }
 
 /** Axis Recommended Stocks: trading-day as-of (today or last NSE session). */
-function buildInvestmentIntelligence(newsletters, axisItems) {
+function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt) {
   const axisScoped = extractAxisRecommendationsForTradingAsOf(axisItems, {
     calendarDate: ANALYSIS_DATE,
     lookbackDays: AXIS_LOOKBACK_DAYS,
@@ -879,14 +1019,22 @@ function buildInvestmentIntelligence(newsletters, axisItems) {
       : formatIstDateLabel(axisScoped.sourceDate),
     axisUsedLastTradingDay: axisScoped.usedLastTradingDay || axisScoped.sourceDate !== ANALYSIS_DATE,
     latestAxisAt: axisItems[0]?.time ?? "No qualifying Axis report in the rolling window",
+    axisLastFetchedAt,
     latestNewsletterAt: newsletters[0]?.time ?? "No newsletter available",
-    axisRecommendations: axisScoped.recommendations,
+    axisRecommendations: axisScoped.recommendations.map((recommendation) => ({
+      ...recommendation,
+      tags: classifyAxisTags(`${recommendation.name} ${recommendation.call} ${recommendation.thesis}`),
+    })),
     macroEvidence: macroEvidence(newsletters, axisItems),
   };
 }
 
 async function refresh() {
   const calendar = await settle(readCalendar);
+  const marketCalendar = await settle(() => loadMarketCalendar({
+    windowStart: ANALYSIS_WINDOW_START,
+    windowEnd: CALENDAR_WINDOW_END,
+  }));
   const newsletters = await settle(readNewsletters);
   const axisResearch = await settle(readAxisResearch);
   const [podcasts, reminders, healthNote] = await Promise.all([
@@ -898,7 +1046,18 @@ async function refresh() {
   const axisValue = axisResearch.status === "fulfilled" ? axisResearch.value : { total: 0, items: [] };
   const podcastValue = podcasts.status === "fulfilled" ? podcasts.value : [];
   const reminderValue = reminders.status === "fulfilled" ? reminders.value : [];
-  const calendarValue = calendar.status === "fulfilled" ? calendar.value : [];
+  const appleCalendarValue = calendar.status === "fulfilled" ? calendar.value : [];
+  const marketCalendarValue = marketCalendar.status === "fulfilled"
+    ? marketCalendar.value
+    : {
+        status: "unavailable",
+        asOf: "",
+        holidays: [],
+        crypto: { market: "CRYPTO", semantics: "24/7", message: "Crypto markets operate continuously." },
+        message: String(marketCalendar.reason),
+      };
+  const calendarValue = [...appleCalendarValue, ...marketCalendarValue.holidays]
+    .sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
   const healthNoteValue = healthNote.status === "fulfilled" ? healthNote.value : null;
   const requiredSources = [newsletters, axisResearch, reminders, calendar, healthNote];
   const liveRequiredSources = requiredSources.filter((source) => source.status === "fulfilled").length;
@@ -908,6 +1067,15 @@ async function refresh() {
     observedAt: new Date().toISOString(),
     message: result.status === "rejected" ? String(result.reason) : undefined,
   });
+  const generatedPodcastSummaries = podcastValue.filter((item) => item.summaryStatus === "generated").length;
+  const transcriptWithoutSummary = podcastValue.filter(
+    (item) => item.contentSource === "transcript" && item.summaryStatus !== "generated",
+  ).length;
+  const unavailablePodcastTranscripts = podcastValue.filter((item) => item.contentSource !== "transcript").length;
+  const podcastSourceState = sourceState(podcasts, podcastValue.length, true);
+  if (podcasts.status === "fulfilled") {
+    podcastSourceState.message = `${generatedPodcastSummaries} transcript summaries · ${transcriptWithoutSummary} transcripts without summaries · ${unavailablePodcastTranscripts} transcripts unavailable.`;
+  }
   return {
     status: liveRequiredSources === requiredSources.length ? "live" : liveRequiredSources ? "partial" : "unavailable",
     asOf: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date()),
@@ -917,13 +1085,20 @@ async function refresh() {
     reminders: reminderValue,
     calendar: calendarValue,
     healthNote: healthNoteValue,
-    investment: buildInvestmentIntelligence(newsletterValue.items, axisValue.items),
+    marketCalendar: marketCalendarValue,
+    investment: buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt),
     sources: {
-      newsletters: { status: newsletters.status === "fulfilled" ? "live" : "error", count: newsletterValue.total, displayedCount: newsletterValue.items.length, message: newsletters.status === "rejected" ? String(newsletters.reason) : undefined },
-      axisResearch: { status: axisResearch.status === "fulfilled" ? "live" : "error", count: axisValue.total, displayedCount: axisValue.items.length, message: axisResearch.status === "rejected" ? String(axisResearch.reason) : undefined },
-      podcasts: sourceState(podcasts, podcastValue.length, true),
+      newsletters: { status: newsletters.status === "fulfilled" ? "live" : "error", count: newsletterValue.total, displayedCount: newsletterValue.items.length, observedAt: new Date().toISOString(), message: newsletters.status === "rejected" ? String(newsletters.reason) : undefined },
+      axisResearch: { status: axisResearch.status === "fulfilled" ? "live" : "error", count: axisValue.total, displayedCount: axisValue.items.length, observedAt: axisValue.fetchedAt ?? new Date().toISOString(), message: axisResearch.status === "rejected" ? String(axisResearch.reason) : undefined },
+      podcasts: podcastSourceState,
       reminders: sourceState(reminders, reminderValue.length),
-      calendar: sourceState(calendar, calendarValue.length),
+      calendar: sourceState(calendar, appleCalendarValue.length),
+      marketCalendar: {
+        status: marketCalendarValue.status === "live" ? "live" : "error",
+        count: marketCalendarValue.holidays.length,
+        observedAt: marketCalendarValue.asOf || new Date().toISOString(),
+        message: marketCalendarValue.message,
+      },
       healthNote: sourceState(healthNote, healthNoteValue ? 1 : 0),
     },
   };
@@ -972,6 +1147,13 @@ function initializingSnapshot() {
     podcasts: [],
     reminders: [],
     calendar: [],
+    marketCalendar: {
+      status: "unavailable",
+      asOf: "",
+      holidays: [],
+      crypto: { market: "CRYPTO", semantics: "24/7", message: "Crypto markets operate continuously." },
+      message: "Market calendar refresh is running in the background.",
+    },
     healthNote: null,
     investment: {
       policy: "The exact local Apple containers are being refreshed. The last validated snapshot will replace this state automatically.",
@@ -982,6 +1164,7 @@ function initializingSnapshot() {
       axisTradingAsOfLabel: formatIstDateLabel(ANALYSIS_DATE),
       axisUsedLastTradingDay: false,
       latestAxisAt: "Refresh in progress",
+      axisLastFetchedAt: undefined,
       latestNewsletterAt: "Refresh in progress",
       axisRecommendations: [],
       macroEvidence: [],
@@ -992,6 +1175,7 @@ function initializingSnapshot() {
       podcasts: source("Apple Podcasts refresh is running in the background.", true),
       reminders: source("Apple Reminders refresh is running in the background."),
       calendar: source("Apple Calendar refresh is running in the background."),
+      marketCalendar: source("Canonical NSE/US market calendar refresh is running in the background."),
       healthNote: source("The exact  Health Daily note refresh is running in the background."),
     },
   };
@@ -1027,7 +1211,30 @@ async function refreshAndCache() {
       },
     };
   }
-  retained.investment = buildInvestmentIntelligence(retained.newsletters, retained.axisResearch);
+  if (
+    retained.sources.marketCalendar?.status !== "live"
+    && previous?.marketCalendar?.status === "live"
+    && previous.marketCalendar.holidays?.length
+  ) {
+    retained.marketCalendar = previous.marketCalendar;
+    const holidayIds = new Set(retained.calendar.map((item) => item.id));
+    retained.calendar = [
+      ...retained.calendar,
+      ...previous.marketCalendar.holidays.filter((item) => !holidayIds.has(item.id)),
+    ].sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
+    retained.sources.marketCalendar = {
+      ...retained.sources.marketCalendar,
+      status: "cached",
+      count: previous.marketCalendar.holidays.length,
+      observedAt: previous.marketCalendar.asOf,
+      message: `${retained.sources.marketCalendar?.message ?? "Latest market-calendar refresh failed."} Retaining the last validated market calendar.`,
+    };
+  }
+  retained.investment = buildInvestmentIntelligence(
+    retained.newsletters,
+    retained.axisResearch,
+    retained.sources.axisResearch?.observedAt,
+  );
   const requiredKeys = ["newsletters", "axisResearch", "reminders", "calendar", "healthNote"];
   retained.status = requiredKeys.every((key) => retained.sources[key]?.status === "live") ? "live" : "partial";
   const persisted = { ...retained, refreshedAt: new Date().toISOString() };
