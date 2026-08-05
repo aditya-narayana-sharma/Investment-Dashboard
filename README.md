@@ -70,21 +70,24 @@ The dashboard has four persistent workspaces:
 - **Investment** (`?view=investment`): action board, live Kite portfolio snapshot,
   macro scenarios, analyst calls, portfolio/Axis risk views, and Axis
   recommendations.
-- **Sectoral Analytics** (`?view=sectors`): a non-scrolling 2x2 analytical
-  console for S-1 Action Board, S-2 Industry Analytics, S-3 Benchmarks &
-  Decision Lab, and S-4 Earnings Calendar. Opening a tile uses a viewport-fitted
-  paged view such as `?view=sectors&section=s2&page=companies`; Back/Forward,
-  reload, keyboard navigation, and selected analytical state are preserved.
+- **Sectoral Analytics** (`?view=sectors`): scrollable, full-width collapsible
+  sections for S-1 Action Board, S-2 Industry Analytics, S-3 Benchmarks &
+  Decision Lab. Each analytical section keeps its
+  accessible local view selector; URLs such as
+  `?view=sectors&section=s2&page=companies`, Back/Forward, reload, keyboard
+  navigation, and selected analytical state are preserved.
 - **Market Intelligence** (`?view=intelligence`, alias `?view=market-intelligence`):
-  a daily three-lane action board followed by the complete Live Intelligence
-  Digest (Newsletters, Axis Research, Calendar + action feeds with earnings
-  calendar, Reminders, Notes, Podcasts).
-- **Health & Wellness** (`?view=health`): a private, non-scrolling 2x2 console
-  for H-1 Action Board, H-2 Health Status, H-3 Daily Guidance, and H-4 Vital
-  Metrics. Opening a tile uses a viewport-fitted paged view such as
-  `?view=health&section=h4&page=heart`. Nutrition is split across two metric
+  four URL-aware full-content sections: M-1 Action Board, M-2 Live Intelligence
+  (Newsletters, Axis Research, Podcasts), M-3 Earnings Calendar, and M-4
+  Calendar + Reminders.
+- **Health & Wellness** (`?view=health`): a private, non-scrolling three-panel
+  console for H-1 Action Board, H-2 Daily Optimism, and H-3 Vital Metrics.
+  Opening a section uses a viewport-fitted paged view such as
+  `?view=health&section=h3&page=heart`. Nutrition is split across two metric
   pages so desktop and iPhone views remain scroll-free. Incognito gates every
   overview tile and drill-down, including Health values and source metadata.
+  Vital Metrics arranges KPIs into four direction columns while keeping each
+  tile’s Health category colour.
 
 Every workspace action board uses the same complete three-lane contract:
 `To Do Today`, `Monitor`, and `Completed Today`. Actions are clickable, completed
@@ -102,21 +105,22 @@ company composition, and linked analytical panels.
 
 The following sections are always outside that filter boundary:
 
-- **Market Intelligence** always shows the complete refreshed Newsletter, Axis
-  Research, Calendar, Reminders, Notes, Podcast, and earnings-calendar content
-  (Earnings bucket inside Calendar + action feeds). It must not show an
+- **Market Intelligence** always shows complete refreshed Newsletter, Axis
+  Research, Podcast, Calendar, Reminder, and earnings-calendar content in its
+  dedicated M-1–M-4 sections. M-3 exclusively owns earnings; M-4 excludes the
+  Earnings source calendar. It must not show an
   industry-filter banner or exclude unmatched industries. Sectoral Analytics
   must not host a digest or Market Intelligence cross-link.
 - **S-3 Benchmarks & Decision Lab** uses its own local sector selector. Its
   benchmark, investability, PESTEL, Porter, and macro-trigger pages do not read
   or mutate S-2 filtering.
-- **S-4 Earnings Calendar** always keeps every tracked earnings event visible,
+- **M-3 Earnings Calendar** always keeps every tracked earnings event visible,
   enabled, and selectable. Counts, details, and KPI rows are scoped to the
   visible month; stars are matched dynamically against current Kite holdings,
   and an event outside the visible month cannot leak into the detail panel.
 
 This boundary is covered by rendered-dashboard tests. Any future sector filter
-change must preserve full Market Intelligence / S-4 visibility on desktop,
+change must preserve full Market Intelligence / M-3 visibility on desktop,
 iPhone, and PDF flows.
 
 ### Access over mobile data
@@ -274,7 +278,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run build`: verify the vinext build output
 - `npm test`: build and verify rendered dashboard behavior
 - `node --test tests/rendered-html.test.mjs`: verify workspace structure,
-  S-2 filter isolation, and Market Intelligence / S-4 visibility
+  S-2 filter isolation, and exclusive Market Intelligence M-3 earnings ownership
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
 ## Learn More

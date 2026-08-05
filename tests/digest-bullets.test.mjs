@@ -198,16 +198,63 @@ test("podcast digest bullets drop CTAs and do not pad to five with promo", () =>
   assert.ok(bullets.some((item) => /Noah Smith|sovereign wealth|fertility/i.test(item)));
 });
 
-test("preferPodcastContentSource uses transcript when present, else description", () => {
+test("preferPodcastContentSource uses transcripts and rejects descriptions as summary evidence", () => {
   assert.equal(
     preferPodcastContentSource("Host discusses tariff policy and oil supply risks in depth today.", "Follow us on Twitter").source,
     "transcript",
   );
   assert.equal(
     preferPodcastContentSource("", "Oil hits $100 and drives a global bond sell-off amid Middle East risk.").source,
-    "description",
+    "none",
   );
   assert.equal(preferPodcastContentSource("", "").source, "none");
+});
+
+test("digest cleaning strips international/US-style phone numbers, not just Indian mobiles", () => {
+  const bullets = extractContentBullets([
+    "Brent crude rose to $94 as shipping risk increased near Hormuz.",
+    "For support call +1 (555) 123-4567 any time.",
+    "Our toll-free desk answers at 800-555-0199 during market hours.",
+    "Reach the helpdesk on +44 20 7946 0958 for account queries.",
+  ].join("\n"));
+  assert.ok(bullets.some((item) => /Brent crude|Hormuz/i.test(item)));
+  assert.doesNotMatch(bullets.join(" "), /555.?123.?4567|800.?555.?0199|7946.?0958/);
+});
+
+test("digest cleaning strips bare website domains embedded mid-sentence, not only full URLs", () => {
+  const bullets = extractContentBullets([
+    "Nifty closed lower amid weak global cues and thin breadth across the tape.",
+    "The full data set is hosted at marketdata.example.com for reference.",
+    "Analysts at research.example.org flagged a widening credit spread this week.",
+  ].join("\n"));
+  assert.ok(bullets.some((item) => /Nifty closed lower/i.test(item)));
+  assert.doesNotMatch(bullets.join(" "), /example\.com|example\.org/i);
+});
+
+test("isDigestPromoOrNoise catches contact-detail CTAs beyond follow/subscribe", () => {
+  const promos = [
+    "WhatsApp us on our support line for a callback.",
+    "DM us on Instagram if you have questions about this pick.",
+    "Call our helpline for a free portfolio review today.",
+    "Our customer care team is available toll-free around the clock.",
+    "Scan the QR code to download the app and start investing.",
+    "Join our Telegram and Discord for daily alpha.",
+    "Book a demo with our advisory team this week.",
+  ];
+  for (const line of promos) {
+    assert.equal(isDigestPromoOrNoise(line), true, `expected promo: ${line}`);
+  }
+});
+
+test("legitimate content with number ranges and financial figures survives new phone/domain filters", () => {
+  const bullets = extractContentBullets([
+    "Management guided for 2024-2025 revenue growth of 12 to 15 percent.",
+    "The company reported PAT of ₹902 Cr, up 29% YoY for Q1 FY27.",
+    "Loan book expanded to ₹1,29,634 Cr with return on assets at 2.48%.",
+  ].join("\n"));
+  assert.ok(bullets.some((item) => /2024-2025|guided for/i.test(item)));
+  assert.ok(bullets.some((item) => /PAT of.*902/i.test(item)));
+  assert.ok(bullets.some((item) => /Loan book|1,29,634/i.test(item)));
 });
 
 test("extractContentBullets from transcript prefers spoken content over description CTAs", () => {

@@ -71,6 +71,8 @@ def validate_xml(path: Path) -> None:
 
 def prepare_archive(archive_path: Path, export_xml: Path) -> str:
     with zipfile.ZipFile(archive_path) as archive:
+        if archive.namelist().count(MEMBER) != 1:
+            raise zipfile.BadZipFile(f"{MEMBER} must appear exactly once.")
         info = archive.getinfo(MEMBER)
         needs_extract = (
             not export_xml.exists()
@@ -114,45 +116,26 @@ def main() -> int:
             return 1
         result = state("verified_export", None, None, args.export_xml, "No ZIP was found; using the existing validated export.xml.")
     else:
-        rejected_archive: Optional[Path] = None
-        rejected_reason = ""
-        active_archive: Optional[Path] = None
-        action = ""
-        for index, archive_path in enumerate(archives):
-            try:
-                action = prepare_archive(archive_path, args.export_xml)
-                active_archive = archive_path
-                status = "verified_latest" if index == 0 else "cached_fallback"
-                fallback_reason = rejected_reason if index else ""
-                message = (
-                    f"Validated the newest archive and {action} {MEMBER}."
-                    if index == 0
-                    else f"Newest archive was rejected ({rejected_reason}); retained valid fallback {archive_path.name}."
-                )
-                result = state(
-                    status,
-                    active_archive,
-                    rejected_archive,
-                    args.export_xml,
-                    message,
-                    fallback_reason,
-                )
-                break
-            except (OSError, KeyError, zipfile.BadZipFile) as error:
-                if index == 0:
-                    rejected_archive = archive_path
-                    rejected_reason = (
-                        "ZIP central directory is missing or invalid."
-                        if isinstance(error, zipfile.BadZipFile) and "zip file" in str(error).lower()
-                        else str(error)
-                    )
-                continue
-        else:
+        try:
+            action = prepare_archive(latest, args.export_xml)
+            result = state(
+                "verified_latest",
+                latest,
+                None,
+                args.export_xml,
+                f"Validated the newest archive and {action} {MEMBER}.",
+            )
+        except (OSError, KeyError, zipfile.BadZipFile) as error:
+            rejected_reason = (
+                "ZIP central directory is missing or invalid."
+                if isinstance(error, zipfile.BadZipFile) and "zip file" in str(error).lower()
+                else str(error)
+            )
             if not args.export_xml.exists():
                 result = state(
                     "unavailable",
                     None,
-                    rejected_archive or latest,
+                    latest,
                     args.export_xml,
                     f"No valid Apple Health archive or fallback export exists: {rejected_reason or 'archive validation failed'}.",
                     rejected_reason,
@@ -163,7 +146,7 @@ def main() -> int:
             result = state(
                 "invalid_latest",
                 None,
-                rejected_archive or latest,
+                latest,
                 args.export_xml,
                 f"Newest archive is invalid ({rejected_reason}); retained the last validated extracted export.xml.",
                 rejected_reason,

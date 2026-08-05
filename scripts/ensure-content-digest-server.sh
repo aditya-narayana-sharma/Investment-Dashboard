@@ -4,6 +4,7 @@ set -euo pipefail
 CONTENT_URL="${CONTENT_DIGEST_URL:-http://127.0.0.1:3003}"
 LOG_DIR="${TMPDIR:-/tmp}/portfolio-live-dashboard"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export MARKET_CALENDAR_PATH="${MARKET_CALENDAR_PATH:-$ROOT_DIR/config/market-calendar.json}"
 
 if curl -sf --max-time 2 "$CONTENT_URL/health" >/dev/null 2>&1; then
   exit 0
@@ -15,7 +16,7 @@ if lsof -nP -iTCP:3003 -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 mkdir -p "$LOG_DIR"
-nohup node "$ROOT_DIR/scripts/content-digest-server.mjs" >>"$LOG_DIR/content-digest-server.log" 2>&1 &
+nohup env MARKET_CALENDAR_PATH="$MARKET_CALENDAR_PATH" node "$ROOT_DIR/scripts/content-digest-server.mjs" >>"$LOG_DIR/content-digest-server.log" 2>&1 &
 
 for _ in {1..20}; do
   if curl -sf --max-time 2 "$CONTENT_URL/health" >/dev/null 2>&1; then

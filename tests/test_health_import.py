@@ -109,16 +109,26 @@ class HealthDatePolicyTests(unittest.TestCase):
         activity = next(category for category in snapshot["categories"] if category["name"] == "Activity")
         steps = next(metric for metric in activity["metrics"] if metric["label"] == "Steps")
         self.assertEqual(steps["averages"]["weekly"]["value"], "7,500")
+        self.assertEqual(snapshot["coverage"]["Steps"]["status"], "available")
+        self.assertEqual(
+            snapshot["coverage"]["Steps"]["missingDates7"],
+            ["2026-07-23", "2026-07-22", "2026-07-21", "2026-07-20", "2026-07-19"],
+        )
+        self.assertEqual(snapshot["coverage"]["Cardio fitness"]["status"], "missing_target")
+        self.assertIn("2026-07-25", snapshot["coverage"]["Cardio fitness"]["missingDates7"])
 
 
 class HealthArchivePreparationTests(unittest.TestCase):
-    def test_invalid_newest_archive_preserves_valid_fallback(self):
+    def test_invalid_newest_archive_preserves_validated_extract_without_using_older_zip(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             older = root / "Apple Health - 24th July.zip"
             newer = root / "Apple Health - 25th July.zip"
             export_xml = root / "apple_health_export" / "export.xml"
             state_path = root / "archive-state.json"
+            prior_export = valid_health_xml("2026-07-24 21:00:00 +0530")
+            export_xml.parent.mkdir(parents=True)
+            export_xml.write_bytes(prior_export)
             with zipfile.ZipFile(older, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr(MEMBER, valid_health_xml("2026-07-25 00:45:33 +0530"))
             newer.write_bytes(b"PK\x03\x04truncated-without-central-directory")
@@ -142,11 +152,14 @@ class HealthArchivePreparationTests(unittest.TestCase):
             )
             state = json.loads(state_path.read_text())
 
+            retained = export_xml.read_bytes()
+
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(state["status"], "cached_fallback")
-        self.assertEqual(Path(state["activeArchive"]).name, older.name)
+        self.assertEqual(state["status"], "invalid_latest")
+        self.assertEqual(state["activeArchive"], "")
         self.assertEqual(Path(state["rejectedArchive"]).name, newer.name)
         self.assertIn("central directory", state["fallbackReason"].lower())
+        self.assertEqual(retained, prior_export)
 
     def test_missing_member_crc_failure_and_malformed_xml_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -154,6 +167,7 @@ class HealthArchivePreparationTests(unittest.TestCase):
             missing = root / "missing.zip"
             crc_failure = root / "crc-failure.zip"
             malformed = root / "malformed.zip"
+            duplicate = root / "duplicate.zip"
             output = root / "apple_health_export" / "export.xml"
             with zipfile.ZipFile(missing, "w") as archive:
                 archive.writestr("other.xml", b"<HealthData/>")
@@ -163,13 +177,18 @@ class HealthArchivePreparationTests(unittest.TestCase):
             crc_failure.write_bytes(corrupted)
             with zipfile.ZipFile(malformed, "w") as archive:
                 archive.writestr(MEMBER, b"<HealthData><ExportDate")
+            with zipfile.ZipFile(duplicate, "w") as archive:
+                archive.writestr(MEMBER, valid_health_xml("2026-07-25 21:00:00 +0530"))
+                archive.writestr(MEMBER, valid_health_xml("2026-07-25 22:00:00 +0530"))
 
-            with self.assertRaises(KeyError):
+            with self.assertRaises(zipfile.BadZipFile):
                 prepare_archive(missing, output)
             with self.assertRaises(zipfile.BadZipFile):
                 prepare_archive(crc_failure, output)
             with self.assertRaises(zipfile.BadZipFile):
                 prepare_archive(malformed, output)
+            with self.assertRaises(zipfile.BadZipFile):
+                prepare_archive(duplicate, output)
             self.assertFalse(output.exists())
 
 

@@ -52,7 +52,16 @@ export type HealthLiveSnapshot = {
     message?: string;
     [key: string]: unknown;
   };
-  coverage?: Record<string, { firstDate: string; lastDate: string; records: number; weekly: boolean; monthly: boolean }>;
+  coverage?: Record<string, {
+    firstDate: string;
+    lastDate: string;
+    records: number;
+    status?: "available" | "missing_target";
+    weekly: boolean;
+    monthly: boolean;
+    missingDates7?: string[];
+    missingDates30?: string[];
+  }>;
   categoryCoverage?: Record<string, { date: string; available: boolean; metricCount: number; recordCount: number }>;
   categories: HealthCategorySnapshot[];
   sources: HealthSourceSnapshot[];

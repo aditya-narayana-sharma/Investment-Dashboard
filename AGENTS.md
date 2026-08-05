@@ -76,32 +76,42 @@ valid Health snapshot with a failed extraction.
   pages or replace them with oversized Kanban variants. Clicking an action
   moves it to Completed Today with strike-through styling; retain that state
   through the local day and clear completed items at local midnight.
-- Keep Health & Wellness as a non-scrolling 2x2 console with H-1 Action Board,
-  H-2 Health Status, H-3 Daily Guidance, and H-4 Vital Metrics. Dense Health
+- Keep Health & Wellness as a non-scrolling three-panel console with H-1
+  Action Board, H-2 Daily Optimism, and H-3 Vital Metrics. Dense Health
   content belongs on explicit URL-backed sub-pages, never in a vertically
   scrolling workspace. Incognito must gate thumbnail values, drill-down values,
   source/archive metadata, actions, recommendations, and accessibility text.
+  H-3 Vital Metrics groups KPIs into four comparison-direction columns
+  (favourable / context dependent / unfavourable / unavailable) while retaining
+  original Health category colour accents on each tile. Body Measurements and
+  Hearing remain excluded.
 - The shared Sectoral Analytics industry toggle is an **S-2-only control**.
   `selectedSectorId` may drive S-2 matrices, charts, rankings, company
   composition, and linked analytical panels, but it must not be passed into
-  Market Intelligence or S-4 components.
-- **Market Intelligence (former S-3 Live Intelligence Digest) is always complete
-  and unfiltered.** Render all refreshed items from the exact Newsletters and
-  Axis Research mailboxes plus Calendar, active Reminders, Notes, Podcasts, and
-  the full tracked earnings calendar inside Calendar + action feeds. Do not add
+  Market Intelligence or S-3 components.
+- **Market Intelligence is always complete and unfiltered** and owns exactly
+  four top-level sections: M-1 Action Board, M-2 Live Intelligence
+  (Newsletters, Axis Research, and Podcasts), M-3 Earnings Calendar, and M-4
+  Calendar + Reminders. Do not add
   an industry filter banner, sector-match count, excluded-industry message,
   dimming, or hidden records. Sectoral Analytics must not host a digest or
   Market Intelligence promo/cross-link; the digest lives only in the Market
   Intelligence workspace.
-- **S-4 Earnings is always complete and interactive.** Every tracked earnings
-  event remains visible, enabled, and selectable regardless of the S-2 industry
-  selection. Do not add `sector-dimmed`, `sector-match`, `aria-disabled`, or
+- **M-3 Earnings is the sole rendered complete earnings-calendar location.**
+  Every tracked event remains visible, enabled, and selectable regardless of
+  the S-2 industry selection. Apple Calendar Earnings rows are scheduling
+  evidence only; only independently verified IR/NSE results may populate KPI
+  values or reported state. Do not duplicate earnings in Sectoral Analytics or
+  M-4, and do not add `sector-dimmed`, `sector-match`, `aria-disabled`, or
   sector-gated click behavior to earnings events.
-- The S-4 Decision Framework may remain sector-specific only through its own
+- **M-4 Calendar + Reminders** contains exactly one inner Calendar collapsible
+  for complete non-earnings calendars and exactly one inner Reminders
+  collapsible with Completed, Scheduled Important, and Work / Job 🔍 groups.
+- The S-3 Decision Framework may remain sector-specific only through its own
   local selector. Its state must not read or mutate the S-2 industry selection.
 - Dimming classes and filter status UI are valid only inside S-2. When an S-2
-  industry changes, verify Market Intelligence and S-4 contain zero dimmed
-  descendants and zero disabled tabs.
+  industry changes, verify Market Intelligence and S-3 contain zero unintended
+  dimmed descendants and M-3 contains zero disabled earnings controls.
 - PDF/report generation remains independent of the currently selected S-2
   industry unless the report explicitly labels a chart as a selected-industry
   view.
@@ -115,11 +125,11 @@ After changing Sectoral Analytics or Market Intelligence behavior:
 2. Open `?view=sectors`, select a different S-2 industry, and confirm S-2 updates.
 3. Open `?view=intelligence` and confirm Market Intelligence has no
    `.sector-intelligence-filter` or `.sector-dimmed` descendants, shows complete
-   source counts, and includes earnings calendar rows inside Calendar + action
-   feeds → Earnings. Confirm Sectoral Analytics has no S-3 digest/cross-link
-   and no duplicate full digest.
-4. Confirm S-4 has no `.sector-dimmed` descendants, no disabled earnings tabs,
-   and all earnings events remain selectable.
-5. Confirm the S-4 local Decision Framework selector changes only its own cards.
+   source counts, exposes M-1 through M-4, renders the complete earnings calendar
+   only in M-3, and excludes Earnings-calendar rows from M-4.
+4. Confirm Sectoral Analytics exposes S-1 through S-3 only, with no S-4,
+   earnings grid, digest, promo, or cross-link.
+5. Confirm the S-3 local Decision Framework selector changes only its own cards,
+   and M-3 has no dimmed or disabled earnings controls.
 6. Verify both the localhost and private Tailscale URLs and check the browser
    console for errors.

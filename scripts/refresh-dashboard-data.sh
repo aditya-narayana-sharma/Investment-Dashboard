@@ -21,6 +21,7 @@ check_source() {
   local body
   local status
   local data_date
+  local source_detail=""
   body="$(mktemp)"
   code="$(curl -sS --max-time "$max_time" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$body" -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
   if [[ -z "$code" || "$code" == "000" ]]; then
@@ -33,6 +34,15 @@ except Exception: print("invalid_json")' "$body")"
     data_date="$(/usr/bin/python3 -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get("dataDate", ""))
 except Exception: print("")' "$body")"
+    source_detail="$(/usr/bin/python3 -c 'import json,sys
+try:
+  payload=json.load(open(sys.argv[1]))
+  parts=[]
+  if payload.get("authStatus"): parts.append("auth=" + str(payload["authStatus"]))
+  unavailable=payload.get("unavailableSections") or []
+  if unavailable: parts.append("unavailable=" + ",".join(map(str, unavailable)))
+  print(" · ".join(parts))
+except Exception: print("")' "$body")"
   fi
 
   local semantic_ok=false
@@ -44,9 +54,9 @@ except Exception: print("")' "$body")"
   fi
 
   if [[ "$semantic_ok" == true ]]; then
-    printf '%s\tOK\tHTTP %s · status=%s%s\n' "$name" "$code" "$status" "${data_date:+ · dataDate=$data_date}"
+    printf '%s\tOK\tHTTP %s · status=%s%s%s\n' "$name" "$code" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}"
   else
-    printf '%s\tFAILED\tHTTP %s · status=%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "$expected_status" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
+    printf '%s\tFAILED\tHTTP %s · status=%s%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}" "$expected_status" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
     FAILURES=$((FAILURES + 1))
     FAILED_NAMES+=("${name} (${status:-missing})")
   fi

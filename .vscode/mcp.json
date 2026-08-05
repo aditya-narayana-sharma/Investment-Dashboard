@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"kite-mcp-server": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"npm@12.0.2"
+			],
+			"cwd": "${workspaceFolder}",
+			"env": {}
+		}
+	},
+	"inputs": []
+}

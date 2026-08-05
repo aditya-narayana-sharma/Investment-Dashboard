@@ -283,9 +283,6 @@ export default function Report() {
 
   const investmentMailReady = content?.sources.axisResearch.status === "live" && content?.sources.newsletters.status === "live";
   if (!snapshot || snapshot.status !== "live" || !investmentMailReady) {
-    const authUrl = snapshot?.authUrl || (snapshot?.reauthSuggested || snapshot?.status === "auth_required" || snapshot?.authStatus === "unauthenticated" || snapshot?.authStatus === "expired"
-      ? "/api/kite/login?force=1&redirect=1"
-      : undefined);
     const authStatus = snapshot?.authStatus;
     const needsAuth = Boolean(
       snapshot?.status === "auth_required"
@@ -293,6 +290,9 @@ export default function Report() {
       || authStatus === "expired"
       || (snapshot?.authUrl && snapshot?.status !== "partial" && snapshot?.status !== "live"),
     );
+    const authUrl = needsAuth
+      ? snapshot?.authUrl || "/api/kite/login?force=1&redirect=1"
+      : undefined;
     const isPartialSession = snapshot?.status === "partial" || authStatus === "partial";
     const navLabel = refreshing
       ? "Latest Kite session required before PDF generation"
@@ -337,10 +337,10 @@ export default function Report() {
         <h1>{title}</h1>
         <p>{detail}</p>
         <div className={styles.gateActions}>
-          {authUrl && <a href={authUrl} target="_blank" rel="noreferrer"><LogIn size={16}/> {needsAuth ? (authStatus === "expired" ? "Re-authenticate Kite" : "Authenticate Kite") : "Re-auth Kite"} <ExternalLink size={13}/></a>}
+          {authUrl && <a href={authUrl} target="_blank" rel="noreferrer"><LogIn size={16}/> {authStatus === "expired" ? "Re-authenticate Kite" : "Authenticate Kite"} <ExternalLink size={13}/></a>}
           <button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><RefreshCw className={refreshing ? styles.spin : ""} size={16}/>{retryLabel}</button>
         </div>
-        <small>Zerodha requires a fresh Kite Connect login each trading day (~06:00 IST expiry). That is expected broker behavior, not a dashboard bug. After overnight expiry: Authenticate/Re-auth → complete Zerodha login → Retry. Also use Re-auth when margins keeps failing on a partial refresh.</small>
+        <small>Zerodha requires a fresh Kite Connect login each trading day (~06:00 IST expiry). That is expected broker behavior, not a dashboard bug. After an explicit token-expired state: Authenticate/Re-auth → complete Zerodha login → Retry. Partial secondary-source failures should be retried or diagnosed without invalidating a valid session.</small>
       </section>
     </main>;
   }

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "asOf": "REPLACE_WITH_FETCH_TIMESTAMP",
+  "coverageStart": "REPLACE_WITH_YYYY-MM-DD",
+  "coverageEnd": "REPLACE_WITH_YYYY-MM-DD",
+  "sources": {
+    "NSE": {
+      "name": "NSE / Nifty Indices holiday calendar",
+      "url": "https://www.niftyindices.com/resources/holiday-calendar"
+    },
+    "US": {
+      "name": "NYSE official hours and calendars",
+      "url": "https://www.nyse.com/markets/hours-calendars"
+    }
+  },
+  "holidays": []
+}

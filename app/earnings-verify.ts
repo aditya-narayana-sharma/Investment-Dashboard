@@ -16,12 +16,18 @@ const monthIndex: Record<string, number> = {
   dec: 11, december: 11,
 };
 
-function istAnalysisDateKey(date = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+/** Latest completed Asia/Kolkata calendar day (yesterday in IST). */
+export function latestCompletedIstDateKey(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+  const currentIstDate = formatter.format(date);
+  const previousDay = new Date(`${currentIstDate}T00:00:00+05:30`);
+  previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+  return formatter.format(previousDay);
 }
 
 /** Parse calendar labels like "20 Jul" into an IST YYYY-MM-DD key for the analysis year. */
 export function earningsEventDateKey(event: EarningsEvent, analysisDate: string): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(event.dateKey ?? "")) return event.dateKey!;
   const match = event.date.trim().match(/^(\d{1,2})\s+([A-Za-z]+)/);
   if (!match) return null;
   const day = Number(match[1]);
@@ -46,7 +52,7 @@ function reportedKpisFilled(event: EarningsEvent) {
  * - overdue pending rows are called out as watch items but do not alone demote verified
  *   (calendar dates are scheduling evidence; KPIs stay blank until publication)
  */
-export function buildEarningsSnapshot(events: EarningsEvent[], analysisDate = istAnalysisDateKey()): EarningsSnapshot {
+export function buildEarningsSnapshot(events: EarningsEvent[], analysisDate = latestCompletedIstDateKey()): EarningsSnapshot {
   if (!events.length) {
     return {
       status: "unavailable",
@@ -90,6 +96,6 @@ export function buildEarningsSnapshot(events: EarningsEvent[], analysisDate = is
     asOf: `${analysisDate} · verified local calendar contract`,
     analysisDate,
     events,
-    message: `Earnings calendar verified through today. Reported KPI rows retain source URLs; pending future values remain intentionally blank.${overdueNote}`,
+    message: `Earnings calendar verified through the latest completed Asia/Kolkata day (${analysisDate}). Reported KPI rows retain source URLs; pending future values remain intentionally blank.${overdueNote}`,
   };
 }

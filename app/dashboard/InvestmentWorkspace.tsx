@@ -1,33 +1,86 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
-import { Activity, CheckCircle2, Database, ExternalLink, FileText, Gauge, Globe2, Mail, ScanSearch, ShieldAlert, Target } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { Activity, CheckCircle2, Database, ExternalLink, FileText, Gauge, Globe2, Mail, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fiiDiiFlowsSnapshot, fiveDayDiiNetCr, fiveDayFiiNetCr, flowCompositionSlices, formatFlowCr, formatFlowDeltaCr } from "../fii-dii-flows";
 import { axisArchiveAudit, riskAxes, type RiskProfile } from "../portfolio-data";
 import type { ContentDigestSnapshot, MailRecommendation } from "../content-types";
-import type { KiteSnapshot } from "../live-types";
+import type { KiteSnapshot, LiveHolding } from "../live-types";
+import { portfolioReturnTone } from "../portfolio-concentration.mjs";
+import { buildRiskExplanation } from "../risk-explanations";
 import { thesisBullets, type ThesisBullet } from "../thesis-bullets";
 import type { MacroBandKey, MacroEventKey } from "./types";
-import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, HoldingLabel, RiskPill } from "./shared-ui";
+import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, HoldingLabel, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { KiteOrderTicket, type KiteOrderSelection } from "./KiteOrderTicket";
 import { analysisWindowLabel, exposureFactors, holdingOuterFill, inr, macroEvents } from "./utils";
+
+type PortfolioMapDatum = Pick<LiveHolding, "symbol" | "name" | "qty" | "avg" | "price" | "value" | "pnl" | "pnlPct" | "dayPnl" | "dayPct" | "sector" | "subSector" | "risk"> & {
+  weight: number;
+  displayColor: string;
+  returnTone: "gain" | "flat" | "loss";
+};
+
+type PortfolioMapRect = PortfolioMapDatum & { x: number; y: number; width: number; height: number };
+
+function portfolioReturnColor(returnPct: number): string {
+  const tone = portfolioReturnTone(returnPct);
+  return tone === "gain" ? "#137a43" : tone === "loss" ? "#a92f39" : "#9a6b12";
+}
+
+function layoutPortfolioMap(data: PortfolioMapDatum[], x = 0, y = 0, width = 100, height = 100): PortfolioMapRect[] {
+  if (!data.length) return [];
+  if (data.length === 1) return [{ ...data[0], x, y, width, height }];
+
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const target = total / 2;
+  let running = 0;
+  let splitAt = 1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < data.length; index += 1) {
+    running += data[index - 1].value;
+    const distance = Math.abs(target - running);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      splitAt = index;
+    }
+  }
+
+  const first = data.slice(0, splitAt);
+  const second = data.slice(splitAt);
+  const firstValue = first.reduce((sum, item) => sum + item.value, 0);
+  const ratio = total > 0 ? firstValue / total : first.length / data.length;
+  if (width >= height) {
+    const firstWidth = width * ratio;
+    return [...layoutPortfolioMap(first, x, y, firstWidth, height), ...layoutPortfolioMap(second, x + firstWidth, y, width - firstWidth, height)];
+  }
+  const firstHeight = height * ratio;
+  return [...layoutPortfolioMap(first, x, y, width, firstHeight), ...layoutPortfolioMap(second, x, y + firstHeight, width, height - firstHeight)];
+}
+
+function portfolioMapTooltip(holding: PortfolioMapDatum): string {
+  return `${holding.name} (${holding.symbol})\nQuantity: ${holding.qty}\nAverage price: ${inr.format(holding.avg)}\nLast price: ${inr.format(holding.price)}\nValue: ${inr.format(holding.value)}\nUnrealised P&L: ${holding.pnl >= 0 ? "+" : ""}${inr.format(holding.pnl)} (${holding.pnlPct >= 0 ? "+" : ""}${holding.pnlPct.toFixed(2)}%)\nDay P&L: ${holding.dayPnl >= 0 ? "+" : ""}${inr.format(holding.dayPnl)} (${holding.dayPct >= 0 ? "+" : ""}${holding.dayPct.toFixed(2)}%)\nIndustry: ${holding.sector}\nSubsector: ${holding.subSector}\nRisk: ${holding.risk}`;
+}
 
 function ThesisBulletList({ bullets, className = "thesis-bullet-list" }: { bullets: ThesisBullet[]; className?: string }) {
   if (!bullets.length) return <span className="thesis-empty">No scoped thesis in readable Mail content</span>;
   return <ul className={className}>{bullets.map((bullet) => <li key={`${bullet.marker}-${bullet.text}`} className={bullet.tone}><span aria-hidden="true">{bullet.marker}</span><span>{bullet.text}</span></li>)}</ul>;
 }
 
-function RiskRadar({ profiles, selected, onSelect, averageLabel, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; emptyLabel?: string }) {
+function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, explainSelected = false, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; idPrefix: string; explainSelected?: boolean; emptyLabel?: string }) {
   if (!profiles.length) return <div className="live-empty compact"><Mail size={22}/><b>{emptyLabel}</b><p>The refreshed source set did not produce a verified profile for the selected analysis window.</p></div>;
   const profile = profiles.find((item) => item.symbol === selected) ?? profiles[0];
+  const explanation = explainSelected ? buildRiskExplanation(profile, riskAxes) : null;
   const data = riskAxes.map((axis, index) => ({
     axis,
     score: profile.scores[index],
     average: Number((profiles.reduce((sum, item) => sum + item.scores[index], 0) / profiles.length).toFixed(1)),
   }));
+  const tabPanelId = `${idPrefix}-panel`;
 
   return <>
-    <div className="risk-selector" aria-label="Select risk profile">{profiles.map((item) => <button key={item.symbol} onClick={() => onSelect(item.symbol)} className={item.symbol === profile.symbol ? "active" : ""}>{item.symbol}</button>)}</div>
+    <div className="risk-selector" role="tablist" aria-label="Select risk profile">{profiles.map((item) => <button type="button" role="tab" id={`${idPrefix}-tab-${item.symbol}`} aria-controls={tabPanelId} aria-selected={item.symbol === profile.symbol} key={item.symbol} onClick={() => onSelect(item.symbol)} className={item.symbol === profile.symbol ? "active" : ""} aria-label={`${item.name} (${item.symbol})`}>{item.symbol}</button>)}</div>
+    <div role="tabpanel" id={tabPanelId} aria-labelledby={`${idPrefix}-tab-${profile.symbol}`}>
     <div className="risk-chart"><ResponsiveContainer width="100%" height={330}>
       <RadarChart data={data} outerRadius="72%" margin={{ top: 16, right: 38, bottom: 12, left: 38 }}>
         <PolarGrid stroke="#3b444e" />
@@ -39,7 +92,13 @@ function RiskRadar({ profiles, selected, onSelect, averageLabel, emptyLabel = "N
         <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} / 5`, "Risk score"]} />
       </RadarChart>
     </ResponsiveContainer></div>
-    <div className="risk-scale"><span><i className="dot green"/>1-2 lower</span><span><i className="dot amber"/>3 moderate</span><span><i className="dot red"/>4-5 elevated</span><em>Qualitative monitoring score, not probability of loss.</em></div>
+    <div className="risk-scale"><span><i className="dot green"/>1-2 lower</span><span><i className="dot amber"/>3 moderate</span><span><i className="dot red"/>4-5 elevated</span><em>Qualitative monitoring score, not a probability of loss or investment recommendation.</em></div>
+    {explanation && <aside className="risk-explanation" aria-live="polite" aria-labelledby={`${idPrefix}-explanation-title`}>
+      <header><span>Selected holding</span><h4 id={`${idPrefix}-explanation-title`}>{explanation.profileLabel}</h4></header>
+      <section><h5>Overview</h5><ul className="risk-overview-list">{explanation.overview.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul></section>
+      <section><h5>Axis explanations</h5><ul className="risk-axis-list">{explanation.axes.map((item) => <li key={item.axis} data-band={item.band}><b>{item.axis}</b><span>{item.score}/5 · {item.band}</span><p>{item.text.slice(item.text.indexOf(":") + 2)}</p></li>)}</ul></section>
+    </aside>}
+    </div>
   </>;
 }
 
@@ -281,6 +340,13 @@ function AxisRecommendationWorkbench({ recommendations, content, currentBySymbol
 
 export type PortfolioActivityView = "holdings" | "orders" | "positions" | "gtts" | "tsls";
 
+const INVESTMENT_SECTIONS = [
+  { id: "i1", label: "Action Board" },
+  { id: "i2", label: "Portfolio" },
+  { id: "i3", label: "Risk" },
+  { id: "i4", label: "Axis picks" },
+] as const;
+
 export type InvestmentWorkspaceProps = {
   snapshot: KiteSnapshot;
   content: ContentDigestSnapshot;
@@ -319,6 +385,7 @@ export type InvestmentWorkspaceProps = {
     [key: string]: unknown;
   }>;
   currentBySymbol: Map<string, number>;
+  onKiteRefresh: () => Promise<void>;
 };
 
 export function InvestmentWorkspace({
@@ -345,8 +412,13 @@ export function InvestmentWorkspace({
   donutHoldings,
   exposureComposition,
   currentBySymbol,
+  onKiteRefresh,
 }: InvestmentWorkspaceProps) {
-  const { holdings, portfolio, orders, gtts, marketCapAllocation, sectorAllocation, subSectorAllocation, classification, asOf } = snapshot;
+  const [activeSection, setActiveSection] = useState("i1");
+  const [selectedHoldingSymbol, setSelectedHoldingSymbol] = useState<string | null>(null);
+  const [engagedHoldingSymbol, setEngagedHoldingSymbol] = useState<string | null>(null);
+  const [orderSelection, setOrderSelection] = useState<KiteOrderSelection>(null);
+  const { holdings, portfolio, orders, gtts, marketCapAllocation, sectorAllocation, subSectorAllocation, classification } = snapshot;
   const positions = snapshot.positions ?? [];
   const entryGtts = gtts.filter((item) => (item.kind ?? "gtt") !== "tsl");
   const tsls = gtts.filter((item) => item.kind === "tsl");
@@ -361,15 +433,91 @@ export function InvestmentWorkspace({
     { key: "gtts", label: "GTTs" },
     { key: "tsls", label: "TSLs" },
   ];
+  const positiveValueHoldings = holdings.filter((holding) => holding.value > 0);
+  const currentPortfolioValue = positiveValueHoldings.reduce((sum, holding) => sum + holding.value, 0);
+  const portfolioMapData: PortfolioMapDatum[] = positiveValueHoldings
+    .map((holding) => ({
+      symbol: holding.symbol,
+      name: holding.name,
+      qty: holding.qty,
+      avg: holding.avg,
+      price: holding.price,
+      value: holding.value,
+      pnl: holding.pnl,
+      pnlPct: holding.pnlPct,
+      dayPnl: holding.dayPnl,
+      dayPct: holding.dayPct,
+      sector: holding.sector,
+      subSector: holding.subSector,
+      risk: holding.risk,
+      weight: currentPortfolioValue > 0 ? holding.value / currentPortfolioValue * 100 : 0,
+      displayColor: portfolioReturnColor(holding.pnlPct),
+      returnTone: portfolioReturnTone(holding.pnlPct),
+    }))
+    .sort((left, right) => right.value - left.value);
+  const portfolioMapRects = layoutPortfolioMap(portfolioMapData);
+  const activeHoldingSymbol = engagedHoldingSymbol ?? selectedHoldingSymbol;
+  const activeMapHolding = portfolioMapData.find((holding) => holding.symbol === activeHoldingSymbol) ?? null;
+  const toggleHoldingSelection = (symbol: string) => setSelectedHoldingSymbol((current) => current === symbol ? null : symbol);
+  const holdingBySymbol = new Map(holdings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+  const matchedAxisTargets = Array.from(new Map(mailAxisRecommendations
+    .filter((recommendation) => recommendation.target && holdingBySymbol.has(recommendation.symbol.toUpperCase()))
+    .map((recommendation) => [recommendation.symbol.toUpperCase(), recommendation])).values())
+    .map((recommendation) => {
+      const holding = holdingBySymbol.get(recommendation.symbol.toUpperCase())!;
+      const upside = recommendation.target && holding.price > 0 ? (recommendation.target / holding.price - 1) * 100 : null;
+      return { recommendation, holding, upside };
+    })
+    .filter((item) => item.upside !== null);
+  const axisCoveredValue = matchedAxisTargets.reduce((sum, item) => sum + item.holding.value, 0);
+  const axisCoveragePct = portfolio.value > 0 ? axisCoveredValue / portfolio.value * 100 : 0;
+  const weightedAxisUpside = axisCoveredValue > 0
+    ? matchedAxisTargets.reduce((sum, item) => sum + item.holding.value * (item.upside ?? 0), 0) / axisCoveredValue
+    : null;
+  const highRiskWeight = holdings.filter((holding) => holding.risk.toLowerCase().includes("high")).reduce((sum, holding) => sum + holding.weight, 0);
+  const negativeWeight = holdings.filter((holding) => holding.pnl < 0).reduce((sum, holding) => sum + holding.weight, 0);
+  const overviewTone = !hasPortfolio || portfolio.pnlPct < 0 || portfolio.dayPct < -1 ? "negative" : portfolio.pnlPct > 0 && portfolio.dayPct >= 0 ? "positive" : "neutral";
+  const overviewHeadline = !hasPortfolio
+    ? "Live portfolio required"
+    : overviewTone === "negative"
+      ? "Capital preservation takes priority"
+      : overviewTone === "positive"
+        ? "Constructive returns, concentration still binding"
+        : "Mixed tape: hold quality and rebalance selectively";
 
-  return <>
-      <div className="workspace-section">
+  useEffect(() => {
+    const sync = () => {
+      const requested = new URLSearchParams(window.location.search).get("section");
+      if (INVESTMENT_SECTIONS.some((section) => section.id === requested)) setActiveSection(requested!);
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const selectSection = (section: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", section);
+    url.searchParams.delete("page");
+    window.history.pushState({}, "", url);
+    setActiveSection(section);
+    expandDashboardSection(dashboardSectionNumberFromNavId(section));
+    document.getElementById(`investment-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return <div className="investment-workspace-shell">
+      <WorkspaceSectionNav
+        label="Investment sections"
+        sections={INVESTMENT_SECTIONS}
+        activeId={activeSection}
+        onSelect={selectSection}
+      />
+      <div id="investment-i1" className="workspace-section action-board-workspace-section">
       <CollapsibleSection number="I-1" title="Investment action board" note="Clickable daily actions, numeric advantages and strategic rationale">
         <DailyKanbanBoard workspace="investment"/>
       </CollapsibleSection>
       </div>
 
-      <div className="workspace-section">
+      <div id="investment-i2" className="workspace-section">
       <CollapsibleSection number="I-2" title="Portfolio" note="Holdings, orders, positions, GTTs, TSLs and nested allocation">
       <section className="metrics-strip">
         <article><span>Portfolio value</span><b>{portfolioMoney(portfolio.value)}</b><small>{hasPortfolio ? `${holdings.length} open equity exposures${isSnapshot ? " · snapshot" : ""}` : "Live Kite data required"}</small></article>
@@ -378,17 +526,36 @@ export function InvestmentWorkspace({
         <article><span>Available equity margin</span><b>{isLive && !unavailable.has("margins") ? inr.format(portfolio.equityMargin) : isSnapshot ? inr.format(portfolio.equityMargin) : "n/a"}</b><small>{isSnapshot ? "Last validated margin snapshot" : unavailable.has("margins") ? "Kite margins temporarily unavailable" : "Live equity segment net margin"}</small></article>
       </section>
 
-      <section className="executive-band">
-        <div className="signal"><ShieldAlert size={22}/><div><b>Portfolio stance: moderately constructive, concentration-limited</b><p>Airtel and ICICI Bank provide relative resilience; Eternal carries the highest valuation and oil-linked risk among large weights.</p></div></div>
-        <div className="market-ticker"><span>AXIS RESEARCH · AS OF {axisAsOfLabel.toUpperCase()}</span><b>{mailAxisRecommendations.length} calls</b><small>{content.investment.latestAxisAt}</small></div>
-        <div className="market-ticker"><span>NEWSLETTERS · {analysisWindowLabel(content).toUpperCase()}</span><b>{content.sources.newsletters.displayedCount ?? content.newsletters.length} items</b><small>{content.investment.latestNewsletterAt}</small></div>
+      <section className="portfolio-management" aria-labelledby="portfolio-management-title">
+        <div className="portfolio-management-heading"><div><Sparkles size={20}/><span><b id="portfolio-management-title">Portfolio management</b><small>Live Kite baseline + explicit Axis targets + audited local research coverage</small></span></div><span className="pill blue">{axisAsOfLabel}</span></div>
+        <div className="portfolio-management-grid">
+          <article className={`portfolio-management-card portfolio-overview ${overviewTone}`}>
+            <span>Portfolio overview</span><b>{overviewHeadline}</b>
+            <p>{hasPortfolio ? `${portfolio.pnlPct >= 0 ? "+" : ""}${portfolio.pnlPct.toFixed(2)}% unrealised · ${portfolio.dayPct >= 0 ? "+" : ""}${portfolio.dayPct.toFixed(2)}% today · ${portfolio.topTwo.toFixed(1)}% in the two largest positions.` : "Authenticate Kite to calculate the current portfolio stance."}</p>
+          </article>
+          <article className="portfolio-management-card mitigation">
+            <span><ShieldCheck size={15}/>Risk mitigation</span><b>{Math.max(highRiskWeight, negativeWeight).toFixed(1)}% priority exposure</b>
+            <ul><li>Cap additions to the largest two holdings until concentration falls below 65%.</li><li>Stage high-risk purchases; use verified results and protective exits rather than headline reactions.</li></ul>
+          </article>
+          <article className="portfolio-management-card upside">
+            <span><TrendingUp size={15}/>Axis-linked upside</span><b>{weightedAxisUpside === null ? "No matched target" : `${weightedAxisUpside >= 0 ? "+" : ""}${weightedAxisUpside.toFixed(1)}%`}</b>
+            <p>{matchedAxisTargets.length} live holding{matchedAxisTargets.length === 1 ? "" : "s"} with explicit current Axis target · {axisCoveragePct.toFixed(1)}% portfolio coverage.</p>
+            <small>{axisArchiveAudit.validPdfs} valid PDFs / {axisArchiveAudit.pagesRead.toLocaleString("en-IN")} pages audited. Archive-only documents are coverage evidence, not invented targets.</small>
+          </article>
+          <article className="portfolio-management-card alpha">
+            <span><Target size={15}/>Actions to maximise α</span><b>Rebalance by evidence, not turnover</b>
+            <ul><li>Direct new capital toward verified positive-upside calls outside the largest weights.</li><li>Re-underwrite negative-P&amp;L and high-risk positions after each reported KPI set.</li><li>Keep cash capacity for dislocations; review oil, INR and FII triggers before sizing.</li></ul>
+          </article>
+        </div>
+        <div className="portfolio-management-sources"><span>Axis Research: {mailAxisRecommendations.length} current calls · {content.investment.latestAxisAt}</span><span>Newsletters: {content.sources.newsletters.displayedCount ?? content.newsletters.length} items · {content.investment.latestNewsletterAt}</span></div>
       </section>
 
+      <div className="portfolio-analysis-grid">
       <section className="panel chart-panel nested-chart-panel">
         <div className="panel-title"><div><h3>Nested portfolio allocation</h3><p>Outer: live Kite holdings and P&amp;L · upper-middle: sub-sector · lower-middle: industry · inner: AMFI market-cap tier</p></div><Gauge size={18}/></div>
         {hasPortfolio ? <><div className="nested-chart-wrap">
-          <ResponsiveContainer width="100%" height={410}>
-            <PieChart margin={{top:12,right:12,bottom:12,left:12}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart margin={{top:4,right:4,bottom:4,left:4}}>
               <Pie data={marketCapAllocation} dataKey="value" nameKey="name" innerRadius="18%" outerRadius="31%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="inner"/>}>{marketCapAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
               <Pie data={sectorAllocation} dataKey="value" nameKey="name" innerRadius="34%" outerRadius="50%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="industry"/>}>{sectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
               <Pie data={subSectorAllocation} dataKey="value" nameKey="name" innerRadius="53%" outerRadius="70%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="subsector"/>}>{subSectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
@@ -403,20 +570,91 @@ export function InvestmentWorkspace({
         <div className="ring-key"><span><i className="ring outer"/>Outer · holding weight + U/Day P&amp;L (green gain / red loss)</span><span><i className="ring subsector"/>Upper-middle · sub-sector</span><span><i className="ring industry"/>Lower-middle · industry</span><span><i className="ring inner"/>Inner · AMFI market-cap tier</span><span><i className="shade"/>Shaded outer segment = negative day P&amp;L</span></div><div className={"classification-audit " + (classification.pendingSymbols.length ? "pending" : "verified")}><CheckCircle2 size={14}/><span>{classification.pendingSymbols.length ? "Verification pending: " + classification.pendingSymbols.join(", ") : "Verified industry and sub-sector · " + classification.industrySource + " · " + classification.marketCapSource + " · as of " + classification.asOf}{!classification.pendingSymbols.length && <> · <a href={classification.industryUrl} target="_blank" rel="noreferrer">NSE</a> · <a href={classification.marketCapUrl} target="_blank" rel="noreferrer">AMFI</a></>}{holdings.some((holding) => holding.symbol === "ADANIGREEN") && <small>ADANIGREEN · Power Generation · Renewable Power · Large Cap</small>}{holdings.some((holding) => holding.symbol === "LTF") && <small>LTF · Non Banking Financial Company · Diversified Retail NBFC · Mid Cap</small>}</span></div></> : <div className="live-empty"><Activity size={24}/><b>Live allocation is unavailable</b><p>{snapshot.message}</p>{snapshot.authUrl && <a href={snapshot.authUrl} target="_blank" rel="noreferrer">Authenticate Kite <ExternalLink size={14}/></a>}</div>}
       </section>
 
-      <section className="panel holdings-panel">
-        <div className="panel-title"><div><h3>Portfolio activity</h3><p>{isLive ? "Live-session prices from Kite" : isSnapshot ? `Last validated Kite snapshot · ${asOf}` : "Waiting for Kite"}</p></div>
+      <div className="portfolio-analysis-stack">
+      <section className="panel holdings-panel portfolio-activity-panel">
+        <div className="panel-title"><div><h3>Portfolio activity</h3></div>
           <div className="segmented portfolio-activity-tabs">{activityTabs.map((tab) => <button key={tab.key} type="button" onClick={() => setView(tab.key)} className={view === tab.key ? "active" : ""}>{tab.label}</button>)}</div>
         </div>
-        {view === "holdings" && <div className="table-scroll"><table className="positions-table"><thead><tr><th>Holding</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P&amp;L</th><th>Day P&amp;L</th><th>Weight</th><th>Quarter stance</th><th>Risk</th></tr></thead><tbody>{holdings.map(h=><tr key={h.symbol}><td><b>{h.name}</b><small className="position-symbol">{h.symbol}</small><span className="position-tags"><i>{h.sector}</i><i>{h.subSector}</i><i>{h.marketCap}</i></span></td><td>{h.qty}</td><td>{inr.format(h.avg)}</td><td>{inr.format(h.price)}</td><td>{inr.format(h.value)}</td><td className={h.pnl>=0?"positive":"negative"}>{h.pnl>=0?"+":""}{inr.format(h.pnl)}<small>{h.pnlPct>=0?"+":""}{h.pnlPct.toFixed(2)}%</small></td><td className={h.dayPnl>=0?"positive":"negative"}>{h.dayPnl>=0?"+":""}{inr.format(h.dayPnl)}<small>{h.dayPct>=0?"+":""}{h.dayPct.toFixed(2)}%</small></td><td><div className="weight-cell"><span style={{width:`${Math.min(100,h.weight*2.1)}%`,background:h.color}}/>{h.weight.toFixed(1)}%</div></td><td><b>{h.quarter}</b><small>{h.stance}</small></td><td><RiskPill value={h.risk}/></td></tr>)}{!holdings.length && <tr><td colSpan={10}><div className="table-empty">No static positions are shown. Connect Kite to load the live portfolio.</div></td></tr>}</tbody></table></div>}
+        {view === "holdings" && (holdings.length
+          ? <><div className="portfolio-activity-table">
+              <table className="positions-table portfolio-activity-matrix">
+                <colgroup><col className="metric-col"/>{holdings.map((holding) => <col className="holding-data-col" key={holding.symbol}/>)}</colgroup>
+                <thead><tr><th scope="col">Metric</th>{holdings.map((holding) => <th scope="col" key={holding.symbol} title={holding.name} data-symbol={holding.symbol} className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined}><span className="holding-ticker-actions"><b>{holding.symbol}</b><span><button type="button" className="buy" disabled={!isLive} onClick={() => setOrderSelection({ holding, side: "BUY" })} title={isLive ? `Open BUY order ticket for ${holding.symbol}` : "Live Kite authentication is required"}>BUY</button><button type="button" className="sell" disabled={!isLive} onClick={() => setOrderSelection({ holding, side: "SELL" })} title={isLive ? `Open SELL order ticket for ${holding.symbol}` : "Live Kite authentication is required"}>SELL</button></span></span></th>)}</tr></thead>
+                <tbody>
+                  <tr><th scope="row">Qty</th>{holdings.map((holding) => <td className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined} key={holding.symbol}>{holding.qty}</td>)}</tr>
+                  <tr><th scope="row">Avg</th>{holdings.map((holding) => <td className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined} key={holding.symbol}>{inr.format(holding.avg)}</td>)}</tr>
+                  <tr><th scope="row">Last</th>{holdings.map((holding) => <td className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined} key={holding.symbol}>{inr.format(holding.price)}</td>)}</tr>
+                  <tr><th scope="row">Value</th>{holdings.map((holding) => <td className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined} key={holding.symbol}>{inr.format(holding.value)}</td>)}</tr>
+                  <tr><th scope="row">Unrealised</th>{holdings.map((holding) => <td className={`${holding.pnl >= 0 ? "positive" : "negative"}${activeHoldingSymbol === holding.symbol ? " holding-column-active" : ""}`} key={holding.symbol}><b>{holding.pnl >= 0 ? "+" : ""}{inr.format(holding.pnl)}</b><small>{holding.pnlPct >= 0 ? "+" : ""}{holding.pnlPct.toFixed(2)}%</small></td>)}</tr>
+                  <tr><th scope="row">Day P&amp;L</th>{holdings.map((holding) => <td className={`${holding.dayPnl >= 0 ? "positive" : "negative"}${activeHoldingSymbol === holding.symbol ? " holding-column-active" : ""}`} key={holding.symbol}><b>{holding.dayPnl >= 0 ? "+" : ""}{inr.format(holding.dayPnl)}</b><small>{holding.dayPct >= 0 ? "+" : ""}{holding.dayPct.toFixed(2)}%</small></td>)}</tr>
+                  <tr><th scope="row">Weight</th>{holdings.map((holding) => <td className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined} key={holding.symbol}><b className="compact-weight" style={{color:holding.color}}>{holding.weight.toFixed(1)}%</b></td>)}</tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="portfolio-activity-mobile" aria-label="Portfolio activity holdings">
+              {holdings.map((holding) => <article key={holding.symbol} className={activeHoldingSymbol === holding.symbol ? "holding-column-active" : undefined}>
+                <header><b>{holding.symbol}</b><span className="holding-mobile-order-actions"><button type="button" className="buy" disabled={!isLive} onClick={() => setOrderSelection({ holding, side: "BUY" })}>BUY</button><button type="button" className="sell" disabled={!isLive} onClick={() => setOrderSelection({ holding, side: "SELL" })}>SELL</button></span><strong>{holding.weight.toFixed(1)}%</strong></header>
+                <dl>
+                  <div><dt>Qty</dt><dd>{holding.qty}</dd></div>
+                  <div><dt>Avg</dt><dd>{inr.format(holding.avg)}</dd></div>
+                  <div><dt>Last</dt><dd>{inr.format(holding.price)}</dd></div>
+                  <div><dt>Value</dt><dd>{inr.format(holding.value)}</dd></div>
+                  <div><dt>Unrealised</dt><dd className={holding.pnl >= 0 ? "positive" : "negative"}>{holding.pnl >= 0 ? "+" : ""}{inr.format(holding.pnl)} <small>{holding.pnlPct >= 0 ? "+" : ""}{holding.pnlPct.toFixed(2)}%</small></dd></div>
+                  <div><dt>Day P&amp;L</dt><dd className={holding.dayPnl >= 0 ? "positive" : "negative"}>{holding.dayPnl >= 0 ? "+" : ""}{inr.format(holding.dayPnl)} <small>{holding.dayPct >= 0 ? "+" : ""}{holding.dayPct.toFixed(2)}%</small></dd></div>
+                </dl>
+              </article>)}
+            </div></>
+          : <div className="table-empty">No static positions are shown. Connect Kite to load the live portfolio.</div>)}
         {view === "orders" && <div className="activity-single">{orders.map(o=><div className="activity-row" key={o.id}><div><b>{o.symbol}</b><small>{o.side} {o.qty} · {o.type}</small></div><strong>{inr.format(o.price)}</strong><span className={`pill ${o.status.toLowerCase()==="complete"?"green":"amber"}`}>{o.status}</span></div>)}{!orders.length&&<div className="table-empty">{unavailable.has("orders") ? "Kite orders are temporarily unavailable." : "No live orders."}</div>}</div>}
         {view === "positions" && <div className="activity-single">{positions.map(p=><div className="activity-row" key={p.id}><div><b>{p.symbol}</b><small>{p.side} {p.qty} · {p.product}</small></div><strong className={p.pnl>=0?"positive":"negative"}>{p.pnl>=0?"+":""}{inr.format(p.pnl)}</strong><span className="pill blue">{inr.format(p.price)}</span></div>)}{!positions.length&&<div className="table-empty">{unavailable.has("positions") ? "Kite positions are temporarily unavailable." : "No open day/net positions beyond the holdings book."}</div>}</div>}
         {view === "gtts" && <div className="activity-single">{entryGtts.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · trigger {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}{!entryGtts.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs are temporarily unavailable." : "No active entry GTTs."}</div>}</div>}
         {view === "tsls" && <div className="activity-single">{tsls.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · stop {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}{!tsls.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs/TSLs are temporarily unavailable." : "No protective TSL / stop-loss GTTs."}</div>}</div>}
       </section>
+
+      <section className="panel portfolio-map-panel" aria-labelledby="portfolio-map-title">
+        <div className="portfolio-map-heading">
+          <div><h3 id="portfolio-map-title">Portfolio concentration map</h3><p>Live Kite holdings · market-value area</p></div>
+          <div className="portfolio-map-legend" aria-label="Concentration map legend"><span>Tile size = portfolio weight</span><span>Color = unrealised return</span></div>
+        </div>
+        {portfolioMapRects.length ? <div className="portfolio-map" role="group" aria-label="Interactive portfolio concentration treemap">
+          {portfolioMapRects.map((holding) => {
+            const selected = selectedHoldingSymbol === holding.symbol;
+            const dimmed = selectedHoldingSymbol !== null && !selected;
+            const showSecondary = holding.width >= 24 && holding.height >= 32;
+            return <button
+              type="button"
+              key={holding.symbol}
+              className={`portfolio-map-tile ${holding.returnTone}${selected ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
+              style={{ left: `${holding.x}%`, top: `${holding.y}%`, width: `${holding.width}%`, height: `${holding.height}%`, "--portfolio-map-color": holding.displayColor } as CSSProperties}
+              aria-pressed={selected}
+              aria-label={portfolioMapTooltip(holding).replaceAll("\n", ". ")}
+              title={portfolioMapTooltip(holding)}
+              onMouseEnter={() => setEngagedHoldingSymbol(holding.symbol)}
+              onMouseLeave={() => setEngagedHoldingSymbol(null)}
+              onFocus={() => setEngagedHoldingSymbol(holding.symbol)}
+              onBlur={() => setEngagedHoldingSymbol(null)}
+              onClick={() => toggleHoldingSelection(holding.symbol)}
+            >
+              <span className="portfolio-map-primary"><b>{holding.symbol}</b><strong>{holding.weight.toFixed(1)}%</strong><em>{inr.format(holding.value)}</em></span>
+              {showSecondary && <span className="portfolio-map-secondary"><span>U {holding.pnl >= 0 ? "+" : ""}{inr.format(holding.pnl)}</span><span>Day {holding.dayPnl >= 0 ? "+" : ""}{inr.format(holding.dayPnl)}</span></span>}
+            </button>;
+          })}
+          {activeMapHolding && <aside className="portfolio-map-tooltip" role="status">
+            <b>{activeMapHolding.name} · {activeMapHolding.symbol}</b>
+            <span>Qty {activeMapHolding.qty} · Avg {inr.format(activeMapHolding.avg)} · Last {inr.format(activeMapHolding.price)}</span>
+            <span>Value {inr.format(activeMapHolding.value)} · Weight {activeMapHolding.weight.toFixed(2)}%</span>
+            <span>Unrealised {activeMapHolding.pnl >= 0 ? "+" : ""}{inr.format(activeMapHolding.pnl)} ({activeMapHolding.pnlPct >= 0 ? "+" : ""}{activeMapHolding.pnlPct.toFixed(2)}%) · Day {activeMapHolding.dayPnl >= 0 ? "+" : ""}{inr.format(activeMapHolding.dayPnl)}</span>
+            <span>{activeMapHolding.sector} · {activeMapHolding.subSector} · Risk {activeMapHolding.risk}</span>
+          </aside>}
+        </div> : <div className="live-empty compact"><Activity size={22}/><b>Concentration map unavailable</b><p>Connect Kite to load current holding values.</p></div>}
+      </section>
+      </div>
+      {orderSelection && <KiteOrderTicket key={`${orderSelection.side}-${orderSelection.holding.symbol}`} selection={orderSelection} onClose={() => setOrderSelection(null)} onSubmitted={onKiteRefresh}/>} 
+      </div>
       </CollapsibleSection>
       </div>
 
-      <div className="workspace-section">
+      <div id="investment-i3" className="workspace-section">
       <CollapsibleSection number="I-3" title="Risk" note="Risk composition, holdings radar and macro scenario lab">
         <section className="panel macro-scenario-panel" aria-label="Macro scenario lab">
           <div className="panel-title"><div><h3>Macro scenario lab</h3><p>Select an event, its decision range and the matching Mail evidence</p></div><Globe2 size={18}/></div>
@@ -444,12 +682,12 @@ export function InvestmentWorkspace({
               <p className="exposure-method">Method: six 1-5 monitoring inputs contribute equally. Segment width = raw score ÷ 6; the full bar = their average. This is a prioritisation aid, not probability of loss.</p>
             </> : <div className="live-empty compact"><ShieldAlert size={24}/><b>Risk composition waits for live positions</b><p>No stored price snapshot is displayed.</p></div>}
           </section>
-          <article className="panel risk-panel"><div className="panel-title"><div><h3>Portfolio / holdings risk</h3><p>{livePortfolioRiskProfiles.length} current Kite holdings · selectable against live-portfolio average</p></div><ScanSearch size={18}/></div><RiskRadar profiles={livePortfolioRiskProfiles} selected={portfolioRisk} onSelect={setPortfolioRisk} averageLabel="Current portfolio average" emptyLabel="No live holding risk profiles" /></article>
+          <article className="panel risk-panel"><div className="panel-title"><div><h3>Portfolio / holdings risk</h3><p>{livePortfolioRiskProfiles.length} current Kite holdings · selectable against live-portfolio average</p></div><ScanSearch size={18}/></div><RiskRadar profiles={livePortfolioRiskProfiles} selected={portfolioRisk} onSelect={setPortfolioRisk} averageLabel="Current portfolio average" idPrefix="portfolio-holdings-risk" explainSelected emptyLabel="No live holding risk profiles" /></article>
         </div>
       </CollapsibleSection>
       </div>
 
-      <div className="workspace-section">
+      <div id="investment-i4" className="workspace-section">
       <CollapsibleSection number="I-4" title="Axis picks" note={`Call matrix · Axis recommended stocks · recommended risk radar · as-of ${axisAsOfLabel}${content.investment.axisUsedLastTradingDay ? " · weekend/holiday fallback" : ""}`}>
         <section className="panel analyst-matrix">
           <div className="panel-title"><div><h3>Analyst call matrix</h3><p>Targets are reference points, not quarter forecasts</p></div><Target size={18}/></div>
@@ -475,8 +713,8 @@ export function InvestmentWorkspace({
           <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol. Other houses remain explicitly labelled supplementary references. Implied upside uses each live Kite last price.</span></div>
         </section>
         <AxisRecommendationWorkbench recommendations={mailAxisRecommendations} content={content} currentBySymbol={currentBySymbol}/>
-        <article className="panel risk-panel"><div className="panel-title"><div><h3>Recommended risk radar</h3><p>{axisAsOfLabel} · {mailAxisProfiles.length} deduplicated Axis calls from iCloud → Axis Research</p></div><Target size={18}/></div><RiskRadar profiles={mailAxisProfiles} selected={axisRisk} onSelect={setAxisRisk} averageLabel="Axis list average" emptyLabel={`No Axis risk profiles for ${mailWindow}`} /></article>
+        <article className="panel risk-panel"><div className="panel-title"><div><h3>Recommended risk radar</h3><p>{axisAsOfLabel} · {mailAxisProfiles.length} deduplicated Axis calls from iCloud → Axis Research</p></div><Target size={18}/></div><RiskRadar profiles={mailAxisProfiles} selected={axisRisk} onSelect={setAxisRisk} averageLabel="Axis list average" idPrefix="axis-recommended-risk" emptyLabel={`No Axis risk profiles for ${mailWindow}`} /></article>
       </CollapsibleSection>
       </div>
-  </>;
+  </div>;
 }

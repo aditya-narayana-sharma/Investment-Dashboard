@@ -9,6 +9,7 @@ import { sortDonutHoldings } from "./portfolio-donut";
 import type { ContentDigestSnapshot, MailRecommendation } from "./content-types";
 import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
+import { kiteAuthPresentation } from "./kite-auth-presentation";
 import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
@@ -63,7 +64,7 @@ export default function Home() {
     ?? (snapshot.status === "live"
       ? "authenticated"
       : snapshot.status === "partial"
-        ? "partial"
+        ? "authenticated"
         : snapshot.status === "auth_required"
           ? "unauthenticated"
           : snapshot.status === "snapshot"
@@ -77,20 +78,14 @@ export default function Home() {
     ? new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(new Date(tokenExpiresAtMs))
     : undefined;
   const nearTokenExpiry = Number.isFinite(hoursUntilTokenExpiry) && hoursUntilTokenExpiry >= 0 && hoursUntilTokenExpiry <= 2;
-  // Badge tracks session/token truth from authStatus — not mere presence of cached holdings.
-  // Cached/snapshot rows must never show "Kite authenticated", even if get_profile still works.
-  const kiteAuthControl =
-    isSnapshot || kiteAuthStatus === "unknown"
-      ? (snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired"
-          ? "authenticate"
-          : "cached")
-      : kiteAuthStatus === "authenticated" && isLive
-        ? "authenticated"
-        : kiteAuthStatus === "partial" || (kiteAuthStatus === "authenticated" && isPartial)
-          ? "partial"
-          : snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired"
-            ? "authenticate"
-            : "unavailable";
+  // Badge/action tracks explicit session truth, independent of partial data.
+  // This also ignores stale auth URLs or reauth suggestions on partial snapshots.
+  const { control: kiteAuthControl, showAuthAction } = kiteAuthPresentation({
+    status: snapshot.status,
+    authStatus: kiteAuthStatus,
+    authUrl: snapshot.authUrl,
+    reauthSuggested: snapshot.reauthSuggested,
+  });
   const healthCurrent = healthSnapshot.status === "live" && healthSnapshot.dataDate >= latestCompletedHealthDateKey();
   const healthRequiredDate = latestCompletedHealthDateKey();
   const healthMissingDates = useMemo(() => missingHealthDateKeys(healthSnapshot.dataDate, healthRequiredDate), [healthSnapshot.dataDate, healthRequiredDate]);
@@ -172,7 +167,7 @@ export default function Home() {
             ?? (data.status === "live"
               ? "authenticated"
               : data.status === "partial"
-                ? "partial"
+                ? "authenticated"
                 : data.status === "auth_required"
                   ? "unauthenticated"
                   : data.status === "snapshot"
@@ -411,20 +406,12 @@ export default function Home() {
           {kiteAuthControl === "authenticated"
             ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
             : kiteAuthControl === "partial"
-              ? <>
-                  <button className="kite-auth-control partial" type="button" disabled title="Kite session is valid but some portfolio sections failed to refresh"><Activity size={15}/><span>Kite partial</span></button>
-                  {(snapshot.reauthSuggested || snapshot.authUrl) && <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title="Clear the daily Kite token and open a fresh Zerodha login"><LogIn size={15}/><span>Re-auth Kite</span><ExternalLink size={13}/></a>}
-                </>
-              : kiteAuthControl === "authenticate" && (snapshot.authUrl || kiteAuthStatus === "unauthenticated" || kiteAuthStatus === "expired")
+              ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
+              : kiteAuthControl === "authenticate" && showAuthAction
                 ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
                 : kiteAuthControl === "cached"
-                  ? <>
-                      <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
-                      <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>
-                    </>
-                  : snapshot.authUrl
-                    ? <a className="kite-auth-control" href={snapshot.authUrl} target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>
-                    : <a className="kite-auth-control" href="/api/kite/login?force=1&redirect=1" target="_blank" rel="noreferrer" title="Open Zerodha Kite login"><LogIn size={15}/><span>Authenticate Kite</span><ExternalLink size={13}/></a>}
+                  ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
+                  : <button className="kite-auth-control unavailable" type="button" disabled title="Kite is unavailable; inspect the displayed source failure before attempting authentication"><Activity size={15}/><span>Kite unavailable</span></button>}
           {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
           <button onClick={()=>void refreshAll()} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
           <em>All sources · 5 min</em>
@@ -461,17 +448,15 @@ export default function Home() {
         donutHoldings={donutHoldings}
         exposureComposition={exposureComposition}
         currentBySymbol={currentBySymbol}
+        onKiteRefresh={loadKite}
       />}
 
       {workspace === "sectors" && <SectorsWorkspace
-        content={content}
         selectedSectorIds={selectedSectorIds}
         onToggleSector={toggleSector}
         sectorMarket={sectorMarket}
         sectorMarketById={sectorMarketById}
         holdings={snapshot.holdings}
-        earningsSnapshot={earningsSnapshot}
-        earningsError={earningsError}
         benchmarks={sectorBenchmarks}
       />}
 
@@ -481,6 +466,7 @@ export default function Home() {
         mailWindow={mailWindow}
         earningsSnapshot={earningsSnapshot}
         earningsError={earningsError}
+        holdings={snapshot.holdings}
       />}
 
       {workspace === "health" && <HealthWorkspace
@@ -497,7 +483,7 @@ export default function Home() {
 
       </section>
 
-      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice; no orders were placed.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
+      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice. Kite orders require an explicit reviewed order ticket and typed confirmation.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
     </main>
   );
 }
