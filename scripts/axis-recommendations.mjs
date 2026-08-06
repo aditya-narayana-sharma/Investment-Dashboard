@@ -59,7 +59,7 @@ export function recommendationSymbol(name) {
   return match?.[1] ?? normalized.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 14);
 }
 
-function recommendationRiskScores(symbol, text) {
+export function recommendationRiskScores(symbol, text) {
   if (recommendationRiskOverrides[symbol]) return recommendationRiskOverrides[symbol];
   const scores = [3, 3, 3, 3, 3, 3];
   if (/premium valuation|expensive|high valuation|multiple|rerating/i.test(text)) scores[0] = 5;

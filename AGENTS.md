@@ -81,10 +81,11 @@ valid Health snapshot with a failed extraction.
   content belongs on explicit URL-backed sub-pages, never in a vertically
   scrolling workspace. Incognito must gate thumbnail values, drill-down values,
   source/archive metadata, actions, recommendations, and accessibility text.
-  H-3 Vital Metrics groups KPIs into four comparison-direction columns
-  (favourable / context dependent / unfavourable / unavailable) while retaining
-  original Health category colour accents on each tile. Body Measurements and
-  Hearing remain excluded.
+  H-3 Vital Metrics groups KPIs into three comparison-direction columns
+  (favourable / context dependent / unfavourable) while retaining original
+  Health category colour accents on each tile. Metrics without a selected-period
+  average remain visible under Context dependent (no dedicated unavailable
+  column). Body Measurements and Hearing remain excluded.
 - The shared Sectoral Analytics industry toggle is an **S-2-only control**.
   `selectedSectorId` may drive S-2 matrices, charts, rankings, company
   composition, and linked analytical panels, but it must not be passed into

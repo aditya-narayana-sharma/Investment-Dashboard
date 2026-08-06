@@ -16,6 +16,19 @@ export type DigestItem = {
     thesis: string[];
     conviction: string[];
   };
+  /**
+   * Apple Mail Message-ID when captured from the exact mailbox read.
+   * Used only to build messageUrl — never fabricated.
+   */
+  messageId?: string;
+  /** `message://…` deep link into Apple Mail when messageId is available. */
+  messageUrl?: string;
+  /** Axis Research topic/subject collapsible group (Punch, Result Updates, …). */
+  topicGroup?: string;
+  /** Local Axis PDF basename when matched under the Axis Research archive. */
+  pdfFile?: string | null;
+  /** Dashboard route that serves the matched local Axis PDF inline. */
+  pdfUrl?: string | null;
   /** Podcast URL from the local Podcasts database, when available. */
   episodeUrl?: string;
   /** Transcript-only takeaways. Description-only episodes intentionally keep this empty. */
@@ -46,6 +59,36 @@ export type MailRecommendation = {
   color: string;
   scores: [number, number, number, number, number, number];
   tags?: DigestItem["tags"];
+  /** Local Axis PDF filename when the call came from the archive extract. */
+  evidenceFile?: string | null;
+  /** YYYY-MM-DD when known from PDF filename / mail as-of. */
+  dateKey?: string | null;
+  bucket?: "fundamental" | "technical" | "trading";
+  origin?: "pdf" | "mail";
+};
+
+export type AxisPdfArchiveAudit = {
+  filesAttempted: number;
+  validPdfs: number;
+  pagesRead: number;
+  duplicateGroups?: number;
+  invalidFiles: string[];
+  recommendations?: number;
+  withCmpAndTarget?: number | null;
+  missingProgressInputs?: number | null;
+  asOf?: string | null;
+  sinceDate?: string;
+  counts?: {
+    total?: number;
+    fundamental?: number;
+    technical?: number;
+    trading?: number;
+    withCmpAndTarget?: number;
+    missingProgressInputs?: number;
+    latestUnique?: number;
+  } | null;
+  mailWindowCalls?: number;
+  shownCalls?: number;
 };
 
 export type MacroMailEvidence = {
@@ -70,6 +113,8 @@ export type InvestmentMailIntelligence = {
   axisLastFetchedAt?: string;
   latestNewsletterAt: string;
   axisRecommendations: MailRecommendation[];
+  /** Live PDF-archive audit for Axis Recommended Stocks (overrides static portfolio-data audit when present). */
+  axisPdfArchive?: AxisPdfArchiveAudit;
   macroEvidence: MacroMailEvidence[];
 };
 

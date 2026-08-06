@@ -180,7 +180,7 @@ function HealthGuidanceWorkbench({
   const attentionCount = guidanceItems.filter((item) => item.tone === "red" || item.tone === "amber").length;
 
   if (page === "optimism") {
-    return <article className={`panel health-optimism-panel viewport ${optimismText ? "has-entry" : ""}`} aria-label="Daily Optimism">
+    return <article className={`panel health-optimism-panel morning-light viewport ${optimismText ? "has-entry" : ""}`} aria-label="Daily Optimism">
       <div className="panel-title"><div><h3>Daily Optimism</h3><p>{optimismSubtitle}</p></div><Sparkles size={18}/></div>
       {optimismText ? <p className="health-optimism-text">{optimismText}</p> : null}
       <section className="health-daily-brief" aria-label="Today’s prioritised health suggestions">
@@ -203,32 +203,32 @@ function HealthGuidanceWorkbench({
 
   if (page === "insights") {
     return <section className="health-insights-page" aria-label="Health insights">
-      <div className="health-mirroring-banner" role="status">
+      <div className="health-mirroring-banner health-insight-crystal" role="status">
         <ShieldAlert size={16}/>
         <div>
           <b>Livity / iPhone Mirroring unavailable this session</b>
           <span>Computer Use could not open Livity. Insights below use only the validated HealthKit snapshot and the exact  Health Daily note — no fabricated Livity numbers.</span>
         </div>
       </div>
-      {noteStats.length ? <div className="health-note-stats" aria-label=" Health Daily shortcut stats">
+      {noteStats.length ? <div className="health-note-stats health-insight-crystal" aria-label=" Health Daily shortcut stats">
         <header><b> Health Daily shortcut snapshot</b><span>{optimismDate ? compactHealthDate(optimismDate) : "latest note"} · evidence only · HealthKit takes precedence</span></header>
         <div>{noteStats.map((stat) => <article key={stat.label}><small>{stat.label}</small><b>{stat.value}</b></article>)}</div>
       </div> : null}
       <div className="health-action-list viewport" aria-label="Metric-derived health insights">
-        {guidanceItems.map((item) => <div key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
+        {guidanceItems.map((item) => <div className="health-insight-crystal" key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
       </div>
     </section>;
   }
 
   if (page === "guidance") {
     return <section className="health-guidance-page">
-      <div className="health-action-list viewport" aria-label="HealthKit daily guidance">
-        {guidanceItems.map((item) => <div key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
+      <div className="health-coach-lane" aria-label="HealthKit daily guidance">
+        {guidanceItems.map((item) => <button type="button" className={`coach-item ${item.tone}`} key={item.title}><i/><div><b>{item.title}</b><p>{item.text}</p></div></button>)}
       </div>
     </section>;
   }
 
-  return <article className="panel health-caveat-panel viewport">
+  return <article className="panel health-caveat-panel health-guardrail-slab viewport">
     <div className="panel-title"><div><h3>Interpretation guardrails</h3><p>What this snapshot can and cannot support</p></div><ShieldAlert size={18}/></div>
     <ul>{healthCaveats.map((item) => <li key={item}>{item}</li>)}</ul>
     <p className="medical-note">Wellness summary only. It is not medical advice and should not be used to diagnose or change treatment.</p>
@@ -245,13 +245,13 @@ function HealthMetricsWorkbench({
   onOpenPage: (page: HealthSectionPage) => void;
 }) {
   if (page === "metrics-overview") {
-    return <section className="health-metrics-overview">
+    return <section className="health-metrics-overview health-organ-portals">
       {categories.map((category) => {
         const primary = primaryHealthMetric(category);
         const supporting = category.metrics.filter((metric) => metric !== primary).slice(0, 6);
-        return <button type="button" className={`health-metric-preview ${category.tone}`} onClick={() => onOpenPage(HEALTH_CATEGORY_PAGE[category.name] ?? "metrics-overview")} aria-label={`Open ${category.name} metrics`} key={category.name}>
+        return <button type="button" className={`health-metric-preview health-organ-portal ${category.tone}`} onClick={() => onOpenPage(HEALTH_CATEGORY_PAGE[category.name] ?? "metrics-overview")} aria-label={`Open ${category.name} metrics`} key={category.name}>
           <header><span><HealthCategoryIcon name={category.name}/><b>{category.name}</b></span><em>{category.metrics.length} KPIs</em></header>
-          {primary ? <div className="health-preview-hero">
+          {primary ? <div className="health-preview-hero portal-core">
             <span><small>{primary.label}</small><strong>{primary.value}</strong></span>
             <HealthTrend metric={primary}/>
           </div> : <div className="health-preview-empty">No validated metric</div>}
@@ -270,7 +270,9 @@ function HealthMetricsWorkbench({
   const metrics = page === "nutrition-1" ? category.metrics.slice(0, 6)
     : page === "nutrition-2" ? category.metrics.slice(6)
       : category.metrics;
-  return <HealthMasonryGrid categories={[{ ...category, metrics }]} compact/>;
+  return <div className={page.startsWith("nutrition") ? "nutrition-lab-tray" : undefined}>
+    <HealthMasonryGrid categories={[{ ...category, metrics }]} compact/>
+  </div>;
 }
 
 export function HealthWorkspace({
@@ -280,7 +282,7 @@ export function HealthWorkspace({
   healthCurrent,
   healthError: _healthError,
   healthRequiredDate: _healthRequiredDate,
-  healthMissingDates: _healthMissingDates,
+  healthMissingDates,
   healthNote,
   healthNoteSource,
 }: {
@@ -296,7 +298,9 @@ export function HealthWorkspace({
 }) {
   void _healthError;
   void _healthRequiredDate;
-  void _healthMissingDates;
+  const missingDates = healthMissingDates.length
+    ? healthMissingDates
+    : (healthSnapshot.missingDates ?? []);
   const shellRef = useRef<HTMLDivElement>(null);
   const [route, setRoute] = useState<{ section: HealthWorkspaceSection | null; page: HealthSectionPage | null; focus: HealthTopSection }>({ section: null, page: null, focus: "h1" });
   const healthStatusLabel = healthSnapshot.status === "live" ? "SYNCED"
@@ -445,6 +449,11 @@ export function HealthWorkspace({
       <div id="health-h3" className="workspace-section health-full-section">
         <CollapsibleSection number="H-3" title="Vital Metrics" note={healthIncognito ? "Vital metrics hidden by Incognito" : SECTION_META.h3.note}>
           <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
+            {missingDates.length > 0 && (
+              <p className="health-missing-ribbon" role="status">
+                Missing Health days: {missingDates.join(", ")}. Refresh those dates before trusting 7-day or 30-day comparisons.
+              </p>
+            )}
             <HealthMasonryGrid categories={healthSnapshot.categories}/>
           </HealthIncognitoGate>
         </CollapsibleSection>

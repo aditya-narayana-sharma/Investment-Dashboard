@@ -11,7 +11,8 @@ import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
 import { kiteAuthPresentation } from "./kite-auth-presentation";
 import { sectorCompanies } from "./sector-company-data";
-import { emptyBenchmarkSnapshot, emptySectorSnapshot, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
+import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
+import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
 import {
   analysisWindowLabel,
@@ -24,11 +25,13 @@ import {
   missingHealthDateKeys,
   workspaces,
 } from "./dashboard/utils";
-import { DashboardTabs, HealthIncognitoToggle } from "./dashboard/shared-ui";
+import { AppearanceToggle, DashboardTabs, HealthIncognitoToggle, type DashboardAppearance } from "./dashboard/shared-ui";
+import { PulseConstellation } from "./dashboard/visual-components";
 import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
+import { AXIS_HOLDING_TRADING_SYMBOLS, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 
 export default function Home() {
   const [workspace, setWorkspace] = useState<WorkspaceKey>("investment");
@@ -47,11 +50,15 @@ export default function Home() {
   const [portfolioRisk, setPortfolioRisk] = useState("ICICIBANK");
   const [axisRisk, setAxisRisk] = useState("RSYSTEMS");
   const [healthIncognito, setHealthIncognito] = useState(false);
+  const [appearance, setAppearance] = useState<DashboardAppearance>("black");
+  const [appearanceHydrated, setAppearanceHydrated] = useState(false);
   const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
   const [clockMs, setClockMs] = useState(0);
   const [sectorMarket, setSectorMarket] = useState<SectorMarketSnapshot>(() => emptySectorSnapshot("pharma"));
   const [sectorMarketById, setSectorMarketById] = useState<Record<string, SectorMarketSnapshot>>({});
+  const [sectorNews, setSectorNews] = useState<SectorNewsSnapshot>(() => emptySectorNewsSnapshot());
   const [sectorBenchmarks, setSectorBenchmarks] = useState<SectorBenchmarkSnapshot>(emptyBenchmarkSnapshot);
+  const [yfinanceBySymbol, setYfinanceBySymbol] = useState<Map<string, number>>(new Map());
   const selectedSectorRef = useRef<string[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const { asOf } = snapshot;
@@ -89,10 +96,46 @@ export default function Home() {
   const healthCurrent = healthSnapshot.status === "live" && healthSnapshot.dataDate >= latestCompletedHealthDateKey();
   const healthRequiredDate = latestCompletedHealthDateKey();
   const healthMissingDates = useMemo(() => missingHealthDateKeys(healthSnapshot.dataDate, healthRequiredDate), [healthSnapshot.dataDate, healthRequiredDate]);
-  const currentBySymbol = useMemo(() => new Map(snapshot.holdings.map((holding) => [holding.symbol, holding.price])), [snapshot.holdings]);
-  const mailAxisRecommendations = useMemo<MailRecommendation[]>(() => content.sources.axisResearch.status === "live"
-    ? content.investment.axisRecommendations
-    : axisRecommendations.map((item) => ({ ...item })), [content]);
+  const kiteBySymbol = useMemo(() => new Map(snapshot.holdings.filter((holding) => holding.price > 0).map((holding) => [holding.symbol, holding.price] as const)), [snapshot.holdings]);
+  const currentBySymbol = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [symbol, price] of yfinanceBySymbol) {
+      if (price > 0) map.set(symbol, price);
+    }
+    for (const [symbol, price] of kiteBySymbol) {
+      map.set(symbol, price);
+    }
+    return map;
+  }, [kiteBySymbol, yfinanceBySymbol]);
+  const mailAxisRecommendations = useMemo<MailRecommendation[]>(() => {
+    const base = content.sources.axisResearch.status === "live"
+      ? content.investment.axisRecommendations
+      : axisRecommendations.map((item) => ({ ...item }));
+    return mergeHoldingTradingCalls(base);
+  }, [content]);
+
+  useEffect(() => {
+    const kiteSymbols = new Set(snapshot.holdings.filter((holding) => holding.price > 0).map((holding) => holding.symbol));
+    const missing = AXIS_HOLDING_TRADING_SYMBOLS.filter((symbol) => !kiteSymbols.has(symbol));
+    // Kite already covers CMP for these holdings — skip fetch. currentBySymbol prefers Kite over any stale yfinance.
+    if (!missing.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/quotes/yfinance?symbols=${missing.join(",")}`, { cache: "no-store" });
+        const data = await response.json() as { quotes?: Record<string, { price?: number | null }> };
+        if (cancelled || !response.ok) return;
+        const next = new Map<string, number>();
+        for (const [symbol, quote] of Object.entries(data.quotes ?? {})) {
+          if (quote?.price != null && quote.price > 0) next.set(symbol, quote.price);
+        }
+        setYfinanceBySymbol(next);
+      } catch {
+        if (!cancelled) setYfinanceBySymbol(new Map());
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [snapshot.holdings]);
   const mailAxisProfiles = useMemo<RiskProfile[]>(() => Array.from(new Map(mailAxisRecommendations.map((item) => [item.symbol, { symbol: item.symbol, name: item.name, color: item.color, scores: item.scores }])).values()), [mailAxisRecommendations]);
   const livePortfolioRiskProfiles = useMemo<RiskProfile[]>(() => {
     const known = new Map(portfolioRiskProfiles.map((profile) => [profile.symbol, profile]));
@@ -252,12 +295,69 @@ export default function Home() {
       const data = await response.json() as SectorMarketSnapshot;
       setSectorMarketById((current) => ({ ...current, [data.sectorId]: data }));
       const primary = selectedSectorRef.current[selectedSectorRef.current.length - 1];
-      if (!primary || data.sectorId === primary) setSectorMarket(data);
+      if (primary) {
+        if (data.sectorId === primary) setSectorMarket(data);
+        return;
+      }
+      // Unfiltered S-2: keep any usable snapshot for header context; never let a late failure wipe live quotes.
+      if (isUsableSectorMarketStatus(data.status)) {
+        setSectorMarket((existing) => (existing.status === "live" && data.status !== "live" ? existing : data));
+      }
     } catch (error) {
       const failed = { ...emptySectorSnapshot(sectorId), message: error instanceof Error ? error.message : "Sector market refresh failed." };
       setSectorMarketById((current) => ({ ...current, [sectorId]: failed }));
       const primary = selectedSectorRef.current[selectedSectorRef.current.length - 1];
-      if (!primary || sectorId === primary) setSectorMarket(failed);
+      // Only pin failures onto the header when that industry is explicitly selected.
+      if (primary && sectorId === primary) setSectorMarket(failed);
+    }
+  }, []);
+
+  const loadSectorNews = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sectors/news?refresh=${Date.now()}`, { cache: "no-store" });
+      const data = await response.json() as SectorNewsSnapshot;
+      if (!response.ok || !Array.isArray(data.items) || !Array.isArray(data.sources)) {
+        throw new Error(data.message || `Sector news refresh returned ${response.status}`);
+      }
+      setSectorNews(data);
+    } catch (error) {
+      setSectorNews((current) => {
+        if (current.items.length) {
+          return {
+            ...current,
+            status: current.status === "unavailable" ? "partial" : current.status,
+            message: `${current.message} Latest refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+        return {
+          ...emptySectorNewsSnapshot(),
+          message: error instanceof Error ? error.message : "Sector news refresh failed.",
+        };
+      });
+    }
+  }, []);
+
+  const loadBenchmarks = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sectors/benchmarks?refresh=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Benchmark refresh returned ${response.status}`);
+      const data = await response.json() as SectorBenchmarkSnapshot;
+      if (!Array.isArray(data.indices)) throw new Error("Benchmark refresh returned an invalid snapshot");
+      setSectorBenchmarks(data);
+    } catch (error) {
+      setSectorBenchmarks((current) => {
+        if (current.indices.some((index) => index.level !== null || index.indexedHistory.length)) {
+          return {
+            ...current,
+            status: current.status === "unavailable" ? "cached" : current.status,
+            message: `${current.message} Latest dedicated benchmark refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+        return {
+          ...emptyBenchmarkSnapshot(),
+          message: error instanceof Error ? error.message : "Benchmark refresh failed.",
+        };
+      });
     }
   }, []);
 
@@ -265,8 +365,19 @@ export default function Home() {
     if (refreshInFlightRef.current) return refreshInFlightRef.current;
     const run = (async () => {
       setRefreshing(true);
-      // Surface Kite quickly; the bundled refresh can wait on Mail/content.
+      // Surface Kite, S-2 yfinance quotes, S-3 benchmarks, and sector news quickly;
+      // the bundled refresh can wait on Mail/content.
       const kiteEarly = loadKite();
+      const benchmarksEarly = loadBenchmarks();
+      const sectorNewsEarly = loadSectorNews();
+      const selectedIds = selectedSectorRef.current;
+      const primaryId = selectedIds[selectedIds.length - 1];
+      const primarySectorEarly = primaryId ? loadSectorMarket(primaryId) : Promise.resolve();
+      const allSectorsEarly = Promise.allSettled(
+        Object.keys(sectorCompanies)
+          .filter((sectorId) => sectorId !== primaryId)
+          .map((sectorId) => loadSectorMarket(sectorId)),
+      );
       try {
         try {
           const response = await fetch(`/api/dashboard/refresh?refresh=${Date.now()}`, {
@@ -283,17 +394,9 @@ export default function Home() {
           if (result.benchmarks) setSectorBenchmarks(result.benchmarks);
         } catch (error) {
           setContentError(error instanceof Error ? error.message : "Complete refresh failed; source adapters are retrying.");
-          await Promise.allSettled([kiteEarly, loadContent(), loadEarnings(), loadHealth()]);
+          await Promise.allSettled([kiteEarly, benchmarksEarly, sectorNewsEarly, loadContent(), loadEarnings(), loadHealth(), loadBenchmarks()]);
         }
-        await kiteEarly;
-        const selectedIds = selectedSectorRef.current;
-        const primaryId = selectedIds[selectedIds.length - 1];
-        if (primaryId) await loadSectorMarket(primaryId);
-        await Promise.allSettled(
-          Object.keys(sectorCompanies)
-            .filter((sectorId) => sectorId !== primaryId)
-            .map((sectorId) => loadSectorMarket(sectorId)),
-        );
+        await Promise.allSettled([kiteEarly, benchmarksEarly, sectorNewsEarly, primarySectorEarly, allSectorsEarly]);
       } finally {
         setRefreshing(false);
         refreshInFlightRef.current = null;
@@ -301,7 +404,7 @@ export default function Home() {
     })();
     refreshInFlightRef.current = run;
     return run;
-  }, [applyHealthSnapshot, loadContent, loadEarnings, loadHealth, loadKite, loadSectorMarket]);
+  }, [applyHealthSnapshot, loadBenchmarks, loadContent, loadEarnings, loadHealth, loadKite, loadSectorMarket, loadSectorNews]);
 
   const selectWorkspace = useCallback((next: WorkspaceKey, historyMode: "push" | "replace" = "push") => {
     setWorkspace(next);
@@ -364,6 +467,21 @@ export default function Home() {
   }, [workspace]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = window.localStorage.getItem("dashboard-appearance");
+      if (stored === "black" || stored === "dark" || stored === "sepia") setAppearance(stored);
+      setAppearanceHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!appearanceHydrated) return;
+    window.localStorage.setItem("dashboard-appearance", appearance);
+    document.documentElement.dataset.appearance = appearance;
+  }, [appearance, appearanceHydrated]);
+
+  useEffect(() => {
     const initial = window.setTimeout(() => void refreshAll(), 0);
     const interval = window.setInterval(() => void refreshAll(), 5 * 60 * 1000);
     const refreshWhenActive = () => {
@@ -395,6 +513,7 @@ export default function Home() {
         <div className="status-panel">
           <div><Activity size={16}/><span>Kite snapshot</span><b className={snapshot.status}>{isLive ? "Live" : isPartial ? "Partial" : isSnapshot ? "Snapshot" : snapshot.status === "auth_required" ? "Authenticate" : "Unavailable"}</b></div>
           <small>As of {asOf}</small>
+          <AppearanceToggle value={appearance} onChange={setAppearance}/>
           <HealthIncognitoToggle active={healthIncognito} onChange={setHealthIncognito}/>
           <a href="/report?export=1"><FileText size={15}/> Export Report</a>
         </div>
@@ -417,7 +536,12 @@ export default function Home() {
           <em>All sources · 5 min</em>
         </div>
       </section>
-      {sourceFreshness.length>0&&<section className="source-freshness-strip" aria-label="Complete dashboard source freshness">{sourceFreshness.map((source)=><div key={source.source} title={source.message}><i className={source.state}/><span><b>{source.source}</b><small>{source.state.replaceAll("_"," ")} · {source.period}</small></span></div>)}</section>}
+      {sourceFreshness.length > 0 && (
+        <PulseConstellation
+          sources={sourceFreshness}
+          onNavigate={(next) => selectWorkspace(next)}
+        />
+      )}
 
       <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status}/>
 
@@ -448,6 +572,8 @@ export default function Home() {
         donutHoldings={donutHoldings}
         exposureComposition={exposureComposition}
         currentBySymbol={currentBySymbol}
+        kiteBySymbol={kiteBySymbol}
+        yfinanceBySymbol={yfinanceBySymbol}
         onKiteRefresh={loadKite}
       />}
 
@@ -456,6 +582,8 @@ export default function Home() {
         onToggleSector={toggleSector}
         sectorMarket={sectorMarket}
         sectorMarketById={sectorMarketById}
+        sectorNews={sectorNews}
+        sectorMarketsLoading={refreshing || Object.keys(sectorMarketById).length < Object.keys(sectorCompanies).length}
         holdings={snapshot.holdings}
         benchmarks={sectorBenchmarks}
       />}

@@ -17,6 +17,15 @@ check_source() {
   local expected_status="$3"
   local require_d1="${4:-false}"
   local max_time="${5:-90}"
+  check_source_any "$name" "$path" "$expected_status" "$require_d1" "$max_time"
+}
+
+check_source_any() {
+  local name="$1"
+  local path="$2"
+  local expected_pattern="$3"
+  local require_d1="${4:-false}"
+  local max_time="${5:-90}"
   local code
   local body
   local status
@@ -46,7 +55,7 @@ except Exception: print("")' "$body")"
   fi
 
   local semantic_ok=false
-  if [[ "$code" =~ ^2 && "$status" == "$expected_status" ]]; then
+  if [[ "$code" =~ ^2 ]] && [[ "$status" =~ ^($expected_pattern)$ ]]; then
     semantic_ok=true
   fi
   if [[ "$semantic_ok" == true && "$require_d1" == true ]]; then
@@ -56,7 +65,7 @@ except Exception: print("")' "$body")"
   if [[ "$semantic_ok" == true ]]; then
     printf '%s\tOK\tHTTP %s · status=%s%s%s\n' "$name" "$code" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}"
   else
-    printf '%s\tFAILED\tHTTP %s · status=%s%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}" "$expected_status" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
+    printf '%s\tFAILED\tHTTP %s · status=%s%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}" "$expected_pattern" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
     FAILURES=$((FAILURES + 1))
     FAILED_NAMES+=("${name} (${status:-missing})")
   fi
@@ -74,6 +83,10 @@ check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date 
 for sector in "${SECTORS[@]}"; do
   check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
 done
+# S-2 news aggregation accepts live or partial when some publishers are blocked.
+check_source_any "Sector news" "/api/sectors/news?startup=$(date +%s)" "live|partial" "false" "60"
+# S-3 Decision Lab depends on NSE benchmark histories; accept live or partial (definition-only residual gaps).
+check_source_any "NSE benchmarks" "/api/sectors/benchmarks?startup=$(date +%s)" "live|partial" "false" "120"
 printf 'Finished\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 printf 'Failures\t%s\n' "$FAILURES"
 

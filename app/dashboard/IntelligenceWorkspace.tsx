@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Bookmark, BookmarkCheck, ChevronDown, Mail, Mic2, Newspaper, NotebookTabs, ShieldAlert } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, FileText, Mail, Mic2, Newspaper, NotebookTabs, ShieldAlert } from "lucide-react";
 import {
   COMPLETED_FEED_LABEL,
   SCHEDULED_FEED_LABEL,
@@ -19,11 +19,24 @@ import type { LiveHolding } from "../live-types";
 import { findEarningsHolidayConflicts } from "../market-calendar";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { WaveformStrip } from "./visual-components";
 import { DIGEST_PAGE_SIZE, earningsReconciliationStats, mergeEarningsCalendarEvents } from "./utils";
 
 const COMPLETED_PAGE_SIZE = 24;
 const SCHEDULED_PAGE_SIZE = 24;
 const BOX_PAGE_SIZE = 12;
+const AXIS_TOPIC_RULES: Array<{ label: string; matcher: RegExp }> = [
+  { label: "Target Achieved", matcher: /\btarget achieved\b/i },
+  { label: "Punch", matcher: /\baxis punch\b|\bpunch\b/i },
+  { label: "Result Updates", matcher: /\bresult updates?\b|\bresult update\b/i },
+  { label: "Daily Technical Outlook", matcher: /\bdaily technical outlook\b|\btechnical outlook\b/i },
+  { label: "Daily Morning Note", matcher: /\bdaily morning note\b|\bmorning note\b|\btrade setup for the day\b/i },
+  { label: "Axis Alpha", matcher: /\baxis alpha\b/i },
+  { label: "Event Updates", matcher: /\bevent update\b|\bmonetary policy\b/i },
+  { label: "Monthly Quant", matcher: /\bmonthly quant\b|\bquant report\b/i },
+  { label: "Pick of the Week", matcher: /\bpick of the week\b/i },
+  { label: "Company Update", matcher: /\bcompany update\b|\bannual analysis\b/i },
+];
 const REMINDER_TOPIC_FALLBACKS: Record<AppleTaskItem["topic"], { color: string; text: "#000" | "#FFF" }> = {
   Earnings: { color: "#2563EB", text: "#FFF" },
   "Work/Jobs": { color: "#F97316", text: "#000" },
@@ -32,12 +45,25 @@ const REMINDER_TOPIC_FALLBACKS: Record<AppleTaskItem["topic"], { color: string; 
   Other: { color: "#64748B", text: "#FFF" },
 };
 
-function DigestBulletList({ bullets }: { bullets: string[] }) {
+function DigestBulletList({ bullets, evidenceChips = false }: { bullets: string[]; evidenceChips?: boolean }) {
+  const [focused, setFocused] = useState<string | null>(null);
   if (!bullets.length) return null;
-  return <ul className="digest-summary-bullets">{bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>;
+  if (!evidenceChips) return <ul className="digest-summary-bullets">{bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>;
+  return <div className="digest-evidence-chips" role="list">
+    {bullets.map((bullet) => (
+      <button
+        type="button"
+        role="listitem"
+        key={bullet}
+        className={`evidence-chip${focused === bullet ? " focused" : focused ? "" : " focused"}`}
+        onClick={() => setFocused((current) => current === bullet ? null : bullet)}
+      >{bullet}</button>
+    ))}
+  </div>;
 }
 
 type DigestKind = "mail" | "podcast";
+type DigestGroupLayout = "mail" | "axis" | "podcasts";
 
 const SENDER_GROUP_COLORS = [
   "#4f8ff7",
@@ -56,24 +82,83 @@ function digestSender(item: DigestItem, kind: DigestKind) {
   return kind === "podcast" ? "Unknown show" : "Unknown sender";
 }
 
+function axisTopicFromTitle(title: string) {
+  const value = title.trim();
+  if (!value) return "Other research";
+  for (const rule of AXIS_TOPIC_RULES) {
+    if (rule.matcher.test(value)) return rule.label;
+  }
+  const stem = value
+    .replace(/\s*[-|:].*$/, "")
+    .replace(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b.*$/i, "")
+    .replace(/\bq[1-4]fy\d{2,4}\b.*$/i, "")
+    .trim();
+  return stem || "Other research";
+}
+
+function digestGroupLabel(item: DigestItem, kind: DigestKind, layout: DigestGroupLayout) {
+  switch (layout) {
+    case "axis": {
+      const topic = item.topicGroup?.trim();
+      if (topic) return topic;
+      return axisTopicFromTitle(item.title);
+    }
+    case "mail":
+    case "podcasts":
+      return digestSender(item, kind);
+    default: {
+      const _exhaustive: never = layout;
+      return _exhaustive;
+    }
+  }
+}
+
 function senderGroupColor(sender: string) {
   const hash = Array.from(sender).reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 0);
   return SENDER_GROUP_COLORS[hash % SENDER_GROUP_COLORS.length];
 }
 
-function groupDigestItemsBySender(items: DigestItem[], kind: DigestKind) {
+function groupDigestItems(items: DigestItem[], kind: DigestKind, layout: DigestGroupLayout) {
   const groups = new Map<string, DigestItem[]>();
   items.forEach((item) => {
-    const sender = digestSender(item, kind);
-    groups.set(sender, [...(groups.get(sender) ?? []), item]);
+    const label = digestGroupLabel(item, kind, layout);
+    groups.set(label, [...(groups.get(label) ?? []), item]);
   });
-  return Array.from(groups, ([sender, senderItems]) => ({ sender, items: senderItems }));
+  return Array.from(groups, ([label, groupItems]) => ({ label, items: groupItems }));
 }
 
 const READ_LATER_KEY = "dashboard-saved-items-v1";
 
 function digestItemId(item: DigestItem) {
   return `${item.receivedAt ?? item.time}|${item.source}|${item.title}`;
+}
+
+function DigestSourceLinks({ item, kind }: { item: DigestItem; kind: DigestKind }) {
+  const links: Array<{ href: string; label: string; icon: "mail" | "pdf" | "episode" }> = [];
+  if (item.messageUrl) links.push({ href: item.messageUrl, label: "Open in Mail", icon: "mail" });
+  if (item.pdfUrl) links.push({ href: item.pdfUrl, label: "Open PDF", icon: "pdf" });
+  if (kind === "podcast" && item.episodeUrl) {
+    links.push({ href: item.episodeUrl, label: "Open in Podcasts", icon: "episode" });
+  }
+  if (!links.length) return null;
+  return (
+    <div className="digest-item-links" aria-label="Source links">
+      {links.map((link) => (
+        <a
+          key={`${link.label}-${link.href}`}
+          className="digest-source-link"
+          href={link.href}
+          target={link.icon === "mail" ? undefined : "_blank"}
+          rel={link.icon === "mail" ? undefined : "noopener noreferrer"}
+        >
+          {link.icon === "mail" ? <Mail size={12} aria-hidden="true" /> : null}
+          {link.icon === "pdf" ? <FileText size={12} aria-hidden="true" /> : null}
+          {link.icon === "episode" ? <ExternalLink size={12} aria-hidden="true" /> : null}
+          {link.label}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function DigestMailItem({
@@ -96,8 +181,16 @@ function DigestMailItem({
     ? (hasTranscriptSummary ? (item.keyTakeaways ?? []).filter(isDigestContentWorthy) : [])
     : digestItemBullets({ ...item, kind });
   const tags = item.tags ? [...item.tags.sector, ...item.tags.thesis, ...item.tags.conviction] : [];
+  const sentimentClass = item.sentiment ? `sentiment-${item.sentiment.toLowerCase()}` : "sentiment-neutral";
+  const podcastEvidenceLabel = (() => {
+    if (kind !== "podcast") return null;
+    if (hasTranscriptSummary) return "Transcript summary";
+    if (item.contentSource === "transcript") return "Summary not generated";
+    // AGENTS.md: label non-transcript podcast evidence as description, never as transcript.
+    return "Description";
+  })();
   return (
-    <article className="digest-item">
+    <article className={`digest-item ${sentimentClass}`}>
       <time className="digest-item-time">{item.time}</time>
       <div>
         <div className="digest-item-heading">
@@ -118,24 +211,35 @@ function DigestMailItem({
         <div className="digest-item-badges">
           {item.sentiment && <span className={`digest-badge sentiment-${item.sentiment.toLowerCase()}`}>{item.sentiment}</span>}
           {tags.map((tag) => <span className="digest-badge" key={tag}>{tag}</span>)}
-          {kind === "podcast" && <span className={`digest-badge evidence-${hasTranscriptSummary ? "transcript" : "unavailable"}`}>
-            {hasTranscriptSummary
-              ? "Transcript summary"
-              : item.contentSource === "transcript"
-                ? "Summary not generated"
-                : "Transcript unavailable"}
-          </span>}
+          {kind === "podcast" && podcastEvidenceLabel && (
+            <span className={`digest-badge evidence-${
+              hasTranscriptSummary
+                ? "transcript"
+                : item.contentSource === "transcript"
+                  ? "unavailable"
+                  : "description"
+            }`}>
+              {podcastEvidenceLabel}
+            </span>
+          )}
         </div>
-        <DigestBulletList bullets={bullets} />
+        {kind === "podcast" && <WaveformStrip seed={item.title.length} />}
+        <DigestBulletList bullets={bullets} evidenceChips={kind !== "podcast"} />
+        {kind === "podcast" && hasTranscriptSummary && bullets.length > 0 && (
+          <div className="podcast-chapters" aria-label="Key takeaway markers">
+            {bullets.slice(0, 4).map((bullet, index) => <span className="chapter-marker" key={`${bullet}-${index}`}>Ch {index + 1}</span>)}
+          </div>
+        )}
         {kind === "podcast" && !hasTranscriptSummary && (
           <p className="podcast-summary-unavailable">
             {item.contentSource === "transcript"
               ? item.summaryReason === "transcript_too_short"
                 ? "Transcript available, but too little substantive content remained after sanitization."
                 : "Transcript available — summary not generated. Configure the private local summarizer to create it."
-              : "Transcript unavailable — summary not generated."}
+              : "Description evidence only — transcript summary not generated"}
           </p>
         )}
+        <DigestSourceLinks item={item} kind={kind} />
         {kind === "podcast" && item.contentSource === "transcript" && Boolean(item.timestampLinks?.length) && (
           <div className="podcast-timestamp-links" aria-label="Transcript timestamps">
             {item.timestampLinks?.map((link) => (
@@ -161,7 +265,7 @@ function SenderDigestGroups({
   items: DigestItem[];
   kind: DigestKind;
   emptyMessage: string;
-  layout?: "mail" | "podcasts";
+  layout?: DigestGroupLayout;
   savedIds?: Set<string>;
   onToggleSaved?: (item: DigestItem) => void;
 }) {
@@ -169,10 +273,10 @@ function SenderDigestGroups({
 
   return (
     <div className={`sender-groups sender-groups-${layout}`}>
-      {groupDigestItemsBySender(items, kind).map(({ sender, items: senderItems }) => {
-        const style = { "--sender-color": senderGroupColor(sender) } as CSSProperties;
-        const groupItems = <div className="sender-group-items">
-          {senderItems.map((item) => (
+      {groupDigestItems(items, kind, layout).map(({ label, items: groupItems }) => {
+        const style = { "--sender-color": senderGroupColor(label) } as CSSProperties;
+        const groupBody = <div className="sender-group-items">
+          {groupItems.map((item) => (
             <DigestMailItem
               key={`${item.time}-${item.source}-${item.title}`}
               item={item}
@@ -182,8 +286,8 @@ function SenderDigestGroups({
             />
           ))}
         </div>;
-        if (layout === "podcasts") return (
-          <details className="sender-group sender-group-collapsible" style={style} key={sender}>
+        return (
+          <details className="sender-group sender-group-collapsible" style={style} key={label}>
             <summary className="sender-group-header" onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
@@ -191,22 +295,12 @@ function SenderDigestGroups({
               if (details) details.open = !details.open;
             }}>
               <span className="sender-group-swatch" aria-hidden="true" />
-              <h3>{sender}</h3>
-              <span className="sender-group-count">{senderItems.length}</span>
+              <h3>{label}</h3>
+              <span className="sender-group-count">{groupItems.length}</span>
               <ChevronDown className="sender-group-chevron" size={15} aria-hidden="true" />
             </summary>
-            {groupItems}
+            {groupBody}
           </details>
-        );
-        return (
-          <section className="sender-group" style={style} key={sender}>
-            <header className="sender-group-header">
-              <span className="sender-group-swatch" aria-hidden="true" />
-              <h3>{sender}</h3>
-              <span className="sender-group-count">{senderItems.length}</span>
-            </header>
-            {groupItems}
-          </section>
         );
       })}
     </div>
@@ -316,11 +410,11 @@ function FeedShowAll({
 }) {
   if (total <= pageSize) return null;
   return expanded ? (
-    <button type="button" className="digest-show-all" onClick={onCollapse}>
+    <button type="button" className="digest-show-all vo-pop" onClick={onCollapse}>
       Show fewer
     </button>
   ) : (
-    <button type="button" className="digest-show-all" onClick={onExpand}>
+    <button type="button" className="digest-show-all vo-pop" onClick={onExpand}>
       Show all {total}
     </button>
   );
@@ -547,7 +641,7 @@ export function SectorIntelligenceDigest({
   return (
     <section className="digest-grid">
       {view === "live" && <>
-      <article className="panel digest-panel">
+      <article className="panel digest-panel briefing-rail">
         <div className="panel-title">
           <div>
             <h3>Newsletter digest</h3>
@@ -576,18 +670,18 @@ export function SectorIntelligenceDigest({
             onToggleSaved={toggleSavedNewsletter}
           />
           {newsletters.length > DIGEST_PAGE_SIZE && !showAllNewsletters && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllNewsletters(true)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllNewsletters(true)}>
               Show all {newsletters.length}
             </button>
           )}
           {showAllNewsletters && newsletters.length > DIGEST_PAGE_SIZE && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllNewsletters(false)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllNewsletters(false)}>
               Show fewer
             </button>
           )}
         </div>
       </article>
-      <article className="panel digest-panel">
+      <article className="panel digest-panel briefing-rail">
         <div className="panel-title">
           <div>
             <h3>Axis Research</h3>
@@ -601,21 +695,22 @@ export function SectorIntelligenceDigest({
           <SenderDigestGroups
             items={visibleAxis}
             kind="mail"
+            layout="axis"
             emptyMessage="No Axis Research item was available for this window."
           />
           {axisResearch.length > DIGEST_PAGE_SIZE && !showAllAxis && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllAxis(true)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllAxis(true)}>
               Show all {axisResearch.length}
             </button>
           )}
           {showAllAxis && axisResearch.length > DIGEST_PAGE_SIZE && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllAxis(false)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllAxis(false)}>
               Show fewer
             </button>
           )}
         </div>
       </article>
-      <article className="panel digest-panel digest-panel-podcasts">
+      <article className="panel digest-panel digest-panel-podcasts waveform-dossiers">
         <div className="panel-title">
           <div>
             <h3>Podcast summaries</h3>
@@ -636,12 +731,12 @@ export function SectorIntelligenceDigest({
             emptyMessage="No podcast episode was available in this window."
           />
           {podcasts.length > DIGEST_PAGE_SIZE && !showAllPodcasts && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllPodcasts(true)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllPodcasts(true)}>
               Show all {podcasts.length}
             </button>
           )}
           {showAllPodcasts && podcasts.length > DIGEST_PAGE_SIZE && (
-            <button type="button" className="digest-show-all" onClick={() => setShowAllPodcasts(false)}>
+            <button type="button" className="digest-show-all vo-pop" onClick={() => setShowAllPodcasts(false)}>
               Show fewer
             </button>
           )}
@@ -660,7 +755,7 @@ export function SectorIntelligenceDigest({
           </div>
           <NotebookTabs size={18} />
         </div>
-        <div className="intelligence-feed-stack">
+        <div className="intelligence-feed-stack agenda-ribbon triptych-command">
           <IntelligenceFeedSection
             kind="calendar"
             title="Calendar"

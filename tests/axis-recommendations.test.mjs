@@ -62,3 +62,22 @@ test("scopeThesisToCompany keeps only the selected company fragment", () => {
   assert.match(scoped, /Bandhan Bank/i);
   assert.doesNotMatch(scoped, /Indian Hotels|Bajaj Auto/i);
 });
+
+test("mergeAxisRecommendations prefers richer PDF calls and keeps category buckets", async () => {
+  const { mergeAxisRecommendations } = await import("../scripts/axis-pdf-recommendations.mjs");
+  const merged = mergeAxisRecommendations({
+    pdfRecommendations: [
+      { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: 1978, horizon: "Result update", source: "Axis PDF", date: "6 Aug", dateKey: "2026-08-06", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3], bucket: "fundamental" },
+      { symbol: "OBEROIRLTY", name: "Oberoi Realty", call: "TRADING BUY", target: 1985, cmp: 1807, horizon: "Axis Punch", source: "Axis PDF", date: "6 Aug", dateKey: "2026-08-06", thesis: "Oberoi Realty: TRADING BUY", color: "#42c878", scores: [3, 3, 3, 3, 3, 3], bucket: "trading" },
+      { symbol: "FLUOROCHEM", name: "Gujarat Fluorochemicals", call: "TECHNICAL BUY", target: 5152, cmp: 4574, horizon: "Weekly technical setup", source: "Axis PDF", date: "25 Jul", dateKey: "2026-07-25", thesis: "FLUOROCHEM: TECHNICAL BUY", color: "#b38cff", scores: [3, 3, 3, 3, 3, 3], bucket: "technical" },
+    ],
+    mailRecommendations: [
+      { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: null, horizon: "Result update", source: "Axis Direct", date: "6 Aug", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3] },
+    ],
+  });
+  const bySymbol = Object.fromEntries(merged.map((item) => [`${item.symbol}|${item.bucket}`, item]));
+  assert.equal(bySymbol["BHARTIARTL|fundamental"]?.cmp, 1978);
+  assert.equal(bySymbol["OBEROIRLTY|trading"]?.call, "TRADING BUY");
+  assert.equal(bySymbol["FLUOROCHEM|technical"]?.call, "TECHNICAL BUY");
+  assert.equal(merged.length, 3);
+});

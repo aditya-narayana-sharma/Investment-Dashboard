@@ -42,16 +42,19 @@ def index_record(item: dict[str, Any]) -> dict[str, Any]:
         parsed = number(value)
         if parsed is not None:
             closes.append((stamp.strftime("%Y-%m-%d"), parsed))
-    if len(closes) < 2:
+    if len(closes) < 1:
         return {"id": item["id"], "ticker": ticker, "error": "Insufficient history"}
 
     values = [value for _, value in closes]
     latest = values[-1]
+    multi = len(closes) >= 2
 
-    def prior(sessions: int) -> float:
+    def prior(sessions: int) -> float | None:
+        if not multi:
+            return None
         return values[-1 - sessions] if len(values) > sessions else values[0]
 
-    daily = [values[index] / values[index - 1] - 1 for index in range(1, len(values))]
+    daily = [values[index] / values[index - 1] - 1 for index in range(1, len(values))] if multi else []
     volatility = statistics.pstdev(daily[-63:]) * math.sqrt(252) * 100 if len(daily) >= 2 else None
     peak = values[0]
     max_drawdown = 0.0
@@ -59,7 +62,7 @@ def index_record(item: dict[str, Any]) -> dict[str, Any]:
         peak = max(peak, value)
         max_drawdown = min(max_drawdown, value / peak - 1)
     recent = values[-20:]
-    squeeze = ((max(recent) - min(recent)) / latest * 100) if recent and latest else None
+    squeeze = ((max(recent) - min(recent)) / latest * 100) if multi and recent and latest else None
     base = values[0]
     history = [{"date": date, "value": round(value / base * 100, 2)} for date, value in closes]
     return {
@@ -72,11 +75,11 @@ def index_record(item: dict[str, Any]) -> dict[str, Any]:
             "month": pct(latest, prior(21)),
             "quarter": pct(latest, prior(63)),
             "halfYear": pct(latest, prior(126)),
-            "year": pct(latest, values[0]),
+            "year": pct(latest, values[0]) if multi else None,
         },
         "indexedHistory": history,
         "volatility": round(volatility, 2) if volatility is not None else None,
-        "maxDrawdown": round(max_drawdown * 100, 2),
+        "maxDrawdown": round(max_drawdown * 100, 2) if multi else None,
         "squeezeWidth": round(squeeze, 2) if squeeze is not None else None,
         "observedAt": closes[-1][0],
     }

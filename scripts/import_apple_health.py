@@ -171,6 +171,56 @@ def daily_series(db: sqlite3.Connection, metric_type: str, end: date, days: int,
     return values
 
 
+def daily_history(
+    db: sqlite3.Connection,
+    metric_type: str,
+    end: date,
+    days: int,
+    mode: str,
+) -> List[dict]:
+    """Chronological (oldest→newest) measured daily points; omit days with no records."""
+    points: List[dict] = []
+    for offset in range(days - 1, -1, -1):
+        day = (end - timedelta(days=offset)).isoformat()
+        result = aggregate(db, metric_type, day, mode)
+        if result is None:
+            continue
+        value = adjusted(metric_type, result)
+        if isinstance(value, tuple):
+            value = sum(value) / 2
+        points.append({"date": day, "value": float(value)})
+    return points
+
+
+def sleep_history(db: sqlite3.Connection, end: date, days: int, pattern: str) -> List[dict]:
+    points: List[dict] = []
+    for offset in range(days - 1, -1, -1):
+        day = (end - timedelta(days=offset)).isoformat()
+        value = sleep_hours(db, day, pattern)
+        if value is None:
+            continue
+        points.append({"date": day, "value": float(value)})
+    return points
+
+
+def apply_history_override(
+    points: List[dict],
+    current: Union[float, Tuple[float, float]],
+    _prior: Optional[Union[float, Tuple[float, float]]],
+    target_day: str,
+) -> List[dict]:
+    """Replace or insert the target-day override without inventing other missing days."""
+    current_point = sum(current) / 2 if isinstance(current, tuple) else float(current)
+    updated = [{**point} for point in points]
+    for point in updated:
+        if point["date"] == target_day:
+            point["value"] = current_point
+            return updated
+    updated.append({"date": target_day, "value": current_point})
+    updated.sort(key=lambda point: point["date"])
+    return updated
+
+
 def sleep_hours(db: sqlite3.Connection, day: str, category_pattern: str = "Asleep") -> Optional[float]:
     if category_pattern == "Asleep":
         rows = db.execute(
@@ -421,17 +471,32 @@ def build_snapshot(
         current = adjusted(metric_type, current)
         week_values = [float(adjusted(metric_type, value)) for value in daily_series(db, metric_type, completed, 7, mode) if not isinstance(adjusted(metric_type, value), tuple)]
         month_values = [float(adjusted(metric_type, value)) for value in daily_series(db, metric_type, completed, 30, mode) if not isinstance(adjusted(metric_type, value), tuple)]
+        weekly_history = daily_history(db, metric_type, completed, 7, mode)
+        monthly_history = daily_history(db, metric_type, completed, 30, mode)
         if metric_override is not None:
             adjusted_prior = adjusted(metric_type, prior_current) if prior_current is not None else None
             week_values = replace_current(week_values, current, adjusted_prior)
             month_values = replace_current(month_values, current, adjusted_prior)
+            target_day = completed.isoformat()
+            weekly_history = apply_history_override(weekly_history, current, adjusted_prior, target_day)
+            monthly_history = apply_history_override(monthly_history, current, adjusted_prior, target_day)
         averages = {}
         weekly = comparison(current, week_values, unit)
         monthly = comparison(current, month_values, unit)
         if weekly: averages["weekly"] = weekly
         if monthly: averages["monthly"] = monthly
+        history = {}
+        if weekly_history: history["weekly"] = weekly_history
+        if monthly_history: history["monthly"] = monthly_history
         metric_source = "iPhone Mirroring" if metric_override is not None else "Apple Health export"
-        categories[category].append({"label": label, "value": fmt(current, unit), "context": f"{metric_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": averages})
+        categories[category].append({
+            "label": label,
+            "value": fmt(current, unit),
+            "context": f"{metric_source} · {completed.strftime('%d %b %Y')}",
+            "tone": tone,
+            "averages": averages,
+            "history": history,
+        })
     sleep_metrics = []
     for label, pattern, tone in (("Time asleep", "Asleep", "blue"), ("Deep sleep", "AsleepDeep", "blue"), ("REM sleep", "AsleepREM", "blue"), ("Core sleep", "AsleepCore", "blue"), ("Awake", "Awake", "amber")):
         sleep_days = {
@@ -466,11 +531,26 @@ def build_snapshot(
         if isinstance(value, tuple): continue
         weekly_values = [v for offset in range(7) if (v := sleep_hours(db, (completed - timedelta(days=offset)).isoformat(), pattern)) is not None]
         monthly_values = [v for offset in range(30) if (v := sleep_hours(db, (completed - timedelta(days=offset)).isoformat(), pattern)) is not None]
+        weekly_history = sleep_history(db, completed, 7, pattern)
+        monthly_history = sleep_history(db, completed, 30, pattern)
         if sleep_override is not None:
             weekly_values = replace_current(weekly_values, value, prior_value)
             monthly_values = replace_current(monthly_values, value, prior_value)
+            target_day = completed.isoformat()
+            weekly_history = apply_history_override(weekly_history, value, prior_value, target_day)
+            monthly_history = apply_history_override(monthly_history, value, prior_value, target_day)
         sleep_source = "iPhone Mirroring" if sleep_override is not None else "Apple Health export"
-        sleep_metrics.append({"label": label, "value": f"{int(value)}h {round((value % 1) * 60):02d}m", "context": f"{sleep_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": {"weekly": comparison(value, weekly_values, "hr"), "monthly": comparison(value, monthly_values, "hr")}})
+        history = {}
+        if weekly_history: history["weekly"] = weekly_history
+        if monthly_history: history["monthly"] = monthly_history
+        sleep_metrics.append({
+            "label": label,
+            "value": f"{int(value)}h {round((value % 1) * 60):02d}m",
+            "context": f"{sleep_source} · {completed.strftime('%d %b %Y')}",
+            "tone": tone,
+            "averages": {"weekly": comparison(value, weekly_values, "hr"), "monthly": comparison(value, monthly_values, "hr")},
+            "history": history,
+        })
     categories["Sleep"] = sleep_metrics
 
     ordered = []

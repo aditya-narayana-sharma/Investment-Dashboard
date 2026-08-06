@@ -110,10 +110,12 @@ test("live earnings calendar uses contractual verification rather than unconditi
 test("tracked earnings are source-verified through the completed 2026-08-05 IST day", () => {
   const snapshot = buildEarningsSnapshot(earningsCalendar, "2026-08-05");
   const irfc = snapshot.events.find((event) => event.symbol === "IRFC");
+  const augustPending = snapshot.events.filter((event) => !event.reported && (event.dateKey ?? "").startsWith("2026-08"));
   assert.equal(snapshot.status, "verified");
   assert.equal(snapshot.analysisDate, "2026-08-05");
-  assert.equal(snapshot.events.filter((event) => event.reported).length, snapshot.events.length);
-  assert.equal(snapshot.events.filter((event) => !event.reported).length, 0);
+  assert.equal(snapshot.events.filter((event) => event.reported).length, 26);
+  assert.equal(augustPending.length, 7);
+  assert.ok(augustPending.every((event) => event.kpis.every((kpi) => !kpi.value.trim())));
   assert.equal(irfc?.reported, true);
   assert.match(irfc?.source ?? "", /^https:\/\/irfc\.co\.in\/investors\/financial-information/);
   assert.ok(irfc?.kpis.every((kpi) => kpi.value.trim()));
@@ -133,7 +135,8 @@ test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains u
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(sectorsWorkspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\} onToggle=\{onToggleSector\} market=\{sectorMarket\} marketsBySector=\{sectorMarketById\} holdings=\{holdings\} page=\{activePages\.s2 as SectorAnalyticsPage\}\/>/);
+  assert.match(sectorsWorkspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\} onToggle=\{onToggleSector\} market=\{sectorMarket\} marketsBySector=\{sectorMarketById\} news=\{sectorNews\} holdings=\{holdings\} page=\{activePages\.s2 as SectorAnalyticsPage\}\/>/);
+  assert.match(sectorsWorkspace, /aggregateSectorMarketStatus/);
   assert.doesNotMatch(sectorsWorkspace, /intelligence-crosslink/);
   assert.doesNotMatch(sectorsWorkspace, /onOpenIntelligence/);
   assert.doesNotMatch(sectorsWorkspace, /S-4|s4|Earnings|EarningsMonthCalendar/);

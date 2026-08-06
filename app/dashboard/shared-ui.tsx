@@ -16,6 +16,7 @@ import {
   number,
   workspaces,
 } from "./utils";
+import { SparkFilament } from "./visual-components";
 
 export type WorkspaceSectionNavItem = {
   id: string;
@@ -141,6 +142,11 @@ export function HealthMetricComparison({ metric, averagePeriod }: { metric: Heal
   </span>;
 }
 
+/** Pull the unit suffix from a live metric display value (e.g. "913 kcal" → "kcal"). */
+function healthMetricUnit(value: string): string | undefined {
+  const match = value.trim().match(/[A-Za-z%°µμ/]+(?:\s*[A-Za-z%°µμ/]+)*/);
+  return match?.[0]?.trim() || undefined;
+}
 
 export function HealthMasonryGrid({ categories, compact = false }: { categories: HealthLiveSnapshot["categories"]; compact?: boolean }) {
   const [averagePeriod, setAveragePeriod] = useState<HealthAveragePeriod>("weekly");
@@ -160,25 +166,31 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
   }, [averagePeriod, averagePeriodHydrated]);
 
   const directionColumns = groupHealthMetricsByDirection(categories, averagePeriod);
+  const unavailableCount = directionColumns.unavailable.length;
 
   return <>
     <section className={`health-average-toolbar${compact ? " compact" : ""}`} aria-label="Health metric average comparison controls">
       <div><b>Vital cadence</b><span>Weekly or month-to-date rhythm · columns are comparison direction; tile colour is Health category</span></div>
       <div className="segmented health-average-toggle" role="group" aria-label="Compare health metrics with weekly or monthly average">
-        <button type="button" className={averagePeriod === "weekly" ? "active" : ""} aria-pressed={averagePeriod === "weekly"} onClick={() => setAveragePeriod("weekly")}>Weekly</button>
-        <button type="button" className={averagePeriod === "monthly" ? "active" : ""} aria-pressed={averagePeriod === "monthly"} onClick={() => setAveragePeriod("monthly")}>Monthly (MTD)</button>
+        <button type="button" className={`vo-pop${averagePeriod === "weekly" ? " active" : ""}`} aria-pressed={averagePeriod === "weekly"} onClick={() => setAveragePeriod("weekly")}>Weekly</button>
+        <button type="button" className={`vo-pop${averagePeriod === "monthly" ? " active" : ""}`} aria-pressed={averagePeriod === "monthly"} onClick={() => setAveragePeriod("monthly")}>Monthly (MTD)</button>
       </div>
       <p>
         <span className="trend-good-key">Green column · favourable direction</span>
         <span className="trend-moderate-key">Gold column · context dependent</span>
         <span className="trend-bad-key">Red column · unfavourable direction</span>
-        <span>Grey column · average unavailable</span>
+        {unavailableCount > 0
+          ? <span className="health-unavailable-inline-note">{unavailableCount} without {averagePeriod === "weekly" ? "7-day" : "MTD"} avg · shown under Context dependent</span>
+          : null}
         <em>Tile accent = category (Heart, Activity, Nutrition, Respiratory/Mindfulness, Sleep, Mobility). Not a diagnosis.</em>
       </p>
     </section>
-    <section className={`health-direction-grid${compact ? " compact" : ""}`} aria-label="Vital Metrics by comparison direction">
+    <section className={`health-direction-grid quadrant-vitals-stage${compact ? " compact" : ""}`} aria-label="Vital Metrics by comparison direction">
       {HEALTH_DIRECTION_COLUMNS.map((column) => {
-        const entries = directionColumns[column.id];
+        // Unavailable averages stay visible inside Context dependent — no dedicated fourth column.
+        const entries = column.id === "moderate"
+          ? [...directionColumns.moderate, ...directionColumns.unavailable]
+          : directionColumns[column.id];
         return <article className={`panel health-direction-column ${column.className}`} key={column.id}>
           <header className="health-direction-title">
             <h3 id={`vital-direction-${column.id}`}>{column.title}</h3>
@@ -187,20 +199,26 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
           <div className="health-kpi-grid" role="group" aria-labelledby={`vital-direction-${column.id}`}>
             {entries.length === 0
               ? <p className="health-direction-empty">No metrics in this direction for the selected cadence.</p>
-              : entries.map((entry) => (
+              : entries.map((entry) => {
+                const average = entry.metric.averages?.[averagePeriod];
+                const filamentTone = average
+                  ? (healthTrendTone(entry.metric, average.direction) === "good" ? "good" : healthTrendTone(entry.metric, average.direction) === "bad" ? "bad" : "neutral")
+                  : undefined;
+                return (
                 <div
-                  className={`health-kpi-tile ${entry.categoryAccent}`}
+                  className={`health-kpi-tile biometric-capsule ${entry.categoryAccent}${average ? "" : " average-unavailable"}`}
                   key={`${entry.categoryName}-${entry.metric.label}`}
                 >
                   <span className="health-kpi-label">{entry.metric.label}</span>
                   <b>{entry.metric.value}</b>
+                  {average ? <SparkFilament tone={filamentTone} series={entry.metric.history?.[averagePeriod]} unit={healthMetricUnit(entry.metric.value)} /> : null}
                   <HealthMetricComparison metric={entry.metric} averagePeriod={averagePeriod}/>
                   <small>
                     <span className="health-kpi-category">{entry.categoryName}</span>
                     {entry.metric.context ? ` · ${entry.metric.context}` : ""}
                   </small>
                 </div>
-              ))}
+              );})}
           </div>
         </article>;
       })}
@@ -226,7 +244,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     return () => window.clearTimeout(timer);
   }, [active]);
 
-  return <nav className="workspace-navigation" aria-label="Dashboard workspaces">
+  return <nav className="workspace-navigation mode-dial" aria-label="Dashboard workspaces">
     <div className="workspace-tabs" role="tablist" aria-orientation="horizontal">
       {workspaces.map((workspace, index) => {
         const Icon = workspace.icon;
@@ -253,10 +271,11 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
           key={workspace.key}
           type="button"
           role="tab"
+          data-mode={workspace.key}
           aria-selected={active === workspace.key}
           aria-controls="dashboard-workspace-panel"
           tabIndex={active === workspace.key ? 0 : -1}
-          className={active === workspace.key ? "active" : ""}
+          className={`vo-pop${active === workspace.key ? " active" : ""}`}
           onClick={() => onChange(workspace.key)}
           onKeyDown={(event) => {
             if (event.key === "ArrowRight") { event.preventDefault(); selectByIndex(index + 1); }
@@ -265,7 +284,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
             if (event.key === "End") { event.preventDefault(); selectByIndex(workspaces.length - 1); }
           }}
         >
-          <Icon size={18}/><span><b>{workspace.label}</b><small>{workspace.note}</small></span><em>{badge}</em>
+          <span className="mode-silhouette" aria-hidden="true"><Icon size={18}/></span><span><b>{workspace.label}</b><small>{workspace.note}</small></span><em className="orbital-badge">{badge}</em>
         </button>;
       })}
     </div>
@@ -314,10 +333,11 @@ export function CollapsibleSection({ number, title, note, children, headerAction
     return () => window.removeEventListener("dashboard-expand-section", onExpand);
   }, [number]);
 
-  return <section className={`collapsible-section ${open ? "open" : "collapsed"}`}>
+  return <section className={`collapsible-section ${open ? "open" : "collapsed"} drawer-shutter`}>
     <div className="section-heading collapsible-heading">
       <span>{number}</span>
       <div><h2>{title}</h2><p>{note}</p></div>
+      <span className="shutter-preview" aria-hidden="true"><i/><em>preview</em></span>
       {headerAction && <div className="section-header-action">{headerAction}</div>}
       <button className="collapse-button" type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen((value) => !value)} title={`${open ? "Collapse" : "Expand"} ${title}`}>
         <ChevronDown size={18}/><span className="sr-only">{open ? "Collapse" : "Expand"} {title}</span>
@@ -327,8 +347,30 @@ export function CollapsibleSection({ number, title, note, children, headerAction
   </section>;
 }
 
+export type DashboardAppearance = "black" | "dark" | "sepia";
+
+const APPEARANCE_OPTIONS: { value: DashboardAppearance; label: string }[] = [
+  { value: "black", label: "Black" },
+  { value: "dark", label: "Dark" },
+  { value: "sepia", label: "Sepia" },
+];
+
+export function AppearanceToggle({ value, onChange }: { value: DashboardAppearance; onChange: (value: DashboardAppearance) => void }) {
+  return <div className="appearance-toggle" role="group" aria-label="Dashboard appearance">
+    {APPEARANCE_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        type="button"
+        className={`vo-pop${value === option.value ? " active" : ""}`}
+        aria-pressed={value === option.value}
+        onClick={() => onChange(option.value)}
+      >{option.label}</button>
+    ))}
+  </div>;
+}
+
 export function HealthIncognitoToggle({ active, onChange }: { active: boolean; onChange: (active: boolean) => void }) {
-  return <label className={`incognito-toggle ${active ? "active" : ""}`}>
+  return <label className={`incognito-toggle vo-pop ${active ? "active" : ""}`}>
     {active ? <EyeOff size={17}/> : <Eye size={17}/>}
     <span><b>Health incognito</b><small>{active ? "Stats hidden" : "Hide health stats"}</small></span>
     <input type="checkbox" checked={active} onChange={(event) => onChange(event.target.checked)} aria-label="Hide health statistics"/>
@@ -340,6 +382,7 @@ export function DailyKanbanBoard({ workspace }: { workspace: KanbanWorkspace }) 
   const storageKey = `dashboard-kanban-${workspace}-v2`;
   const [state, setState] = useState<{ date: string; completed: string[] }>({ date: "", completed: [] });
   const [kanbanHydrated, setKanbanHydrated] = useState(false);
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -368,16 +411,20 @@ export function DailyKanbanBoard({ workspace }: { workspace: KanbanWorkspace }) 
   }, [kanbanHydrated, state.date]);
 
   const items = kanbanItems[workspace];
-  const toggle = (id: string) => setState((current) => ({ ...current, completed: current.completed.includes(id) ? current.completed.filter((item) => item !== id) : [...current.completed, id] }));
+  const toggle = (id: string) => {
+    setCompletingId(id);
+    window.setTimeout(() => setCompletingId(null), 320);
+    setState((current) => ({ ...current, completed: current.completed.includes(id) ? current.completed.filter((item) => item !== id) : [...current.completed, id] }));
+  };
   const lanes = [{ key: "today", label: "To do today" }, { key: "monitor", label: "Monitor" }, { key: "done", label: "Completed today" }] as const;
-  return <section className="kanban-board canonical-action-board">
+  return <section className="kanban-board canonical-action-board" data-visual="mission-chips">
     <div className="kanban-summary"><div><Target size={18}/><span><b>Daily action board</b><small>{Math.max(items.length - state.completed.length, 0)} active · {state.completed.length} completed · resets at local midnight</small></span></div><em>{localDateKey()}</em></div>
     <div className="kanban-lanes">{lanes.map((lane) => {
       const laneItems = items.filter((item) => lane.key === "done" ? state.completed.includes(item.id) : item.lane === lane.key && !state.completed.includes(item.id));
       return <article className={`kanban-lane ${lane.key} ${laneItems.length ? "" : "empty"}`} key={lane.key}><header><b>{lane.label}</b><span>{laneItems.length}</span></header><div>{laneItems.map((item) => {
         const completed = state.completed.includes(item.id);
         const cardLabel = `${completed ? "Mark incomplete" : "Mark complete"}: ${item.title}. ${item.detail} ${item.numericAdvantage}. ${item.strategicAdvantage}`;
-        return <button type="button" className={`kanban-card ${item.tone} ${completed ? "completed" : ""}`} aria-label={cardLabel} title={completed ? `${item.detail} · ${item.numericAdvantage} · ${item.strategicAdvantage}` : undefined} onClick={() => toggle(item.id)} key={item.id}><span className="kanban-check">{completed ? <CheckCircle2 size={17}/> : <i/>}</span><strong>{item.title}</strong><p>{item.detail}</p><small><b>{item.numericAdvantage}</b><em>{item.strategicAdvantage}</em></small></button>;
+        return <button type="button" className={`kanban-card vo-pop ${item.tone} ${completed ? "completed" : ""}${completingId === item.id ? " completing" : ""}`} aria-label={cardLabel} title={completed ? `${item.detail} · ${item.numericAdvantage} · ${item.strategicAdvantage}` : undefined} onClick={() => toggle(item.id)} key={item.id}><span className="kanban-check">{completed ? <CheckCircle2 size={17}/> : <i/>}</span><strong>{item.title}</strong><p>{item.detail}</p><small><b>{item.numericAdvantage}</b><em>{item.strategicAdvantage}</em></small></button>;
       })}{!laneItems.length && <p className="kanban-empty">Empty</p>}</div></article>;
     })}</div>
   </section>;

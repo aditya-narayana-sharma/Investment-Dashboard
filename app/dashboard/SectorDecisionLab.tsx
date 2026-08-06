@@ -30,6 +30,7 @@ import {
   investabilityComposite,
 } from "../sector-investability";
 import type { SectorBenchmarkSnapshot, SectorMarketSnapshot } from "../sector-live-types";
+import { TriggerDial } from "./visual-components";
 
 export type SectorDecisionPage = "benchmarks" | "investability" | "pestel" | "porter" | "macro";
 
@@ -107,6 +108,17 @@ export function SectorDecisionLab({
     trigger: Number((((dial.trigger - dial.min) / (dial.max - dial.min || 1)) * 100).toFixed(1)),
     raw: `${dial.unit}${dial.value.toLocaleString("en-IN")}`,
   }));
+  const liveSqueeze = useMemo(() => {
+    const fromBenchmarks = benchmarks.indices
+      .filter((index) => index.squeezeWidth !== null)
+      .map((index, offset) => ({
+        name: index.officialName.replace(/^NIFTY\s+/i, "Nifty "),
+        value: index.squeezeWidth as number,
+        color: INDEX_COLORS[offset % INDEX_COLORS.length],
+        group: "Index" as const,
+      }));
+    return fromBenchmarks.length ? [...fromBenchmarks, ...squeezeWidths.filter((item) => item.group === "Name")] : squeezeWidths;
+  }, [benchmarks.indices]);
 
   const sectorSelector = <div className="decision-lab-sector-selector" role="tablist" aria-label="Decision Lab sector">
     {sectors.map((item) => <button type="button" role="tab" aria-selected={item.id === sectorId} className={item.id === sectorId ? "active" : ""} style={{ "--sector": item.color } as CSSProperties} onClick={() => setSectorId(item.id)} key={item.id}><i/>{item.name}</button>)}
@@ -115,6 +127,7 @@ export function SectorDecisionLab({
   if (page === "benchmarks") {
     return <section className="decision-lab-page benchmark-page">
       <div className="decision-purpose"><BarChart3 size={17}/><span><b>Reference-index comparison</b><small>Compare sector leadership with broad, sector and factor benchmarks. Delayed/EOD series are never labelled live.</small></span><em className={`pill ${benchmarks.status === "live" ? "green" : benchmarks.status === "partial" || benchmarks.status === "cached" ? "amber" : "red"}`}>{benchmarks.status}</em></div>
+      {!benchmarks.indices.length ? <div className="live-empty compact"><b>Benchmark registry unavailable</b><p>{benchmarks.message}</p></div> : null}
       <div className="benchmark-selector" role="group" aria-label="Select up to three benchmark indices">
         {benchmarks.indices.map((index) => {
           const active = selectedIndices.includes(index.id);
@@ -122,17 +135,19 @@ export function SectorDecisionLab({
         })}
       </div>
       <div className="decision-chart-layout">
-        <article className="panel decision-main-chart">
+        <article className="panel decision-main-chart benchmark-panel index-race-tape">
+          <div className="chart-wrap decision-chart-canvas">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={history} margin={{ top: 10, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-              <XAxis dataKey="date" minTickGap={48} tick={{ fill: "#9ba6b2", fontSize: 10 }}/>
-              <YAxis domain={["auto", "auto"]} width={42} tick={{ fill: "#9ba6b2", fontSize: 10 }}/>
+              <XAxis dataKey="date" minTickGap={48} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
+              <YAxis domain={["auto", "auto"]} width={42} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
               <Tooltip/>
               <Legend/>
               {selectedBenchmarks.map((index) => <Line key={index.id} dataKey={index.id} name={index.officialName} stroke={INDEX_COLORS[benchmarks.indices.findIndex((item) => item.id === index.id)]} dot={false} strokeWidth={2} connectNulls/>)}
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </article>
         <aside className="benchmark-return-grid">
           {selectedBenchmarks.map((index) => <article className="panel" key={index.id}><span>{index.officialName}</span><b>{index.level === null ? "Unavailable" : index.level.toLocaleString("en-IN")}</b><div>{(["day", "month", "quarter", "year"] as const).map((period) => <small className={(index.returns[period] ?? 0) >= 0 ? "positive" : "negative"} key={period}>{period}: {index.returns[period] === null ? "—" : `${index.returns[period]! >= 0 ? "+" : ""}${index.returns[period]!.toFixed(2)}%`}</small>)}</div><em>{index.source} · {index.observedAt}</em></article>)}
@@ -146,23 +161,30 @@ export function SectorDecisionLab({
     : page === "porter"
       ? { title: "Porter competitive pressure", note: "Higher means tougher industry economics and more value competed away.", data: porterData, icon: <Target size={18}/> }
       : { title: "Investability decision radar", note: "Converts sector evidence into allocate, monitor, avoid or reassess gates.", data: investabilityData, icon: <ShieldCheck size={18}/> };
+  const radarChartData = radarConfig.data.map((row) => ({
+    ...row,
+    score: row.score ?? 0,
+    median: row.median ?? 0,
+  }));
 
   if (page !== "macro") {
-    return <section className="decision-lab-page">
+    return <section className="decision-lab-page decision-lab-panel decision-hex-shield">
       {sectorSelector}
       <div className="decision-purpose"><span>{radarConfig.icon}</span><span><b>{radarConfig.title}</b><small>{radarConfig.note}</small></span><em className={`pill ${decision.tone}`}>{decision.label}</em></div>
       <div className="decision-chart-layout">
-        <article className="panel decision-main-chart">
+        <article className="panel decision-main-chart risk-chart">
+          <div className="chart-wrap decision-chart-canvas">
           <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={radarConfig.data} outerRadius="70%" margin={{ top: 18, right: 54, bottom: 18, left: 54 }}>
+            <RadarChart data={radarChartData} outerRadius="70%" margin={{ top: 18, right: 54, bottom: 18, left: 54 }}>
               <PolarGrid stroke="#46515b"/>
-              <PolarAngleAxis dataKey="axis" tick={{ fill: "#fff", fontSize: 10, fontWeight: 800 }}/>
-              <PolarRadiusAxis domain={[0, 5]} tickCount={6} tick={{ fill: "#9ba6b2", fontSize: 10 }}/>
+              <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
+              <PolarRadiusAxis domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
               <Radar name="All-sector median" dataKey="median" stroke="#9ca4ad" fill="#9ca4ad" fillOpacity={0.07} strokeDasharray="5 4"/>
               <Radar name={sector.name} dataKey="score" stroke={sector.color} fill={sector.color} fillOpacity={0.3} strokeWidth={2.5}/>
               <Legend/><Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)} / 5`, String(name)]}/>
             </RadarChart>
           </ResponsiveContainer>
+          </div>
         </article>
         <aside className="panel decision-evidence">
           <h3>Decision gate</h3><strong>{decision.label} · {decisionScore.toFixed(1)} / 5</strong><p>{decision.action}</p>
@@ -185,17 +207,28 @@ export function SectorDecisionLab({
   return <section className="decision-lab-page">
     {sectorSelector}
     <div className="decision-purpose"><Activity size={18}/><span><b>Macro triggers and volatility squeeze</b><small>Distance to trigger is context for sizing, not an automatic trading signal.</small></span></div>
+    <div className="trigger-dials" aria-label="Macro trigger proximity dials">
+      {macroData.map((dial) => (
+        <TriggerDial
+          key={dial.name}
+          label={dial.name}
+          valueLabel={dial.raw}
+          distance={dial.current}
+          triggerAt={dial.trigger}
+        />
+      ))}
+    </div>
     <div className="decision-chart-layout macro-decision-chart-layout">
       <article className="panel decision-main-chart macro-chart-panel">
         <header className="macro-chart-header">
           <span><b>Distance to macro trigger</b><small>Current level versus the decision threshold, normalized to 100.</small></span>
         </header>
-        <div className="macro-chart-canvas">
+        <div className="macro-chart-canvas decision-chart-canvas">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={macroData} layout="vertical" margin={{ top: 8, right: 24, bottom: 8, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-              <XAxis type="number" domain={[0, 100]} tick={{ fill: "#9ba6b2", fontSize: 10 }}/>
-              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "#fff", fontSize: 10, fontWeight: 800 }}/>
+              <XAxis type="number" domain={[0, 100]} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
+              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
               <Tooltip formatter={(value, name, item) => [`${Number(value).toFixed(1)} / 100 · ${item.payload.raw}`, String(name)]}/>
               <Legend/><Bar dataKey="current" name="Current" fill="#4c8fff"/><Bar dataKey="trigger" name="Decision trigger" fill="#e9ae2f"/>
             </BarChart>
@@ -204,18 +237,18 @@ export function SectorDecisionLab({
       </article>
       <article className="panel decision-main-chart macro-chart-panel">
         <header className="macro-chart-header">
-          <span><b>Volatility squeeze width</b><small>Narrower bands indicate tighter compression and greater expansion risk.</small></span>
+          <span><b>Volatility squeeze width</b><small>Narrower bands indicate tighter compression and greater expansion risk</small></span>
         </header>
-        <div className="macro-chart-canvas">
+        <div className="macro-chart-canvas decision-chart-canvas">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={squeezeWidths} layout="vertical" margin={{ top: 8, right: 46, bottom: 8, left: 8 }}>
+            <BarChart data={liveSqueeze} layout="vertical" margin={{ top: 8, right: 46, bottom: 8, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-              <XAxis type="number" domain={[0, 5]} tick={{ fill: "#9ba6b2", fontSize: 10 }} unit="%"/>
-              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "#fff", fontSize: 10, fontWeight: 800 }}/>
+              <XAxis type="number" domain={[0, "dataMax"]} tick={{ fill: "var(--chart-tick)", fontSize: 10 }} unit="%"/>
+              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
               <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, "Band width"]}/>
               <Bar dataKey="value" name="Band width" radius={[0, 3, 3, 0]}>
-                {squeezeWidths.map((item) => <Cell fill={item.color} key={item.name}/>)}
-                <LabelList dataKey="value" position="right" fill="#fff" fontSize={10} fontWeight={800} formatter={(value: number) => `${value.toFixed(1)}%`}/>
+                {liveSqueeze.map((item) => <Cell fill={item.color} key={item.name}/>)}
+                <LabelList dataKey="value" position="right" fill="var(--chart-label)" fontSize={10} fontWeight={800} formatter={(value: number) => `${value.toFixed(1)}%`}/>
               </Bar>
             </BarChart>
           </ResponsiveContainer>

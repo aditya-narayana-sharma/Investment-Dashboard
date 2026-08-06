@@ -454,8 +454,9 @@ export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" |
 /** Direction-column bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
 export type HealthDirectionBucket = "good" | "moderate" | "bad" | "unavailable";
 
+/** Visible H-3 columns only — unavailable averages render inside Context dependent, not a fourth column. */
 export const HEALTH_DIRECTION_COLUMNS: Array<{
-  id: HealthDirectionBucket;
+  id: Exclude<HealthDirectionBucket, "unavailable">;
   title: string;
   shortLabel: string;
   className: string;
@@ -463,7 +464,6 @@ export const HEALTH_DIRECTION_COLUMNS: Array<{
   { id: "good", title: "Favourable direction", shortLabel: "Favourable", className: "direction-good" },
   { id: "moderate", title: "Context dependent", shortLabel: "Context", className: "direction-moderate" },
   { id: "bad", title: "Unfavourable direction", shortLabel: "Unfavourable", className: "direction-bad" },
-  { id: "unavailable", title: "Average unavailable", shortLabel: "Unavailable", className: "direction-unavailable" },
 ];
 
 export function healthMetricDirectionBucket(
