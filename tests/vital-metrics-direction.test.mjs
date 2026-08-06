@@ -26,21 +26,49 @@ test("direction helpers and category accents are exported from utils", () => {
   assert.match(utilsSource, /Hearing/);
 });
 
-test("Vital Metrics UI uses four direction columns with category colour classes", () => {
+test("Vital Metrics UI uses three direction columns with category colour classes", () => {
   assert.match(sharedUiSource, /health-direction-grid/);
   assert.match(sharedUiSource, /groupHealthMetricsByDirection/);
   assert.match(sharedUiSource, /HEALTH_DIRECTION_COLUMNS/);
   assert.match(sharedUiSource, /health-kpi-category/);
   assert.match(sharedUiSource, /\{column\.title\}/);
+  assert.match(sharedUiSource, /SparkFilament tone=\{filamentTone\} series=\{entry\.metric\.history\?\.\[averagePeriod\]\} unit=\{healthMetricUnit\(entry\.metric\.value\)\}/);
+  assert.match(sharedUiSource, /function healthMetricUnit/);
+  assert.match(sharedUiSource, /directionColumns\.unavailable/);
+  assert.match(sharedUiSource, /average-unavailable/);
+  assert.match(sharedUiSource, /shown under Context dependent/);
   assert.match(utilsSource, /title: "Favourable direction"/);
   assert.match(utilsSource, /title: "Context dependent"/);
   assert.match(utilsSource, /title: "Unfavourable direction"/);
-  assert.match(utilsSource, /title: "Average unavailable"/);
+  assert.doesNotMatch(utilsSource, /title: "Average unavailable"/);
   assert.doesNotMatch(sharedUiSource, /health-category-grid/);
+  assert.doesNotMatch(sharedUiSource, /Grey column · average unavailable/);
   assert.match(globalCss, /\.health-direction-grid/);
+  assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(globalCss, /\.health-cat-heart/);
   assert.match(globalCss, /\.health-cat-activity/);
-  assert.match(globalCss, /\.direction-unavailable/);
+  assert.match(globalCss, /\.average-unavailable/);
+  assert.doesNotMatch(globalCss, /\.direction-unavailable/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile > b/);
+});
+
+test("SparkFilament renders from per-metric history and has no hardcoded shared path", () => {
+  const visualSource = readFileSync(join(root, "app/dashboard/visual-components.tsx"), "utf8");
+  const overhaulCss = readFileSync(join(root, "app/visual-overhaul.css"), "utf8");
+  assert.match(visualSource, /export function sparkFilamentPath/);
+  assert.match(visualSource, /export function sparkFilamentPoints/);
+  assert.match(visualSource, /export function SparkFilament/);
+  assert.match(visualSource, /series\?: Array<\{ date: string; value: number \}>/);
+  assert.match(visualSource, /spark-filament-label/);
+  assert.match(visualSource, /onPointerMove/);
+  assert.match(visualSource, /onPointerLeave/);
+  assert.doesNotMatch(visualSource, /M0 8 Q8 2 16 7 T32 6 T48 5 T64 7/);
+  assert.match(overhaulCss, /vo-filament-draw/);
+  assert.match(overhaulCss, /spark-filament-label/);
+  assert.match(readFileSync(join(root, "app/health-data.ts"), "utf8"), /history\?: Partial<Record<HealthAveragePeriod, HealthMetricHistoryPoint\[\]>>/);
+  assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /def daily_history\(/);
+  assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /"history": history/);
 });
 
 test("Health console is H-1 / Daily Optimism H-2 / Vital Metrics H-3 without H-4 or Health Status", () => {

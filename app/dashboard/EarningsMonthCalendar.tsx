@@ -164,9 +164,14 @@ export function EarningsMonthCalendar({
     return [...counts.keys()].sort();
   }, [analysisKey, eventsByDay]);
 
-  const [monthKey, setMonthKey] = useState(() => monthCandidates[0] ?? analysisKey.slice(0, 7));
-  const requestedMonth = activeMonth ?? monthKey;
-  const activeMonthKey = monthCandidates.includes(requestedMonth) ? requestedMonth : (monthCandidates[0] ?? analysisKey.slice(0, 7));
+  const preferredMonth = analysisKey.slice(0, 7);
+  const fallbackMonth = monthCandidates.includes(preferredMonth)
+    ? preferredMonth
+    : (monthCandidates.find((candidate) => candidate >= preferredMonth) ?? monthCandidates[monthCandidates.length - 1] ?? preferredMonth);
+  /** null = follow analysis month until the user navigates (avoids landing on 2023 history). */
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+  const requestedMonth = activeMonth ?? monthKey ?? preferredMonth;
+  const activeMonthKey = monthCandidates.includes(requestedMonth) ? requestedMonth : fallbackMonth;
   const year = Number(activeMonthKey.slice(0, 4));
   const monthIndex = Number(activeMonthKey.slice(5, 7)) - 1;
   const cells = useMemo(() => monthMatrix(year, monthIndex), [monthIndex, year]);
@@ -209,7 +214,7 @@ export function EarningsMonthCalendar({
   };
 
   return (
-    <div className="earnings-month-calendar">
+    <div className="earnings-month-calendar earnings-observatory">
       <div className="earnings-month-head">
         <div>
           <h4>{title} — {monthLabel}</h4>
@@ -253,7 +258,7 @@ export function EarningsMonthCalendar({
                   return (
                     <li key={earningsEventKey(event)} style={{ "--dot": meta.color } as CSSProperties}>
                       <i aria-hidden="true"/>
-                      <em>{event.name}{event.portfolio ? " ★" : ""}</em>
+                      <em>{event.name}{event.portfolio ? <span className="earnings-holding-star"> ★</span> : ""}</em>
                       {Boolean(event.holidayConflicts?.length) && <span className="market-conflict-badge">HOLIDAY</span>}
                     </li>
                   );
@@ -274,7 +279,7 @@ export function EarningsMonthCalendar({
           <div className="earnings-day-empty">No earnings events on this date.</div>
         ) : (
           <div className="earnings-day-table-wrap">
-            <table className="earnings-day-table">
+            <table className="earnings-day-table earnings-result-telemetry">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -288,10 +293,11 @@ export function EarningsMonthCalendar({
                   const key = earningsEventKey(event);
                   const selected = selectedEventKey === key;
                   const tone = statusTone(event);
+                  const scheduleOnly = !event.reported && !(event.kpis ?? []).some((kpi) => Boolean(kpi?.value));
                   return (
                     <tr
                       key={key}
-                      className={`${tone} ${selected ? "selected" : ""} ${onSelectEvent ? "selectable" : ""}`}
+                      className={`${tone} ${selected ? "selected" : ""} ${onSelectEvent ? "selectable" : ""}${scheduleOnly ? " schedule-evidence" : ""}`}
                       tabIndex={onSelectEvent ? 0 : undefined}
                       aria-selected={onSelectEvent ? selected : undefined}
                       onClick={onSelectEvent ? () => onSelectEvent(event) : undefined}
@@ -304,10 +310,11 @@ export function EarningsMonthCalendar({
                     >
                       <td>
                         <b>{formatShortDate(activeDay)}</b>
-                        <span className={`earnings-status ${tone}`}>{event.reported ? "Reported" : /today/i.test(event.state) ? "Today" : "Due"}</span>
+                        <span className={`earnings-status ${tone}${!event.reported && /today/i.test(event.state) ? " pending-lock" : ""}`}>{event.reported ? "Reported" : /today/i.test(event.state) ? "Today" : "Due"}</span>
+                        {scheduleOnly ? <small>schedule evidence</small> : null}
                       </td>
                       <td>
-                        <b>{event.name}{event.portfolio ? " ★" : ""}</b>
+                        <b>{event.name}{event.portfolio ? <span className="earnings-holding-star"> ★</span> : ""}</b>
                         <small>{meta.name} · {event.symbol}</small>
                         {event.holidayConflicts?.map((conflict) => (
                           <span className="market-conflict-badge" key={`${conflict.market}-${conflict.holiday}`}>
@@ -318,7 +325,7 @@ export function EarningsMonthCalendar({
                       {columns.map((column) => {
                         const kpi = event.kpis[column.index];
                         return (
-                          <td key={`${key}-${column.index}`}>
+                          <td key={`${key}-${column.index}`} className={!kpi?.value ? "sealed" : undefined}>
                             {kpi?.value ? (
                               <>
                                 {column.showPerRowLabel && kpi.label ? <em className="kpi-row-label">{kpi.label}</em> : null}

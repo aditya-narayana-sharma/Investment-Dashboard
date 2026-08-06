@@ -69,10 +69,12 @@ test("Podcast sender groups expose collapsible masonry and a Playwright geometry
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("./podcast-masonry.playwright.mjs", import.meta.url), "utf8"),
   ]);
-  assert.match(intelligenceWorkspace, /layout === "podcasts"[\s\S]*?<details className="sender-group sender-group-collapsible"/);
+  assert.match(intelligenceWorkspace, /layout\?: DigestGroupLayout/);
+  assert.match(intelligenceWorkspace, /sender-group sender-group-collapsible/);
   assert.doesNotMatch(intelligenceWorkspace, /<details className="sender-group sender-group-collapsible"[^>]*\sopen[\s>]/);
   assert.match(intelligenceWorkspace, /<summary className="sender-group-header"[^>]*>/);
   assert.match(intelligenceWorkspace, /event\.key !== "Enter" && event\.key !== " "/);
+  assert.match(intelligenceWorkspace, /layout="podcasts"/);
   assert.match(globalCss, /\.sender-groups-podcasts\s*\{[^}]*display:block;[^}]*column-count:2;[^}]*column-gap:8px;/s);
   assert.match(globalCss, /\.sender-groups-podcasts \.sender-group\s*\{[^}]*margin:0 0 8px;[^}]*break-inside:avoid;/s);
   assert.doesNotMatch(globalCss, /\.sender-groups-podcasts\s*\{[^}]*grid-template-columns/s);
@@ -88,6 +90,37 @@ test("Podcast sender groups expose collapsible masonry and a Playwright geometry
   assert.match(geometryTest, /getBoundingClientRect/);
   assert.match(geometryTest, /gap <= gutter \+ 0\.5/);
   assert.match(geometryTest, /current\.index > previous\.index/);
+});
+
+test("Market Intelligence digests collapse newsletters by sender and Axis by topic with source links", async () => {
+  const [intelligenceWorkspace, contentServer, contentTypes, globalCss, pdfRoute] = await Promise.all([
+    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../app/content-types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/axis-research/pdf/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(intelligenceWorkspace, /layout="axis"/);
+  assert.match(intelligenceWorkspace, /axisTopicFromTitle|topicGroup/);
+  assert.match(intelligenceWorkspace, /Open in Mail/);
+  assert.match(intelligenceWorkspace, /Open PDF/);
+  assert.match(intelligenceWorkspace, /Open in Podcasts/);
+  assert.match(intelligenceWorkspace, /DigestSourceLinks/);
+  assert.match(intelligenceWorkspace, /return "Description"/);
+  assert.match(intelligenceWorkspace, /keyTakeaways/);
+  assert.match(contentTypes, /messageUrl\?:/);
+  assert.match(contentTypes, /pdfUrl\?:/);
+  assert.match(contentTypes, /topicGroup\?:/);
+  assert.match(contentServer, /mailMessageId\(/);
+  assert.match(contentServer, /mailMessageUrl\(/);
+  assert.match(contentServer, /matchAxisResearchPdf\(/);
+  assert.match(contentServer, /axisTopicGroup\(/);
+  assert.match(contentServer, /preferApplePodcastsEpisodeUrl\(/);
+  assert.match(contentServer, /deduplicatePodcastEpisodes\(/);
+  assert.match(pdfRoute, /application\/pdf/);
+  assert.match(pdfRoute, /AXIS_PDF_ARCHIVE_PATH|Downloads\/Axis Research/);
+  assert.match(globalCss, /\.digest-source-link\s*\{/);
 });
 
 test("Sectoral Analytics uses full-width collapsible sections without overview thumbnails", async () => {
@@ -171,8 +204,9 @@ test("Phase 3 Market Intelligence automation remains wired to local source paths
   assert.match(workspace, /Read Later/);
   assert.match(workspace, /findEarningsHolidayConflicts/);
   assert.match(workspace, /Transcript summary/);
-  assert.match(workspace, /Transcript unavailable — summary not generated/);
+  assert.match(workspace, /Description evidence only — transcript summary not generated/);
   assert.doesNotMatch(workspace, /Episode description/);
+  assert.match(workspace, /Open in Podcasts/);
   assert.match(globalCss, /font-size:12px/);
   assert.match(globalCss, /background:var\(--reminder-bg\)/);
   assert.match(cron, /0 \* \* \* \*/);
@@ -192,6 +226,10 @@ test("server-renders the portfolio dashboard", async () => {
   assert.match(html, /Sectoral Analytics/);
   assert.match(html, /Health incognito/);
   assert.match(html, /Hide health statistics/);
+  assert.match(html, /Dashboard appearance/);
+  assert.match(html, />Black</);
+  assert.match(html, />Dark</);
+  assert.match(html, />Sepia</);
   // Sections start collapsed: headings + Expand controls remain, body content stays unmounted.
   assert.match(html, /collapsible-section collapsed/);
   assert.match(html, /Investment action board/);
@@ -440,9 +478,12 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /items=\{visibleAxis\}/);
   assert.match(page, /visiblePodcasts\.map|podcasts\.map/);
   assert.match(page, /SenderDigestGroups/);
-  assert.match(page, /groupDigestItemsBySender/);
+  assert.match(page, /groupDigestItems/);
+  assert.match(page, /axisTopicFromTitle|topicGroup/);
+  assert.match(page, /Open in Mail|Open in Podcasts|Open PDF/);
   assert.match(globalCss, /\.sender-group\s*\{/);
-  assert.match(globalCss, /background:color-mix\(in srgb,var\(--sender-color\) 30%,transparent\)/);
+  assert.match(globalCss, /background:color-mix\(in srgb,var\(--sender-color\) 14%, var\(--bg-panel\)\)/);
+  assert.doesNotMatch(globalCss, /background:color-mix\(in srgb,var\(--sender-color\) 30%,transparent\)/);
   assert.match(page, /matchesSelectedSector/);
   assert.match(page, /data-sector-filter/);
   assert.match(page, /aria-pressed=/);
@@ -538,6 +579,9 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /earnings-month-grid/);
   assert.match(globalCss, /kpi-row-label/);
   assert.match(globalCss, /\.intelligence-feed-stack\s*\{[^}]*display:grid;/s);
+  assert.match(globalCss, /\.intelligence-feed-stack\.topic-feed[\s\S]*?column-count:\s*auto\s*!important/s);
+  assert.match(page, /intelligence-feed-stack agenda-ribbon triptych-command/);
+  assert.doesNotMatch(page, /intelligence-feed-stack topic-feed agenda-ribbon/);
   assert.match(globalCss, /\.intelligence-feed-collapse:focus-visible\s*\{[^}]*outline:/s);
   assert.match(globalCss, /\.reminder-smart-groups\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s);
   assert.match(globalCss, /\.calendar-complete-feed\s*\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\);/s);
@@ -591,20 +635,23 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /data-label="What matters"/);
   assert.match(page, /thesisBullets\(/);
   assert.match(page, /ThesisBulletList/);
-  assert.match(page, /mail-window calls/);
-  assert.match(page, /Local evidence inventory/);
+  assert.match(page, /archive calls/);
+  assert.match(page, /mail-window/);
+  assert.match(page, /PDF-archive policy/);
   assert.match(page, /last trading day/);
   assert.match(globalCss, /\.thesis-bullet-list/);
   assert.match(globalCss, /\.analyst-matrix/);
   assert.match(globalCss, /grid-template-areas:[\s\S]*"stock call"/);
   assert.match(page, /function AxisRecommendationWorkbench/);
   assert.match(page, /formatAxisTargetLine/);
-  assert.match(page, /TARGET - \$\{label\} \(Axis Mail\)/);
+  assert.match(page, /TARGET - \$\{label\} \(\$\{sourceLabel\}\)/);
   assert.match(page, /function axisProgressToTarget/);
   assert.match(page, /function AxisCmpProgressBar/);
   assert.match(page, /Progress to target/);
-  assert.match(page, /CMP ÷ Axis target \(capped 100%\)/);
+  assert.match(page, /CMP ÷ Axis target \(capped 100%\)|Kite CMP ÷ Axis target|yfinance CMP ÷ Axis target/);
   assert.match(page, /axis-pick-cmp/);
+  assert.match(page, /mergeHoldingTradingCalls|axisHoldingTradingCalls|AXIS_HOLDING_TRADING_SYMBOLS/);
+  assert.match(page, /ETERNAL|ICICIBANK|JSWENERGY|BHARTIARTL/);
   assert.match(globalCss, /\.axis-pick-list button \{[^}]*flex-direction:column/);
   assert.match(globalCss, /\.axis-target-line/);
   assert.match(globalCss, /\.axis-target-progress/);
@@ -836,6 +883,12 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.match(globalCss, /\.health-direction-grid/);
     assert.match(globalCss, /\.health-cat-heart/);
     assert.match(globalCss, /\.health-direction-grid\.compact/);
+    assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+    assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
+    assert.doesNotMatch(globalCss, /\.direction-unavailable/);
+    const utilsSource = await readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8");
+    assert.match(utilsSource, /Exclude<HealthDirectionBucket, "unavailable">/);
+    assert.doesNotMatch(utilsSource, /title: "Average unavailable"/);
     assert.match(globalCss, /\.viewport-console-active body\{overflow:hidden\}/);
     assert.match(globalCss, /\.sector-overview-grid\.sector-overview-trio/);
     assert.match(globalCss, /Typography floor: body UI/);
@@ -922,9 +975,14 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(liveServer, /adoptPersistedKiteSession/);
   assert.match(await readFile(new URL("../app/kite-session-store.ts", import.meta.url), "utf8"), /nextKiteDailyExpiry/);
   assert.doesNotMatch(sectorRoute, /Set-Cookie/);
-  assert.match(page, /await loadSectorMarket\(primaryId\)/);
+  assert.match(page, /primarySectorEarly/);
+  assert.match(page, /allSectorsEarly/);
+  assert.match(page, /loadSectorNews/);
+  assert.match(page, /\/api\/sectors\/news/);
   assert.match(page, /Object\.keys\(sectorCompanies\)/);
   assert.match(page, /filter\(\(sectorId\) => sectorId !== primaryId\)/);
+  assert.match(page, /isUsableSectorMarketStatus/);
+  assert.match(await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"), /aggregateSectorMarketStatus/);
   assert.match(page, /toggleSector/);
   assert.match(page, /selectedSectorIds/);
   assert.match(page, /useState<string\[\]>\(\[\]\)/);
@@ -970,8 +1028,16 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(sectorData, /value: "5\.25%"/);
   assert.match(sectorData, /moneycontrol\.com/);
   assert.match(sectorData, /ndtvprofit\.com/);
+  assert.match(sectorData, /Economic Times, Financial Times, Bloomberg, Zerodha, Moneycontrol/);
   assert.match(sectorData, /US tariff path/);
   assert.match(sectorData, /Blinkit daily orders/);
+  assert.match(await readFile(new URL("../app/sector-news-server.ts", import.meta.url), "utf8"), /economic_times/);
+  assert.match(await readFile(new URL("../app/api/sectors/news/route.ts", import.meta.url), "utf8"), /getSectorNewsSnapshot/);
+  assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /News \+ sentiment/);
+  assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /sector-news-sentiment-grid/);
+  assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /\.slice\(0, 3\)/);
+  assert.match(globalCss, /\.sector-news-sentiment-grid/);
+  assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(globalCss, /\.workspace-navigation\s*\{/);
   assert.match(globalCss, /position:\s*sticky/);
   assert.match(globalCss, /\.sector-rank-grid/);
@@ -1008,4 +1074,86 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
   assert.match(flaskGateway, /@app\.post\("\/_health\/pair\/code"\)/);
   assert.match(flaskGateway, /@app\.post\("\/_health\/pair"\)/);
   assert.match(page, /portfolio-native-refresh/);
+});
+
+test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", async () => {
+  const [sharedUi, page, layout, globalCss, visualCss] = await Promise.all([
+    readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(sharedUi, /export function AppearanceToggle/);
+  assert.match(sharedUi, /Dashboard appearance/);
+  assert.match(sharedUi, /Black[\s\S]*Dark[\s\S]*Sepia/);
+  assert.match(page, /AppearanceToggle/);
+  assert.match(page, /dashboard-appearance/);
+  assert.match(page, /document\.documentElement\.dataset\.appearance/);
+  assert.match(page, /appearanceHydrated/);
+  assert.match(layout, /data-appearance="black"/);
+  assert.match(layout, /dashboard-appearance/);
+  assert.match(layout, /document\.documentElement\.dataset\.appearance/);
+
+  assert.match(globalCss, /--bg-page/);
+  assert.match(globalCss, /--btn-bg/);
+  assert.match(globalCss, /--brutalist-shadow-lg/);
+  assert.match(globalCss, /html\[data-appearance="dark"\]/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\]/);
+  assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--bg-page:#0d1117/);
+  assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--btn-bg:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--bg-page:#faf7f2/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-bg:#1a140f/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-fg:#faf6ee/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--ink:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--muted:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--navy:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--chart-tick:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--chart-label:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--on-dark:#fffdf9/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.nested-chart-panel[\s\S]*?background:var\(--bg-panel\) !important/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.nested-chart-panel \.panel-title[\s\S]*color:var\(--ink\) !important/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.nested-chart-panel \.ring-key[\s\S]*color:var\(--muted\) !important/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.analytics-subhead span[\s\S]*color:var\(--ink\)/);
+  assert.doesNotMatch(globalCss, /html\[data-appearance="sepia"\][\s\S]*?--muted:#4a3f32/);
+  assert.doesNotMatch(globalCss, /html\[data-appearance="sepia"\][\s\S]*?--ink:#1a140f/);
+  /* Decision Lab / page navs paperize with black text (not dark chrome) */
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.sector-page-nav[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.sector-page-nav>div button[\s\S]*?color:var\(--ink\)/);
+  assert.doesNotMatch(globalCss, /html\[data-appearance="sepia"\] \.sector-page-nav\s*\{[^}]*background:var\(--btn-bg\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.decision-purpose[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.decision-purpose small[\s\S]*?color:var\(--ink\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.decision-lab-sector-selector button[\s\S]*?color:var\(--ink\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.workspace-section-nav button[\s\S]*?color:var\(--ink\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.section-heading p[\s\S]*?color:var\(--ink\)/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.trigger-dial b[\s\S]*?color:\s*var\(--ink\)\s*!important/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.trigger-dial small[\s\S]*?color:\s*var\(--ink\)\s*!important/);
+  assert.match(globalCss, /\.kanban-card[\s\S]*color:var\(--ink\)/);
+  assert.match(globalCss, /\.kanban-lane>header[\s\S]*background:var\(--btn-bg\)/);
+  assert.match(globalCss, /\.kanban-lane>header b[\s\S]*color:var\(--btn-fg\)/);
+  assert.match(globalCss, /color-mix\(in srgb,var\(--sender-color\) 14%, var\(--bg-panel\)\)/);
+  assert.doesNotMatch(globalCss, /color-mix\(in srgb,var\(--sender-color\) 30%,transparent\)/);
+  assert.match(globalCss, /\.appearance-toggle/);
+  /* Sepia paperizes dark dashboard islands (nested allocation, macro lab, evidence) */
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.scenario-shell[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.macro-regime-card[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.macro-selected-evidence[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.exposure-driver-head[\s\S]*?background:var\(--bg-table-head\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.portfolio-activity-matrix thead th[\s\S]*?background:var\(--bg-table-head\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.kanban-lane>header[\s\S]*?background:var\(--bg-table-head\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.risk-explanation[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.sector-news-sentiment-column[\s\S]*?background:var\(--bg-panel\)/);
+  assert.doesNotMatch(globalCss, /Intentional dark chrome islands/);
+
+  assert.match(visualCss, /\.vo-pop/);
+  assert.match(visualCss, /@keyframes vo-pop-press/);
+  assert.match(visualCss, /--brutalist-shadow-lg/);
+  assert.match(visualCss, /\.collapsible-content[\s\S]*vo-magnetic/);
+  assert.match(visualCss, /prefers-reduced-motion:\s*reduce/);
+  assert.match(visualCss, /\.digest-panel\.briefing-rail \.evidence-chip:not\(\.focused\)[\s\S]*?opacity:\s*1/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.orbital-planet \.nested-chart-panel[\s\S]*var\(--bg-panel\) !important/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.risk-panel\.threat-flower[\s\S]*var\(--bg-panel\) !important/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-workbench\.scenario-weather \.macro-event-tabs button\.active/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.lifecycle-panel\.evolution-river \.chart-wrap/);
 });

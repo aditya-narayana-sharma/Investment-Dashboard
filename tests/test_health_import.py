@@ -111,6 +111,20 @@ class HealthDatePolicyTests(unittest.TestCase):
         self.assertEqual(steps["averages"]["weekly"]["value"], "7,500")
         self.assertEqual(snapshot["coverage"]["Steps"]["status"], "available")
         self.assertEqual(
+            steps["history"]["weekly"],
+            [
+                {"date": "2026-07-24", "value": 5000.0},
+                {"date": "2026-07-25", "value": 10000.0},
+            ],
+        )
+        self.assertEqual(
+            steps["history"]["monthly"],
+            [
+                {"date": "2026-07-24", "value": 5000.0},
+                {"date": "2026-07-25", "value": 10000.0},
+            ],
+        )
+        self.assertEqual(
             snapshot["coverage"]["Steps"]["missingDates7"],
             ["2026-07-23", "2026-07-22", "2026-07-21", "2026-07-20", "2026-07-19"],
         )

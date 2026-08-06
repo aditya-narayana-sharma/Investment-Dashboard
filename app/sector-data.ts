@@ -287,4 +287,4 @@ export function sectorComposite(sector: SectorView) {
 }
 
 export const sectorSourceNote =
-  "Sector research narratives and KPIs refreshed 24 Jul 2026 from Moneycontrol and NDTV Profit primary articles (with official SIAM/RBI/Budget figures where those outlets cite them). Live prices and return horizons continue to refresh separately via yfinance sector snapshots. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";
+  "Sector research narratives and KPIs remain the dated research snapshot from 24 Jul 2026 (Moneycontrol and NDTV Profit primary articles, with official SIAM/RBI/Budget figures where those outlets cite them). Live S-2 news + sentiment aggregates Economic Times, Financial Times, Bloomberg, Zerodha, Moneycontrol, and NDTV Profit on each refresh. Live prices and return horizons refresh separately via yfinance sector snapshots. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";

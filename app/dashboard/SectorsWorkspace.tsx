@@ -14,6 +14,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { SectorBenchmarkSnapshot, SectorMarketSnapshot } from "../sector-live-types";
+import { aggregateSectorMarketStatus, isUsableSectorMarketStatus } from "../sector-live-types";
+import type { SectorNewsSnapshot } from "../sector-news-types";
 import type { LiveHolding } from "../live-types";
 import { SectorDecisionLab, type SectorDecisionPage } from "./SectorDecisionLab";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
@@ -133,6 +135,8 @@ function SectorWorkspaceShell({
   onToggleSector,
   sectorMarket,
   sectorMarketById,
+  sectorNews,
+  sectorMarketsLoading,
   holdings,
 }: {
   benchmarks: SectorBenchmarkSnapshot;
@@ -140,10 +144,31 @@ function SectorWorkspaceShell({
   onToggleSector: (sectorId: string) => void;
   sectorMarket: SectorMarketSnapshot;
   sectorMarketById: Record<string, SectorMarketSnapshot>;
+  sectorNews: SectorNewsSnapshot;
+  sectorMarketsLoading: boolean;
   holdings: LiveHolding[];
 }) {
   const [activePages, setActivePages] = useState<Record<SectorWorkspaceSection, SectorSectionPage>>(DEFAULT_SECTION_PAGES);
   const [activeSection, setActiveSection] = useState<SectorTopSection>("s1");
+  const primarySectorId = selectedSectorIds[selectedSectorIds.length - 1];
+  const marketSnapshots = Object.values(sectorMarketById);
+  const aggregatedMarketStatus = aggregateSectorMarketStatus(marketSnapshots);
+  // Prefer live breadth across industries. Empty byId must not render as
+  // "unavailable" while yfinance sector fetches are still in flight.
+  const resolvedMarketStatus = primarySectorId
+    ? (sectorMarketById[primarySectorId]?.status
+      ?? (isUsableSectorMarketStatus(sectorMarket.status) ? sectorMarket.status : null)
+      ?? (sectorMarketsLoading || !marketSnapshots.length ? null : sectorMarket.status))
+    : marketSnapshots.length
+      ? aggregatedMarketStatus
+      : null;
+  const s2Status = resolvedMarketStatus
+    ?? (sectorMarketsLoading || !marketSnapshots.length ? "loading" : "unavailable");
+  const s2StatusPill = s2Status === "live"
+    ? "green"
+    : s2Status === "cached" || s2Status === "public_delayed" || s2Status === "loading"
+      ? "amber"
+      : "red";
 
   useEffect(() => {
     const sync = () => {
@@ -196,11 +221,11 @@ function SectorWorkspaceShell({
     </div>
 
     <div id="sector-s2" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${sectorMarket.status === "live" ? "green" : "amber"}`}>{sectorMarket.status}</span>}>
+      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${s2StatusPill}`}>{s2Status}</span>}>
         <SectionPageNav section="s2" activePage={activePages.s2} onSelect={selectPage}/>
         <div id="sector-s2-panel" className="sector-full-section-body s2" role="tabpanel" aria-labelledby={`sector-s2-tab-${activePages.s2}`}>
           <Suspense fallback={<div className="live-empty compact"><b>Loading industry analytics…</b></div>}>
-            <SectoralAnalytics selectedIds={selectedSectorIds} onToggle={onToggleSector} market={sectorMarket} marketsBySector={sectorMarketById} holdings={holdings} page={activePages.s2 as SectorAnalyticsPage}/>
+            <SectoralAnalytics selectedIds={selectedSectorIds} onToggle={onToggleSector} market={sectorMarket} marketsBySector={sectorMarketById} news={sectorNews} holdings={holdings} page={activePages.s2 as SectorAnalyticsPage}/>
           </Suspense>
         </div>
       </CollapsibleSection>
@@ -222,6 +247,8 @@ export function SectorsWorkspace({
   onToggleSector,
   sectorMarket,
   sectorMarketById,
+  sectorNews,
+  sectorMarketsLoading = false,
   holdings,
   benchmarks,
 }: {
@@ -229,6 +256,8 @@ export function SectorsWorkspace({
   onToggleSector: (sectorId: string) => void;
   sectorMarket: SectorMarketSnapshot;
   sectorMarketById: Record<string, SectorMarketSnapshot>;
+  sectorNews: SectorNewsSnapshot;
+  sectorMarketsLoading?: boolean;
   holdings: LiveHolding[];
   benchmarks: SectorBenchmarkSnapshot;
 }) {
@@ -237,6 +266,8 @@ export function SectorsWorkspace({
     onToggleSector={onToggleSector}
     sectorMarket={sectorMarket}
     sectorMarketById={sectorMarketById}
+    sectorNews={sectorNews}
+    sectorMarketsLoading={sectorMarketsLoading}
     holdings={holdings}
     benchmarks={benchmarks}
   />;

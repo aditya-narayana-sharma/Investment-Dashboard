@@ -5,7 +5,19 @@ import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+  axisTopicGroup,
+  indexAxisPdfArchive,
+  mailMessageUrl,
+  matchAxisResearchPdf,
+  preferApplePodcastsEpisodeUrl,
+} from "./axis-digest-links.mjs";
 import { isAxisResearchMail } from "./axis-mail-filter.mjs";
+import {
+  axisPdfAuditFromSnapshot,
+  loadAxisPdfRecommendationSnapshot,
+  mergeAxisRecommendations,
+} from "./axis-pdf-recommendations.mjs";
 import { extractAxisRecommendationsForTradingAsOf } from "./axis-recommendations.mjs";
 import {
   classifyAxisTags,
@@ -58,6 +70,32 @@ const CALENDAR_WINDOW_END = (() => {
 })();
 const AXIS_LOOKBACK_DAYS = 3;
 const AXIS_DIGEST_LIMIT = 500;
+const AXIS_PDF_ARCHIVE_PATH = process.env.AXIS_PDF_ARCHIVE_PATH
+  ?? join(process.env.HOME ?? "", "Downloads", "Axis Research");
+
+/** Shared JXA helpers for Message-ID → message:// links and PDF attachment names. */
+const mailLinkHelpers = String.raw`
+function mailMessageId(message) {
+  try {
+    const id = String(message.messageId() || "").trim();
+    return id;
+  } catch (error) {
+    try {
+      const id = String(message.properties().messageId || "").trim();
+      return id;
+    } catch (inner) {
+      return "";
+    }
+  }
+}
+function mailAttachmentNames(message) {
+  try {
+    return message.mailAttachments().map((attachment) => String(attachment.name() || "")).filter((name) => /\.pdf$/i.test(name));
+  } catch (error) {
+    return [];
+  }
+}
+`;
 
 const newsletterMailboxHelpers = String.raw`
 const Mail = Application("Mail");
@@ -100,6 +138,7 @@ function newsletterWindowMessages(limit) {
 /** Fast metadata pass — proves the mailbox is readable without loading bodies. */
 const newsletterListScript = String.raw`
 ${newsletterMailboxHelpers}
+${mailLinkHelpers}
 const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
 const messages = ordered.map(({ message, received }) => {
   try {
@@ -107,6 +146,7 @@ const messages = ordered.map(({ message, received }) => {
       subject: String(message.subject() || "Untitled message"),
       sender: String(message.sender() || "Unknown sender"),
       received: received.toISOString(),
+      messageId: mailMessageId(message),
       content: "",
     };
   } catch (error) {
@@ -122,6 +162,7 @@ JSON.stringify({ totalCount, messages });
  */
 const newsletterBodyScript = String.raw`
 ${newsletterMailboxHelpers}
+${mailLinkHelpers}
 const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
 const started = Date.now();
 const budgetMs = ${NEWSLETTER_BODY_BUDGET_MS};
@@ -129,6 +170,7 @@ const messages = ordered.map(({ message, received }) => {
   try {
     const subject = String(message.subject() || "Untitled message");
     const sender = String(message.sender() || "Unknown sender");
+    const messageId = mailMessageId(message);
     let content = "";
     if (Date.now() - started < budgetMs) {
       try {
@@ -137,7 +179,7 @@ const messages = ordered.map(({ message, received }) => {
         content = "";
       }
     }
-    return { subject, sender, received: received.toISOString(), content };
+    return { subject, sender, received: received.toISOString(), messageId, content };
   } catch (error) {
     return null;
   }
@@ -157,19 +199,11 @@ function exactMailbox(account, name) {
   if (!mailbox) throw new Error('Mailbox "' + name + '" was not found under iCloud');
   return mailbox;
 }
+${mailLinkHelpers}
 const account = exactAccount("iCloud");
 const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
 const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
 end.setDate(end.getDate() + 1);
-function serialize(message) {
-  const properties = message.properties();
-  return {
-    subject: String(properties.subject || "Untitled message"),
-    sender: String(properties.sender || "Unknown sender"),
-    received: properties.dateReceived.toISOString(),
-    content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
-  };
-}
 const mailbox = exactMailbox(account, "Axis Research");
 const recent = mailbox.messages.whose({ _and: [
   { dateReceived: { _greaterThan: cutoff } },
@@ -182,6 +216,8 @@ const messages = recent.map((message) => {
     subject: String(properties.subject || "Untitled message"),
     sender: String(properties.sender || "Unknown sender"),
     received: properties.dateReceived.toISOString(),
+    messageId: mailMessageId(message),
+    attachmentNames: mailAttachmentNames(message),
     content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
   };
 }).sort((left, right) => new Date(right.received) - new Date(left.received)).slice(0, ${AXIS_DIGEST_LIMIT});
@@ -287,7 +323,7 @@ JSON.stringify({
 });
 `;
 
-function podcastQuery(episodeColumns) {
+function podcastQuery(episodeColumns, podcastColumns = new Set()) {
   // Modern Apple Podcasts stores episode copy on ZMTEPISODEDESCRIPTION (via ZDESCRIPTIONOBJECT).
   // Older schemas may still expose description columns directly on ZMTEPISODE.
   const legacyColumns = ["ZITEMDESCRIPTIONWITHOUTHTML", "ZITEMDESCRIPTION", "ZITUNESSUBTITLE"]
@@ -300,6 +336,10 @@ function podcastQuery(episodeColumns) {
     .filter((column) => episodeColumns.has(column))
     .map((column) => `nullif(e.${column}, '')`);
   const episodeUrl = episodeUrlColumns.length ? `coalesce(${episodeUrlColumns.join(", ")}, '')` : "''";
+  const storeTrack = episodeColumns.has("ZSTORETRACKID") ? "e.ZSTORETRACKID" : "0";
+  const storeCollection = podcastColumns.has("ZSTORECOLLECTIONID") ? "p.ZSTORECOLLECTIONID" : "0";
+  const storeClean = podcastColumns.has("ZSTORECLEANURL") ? "coalesce(p.ZSTORECLEANURL, '')" : "''";
+  const storeShort = podcastColumns.has("ZSTORESHORTURL") ? "coalesce(p.ZSTORESHORTURL, '')" : "''";
   return `
 SELECT
   coalesce(p.ZTITLE, e.ZAUTHOR, 'Apple Podcasts') AS source,
@@ -307,6 +347,10 @@ SELECT
   datetime(e.ZPUBDATE + ${CORE_DATA_EPOCH}, 'unixepoch', 'localtime') AS published,
   ${description} AS description,
   ${episodeUrl} AS episodeUrl,
+  ${storeTrack} AS storeTrackId,
+  ${storeCollection} AS storeCollectionId,
+  ${storeClean} AS storeCleanUrl,
+  ${storeShort} AS storeShortUrl,
   (
     SELECT m.ZTRANSCRIPTIDENTIFIER
     FROM ZMTMEDIAENCLOSURE m
@@ -655,7 +699,7 @@ function axisBullets(message) {
   return summaryBullets(message.content, { extras: [...recommendations, ...altCalls] });
 }
 
-function mailItem(message, axis = false, includeDate = false) {
+function mailItem(message, axis = false, includeDate = false, archiveIndex = null) {
   const source = senderName(message.sender);
   const title = cleanText(message.subject);
   const time = includeDate ? formatMailTimestamp(message.received) : formatTime(message.received);
@@ -663,6 +707,7 @@ function mailItem(message, axis = false, includeDate = false) {
   const summary = bullets.length
     ? bullets.slice(0, 3).join(" ")
     : `Headline received from ${source}; this message has no readable plain-text body.`;
+  const messageId = cleanText(message.messageId);
   const item = {
     source,
     time,
@@ -671,8 +716,29 @@ function mailItem(message, axis = false, includeDate = false) {
     summary,
     bullets,
   };
-  if (axis) item.tags = classifyAxisTags(`${title} ${summary} ${bullets.join(" ")}`);
-  else item.sentiment = classifyNewsletterSentiment(`${title} ${summary} ${bullets.join(" ")}`);
+  if (messageId) {
+    item.messageId = messageId;
+    item.messageUrl = mailMessageUrl(messageId);
+  }
+  if (axis) {
+    item.tags = classifyAxisTags(`${title} ${summary} ${bullets.join(" ")}`);
+    item.topicGroup = axisTopicGroup(title);
+    const pdf = matchAxisResearchPdf({
+      subject: title,
+      receivedAt: message.received,
+      attachmentNames: Array.isArray(message.attachmentNames) ? message.attachmentNames : [],
+      archiveIndex: archiveIndex ?? indexAxisPdfArchive(AXIS_PDF_ARCHIVE_PATH),
+    });
+    if (pdf?.file) {
+      item.pdfFile = pdf.file;
+      item.pdfUrl = `/api/axis-research/pdf?file=${encodeURIComponent(pdf.file)}`;
+    } else {
+      item.pdfFile = null;
+      item.pdfUrl = null;
+    }
+  } else {
+    item.sentiment = classifyNewsletterSentiment(`${title} ${summary} ${bullets.join(" ")}`);
+  }
   return item;
 }
 
@@ -744,9 +810,10 @@ async function readAxisResearch() {
   const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", axisMailScript], { timeout: 45000, maxBuffer: 12 * 1024 * 1024 });
   const parsed = JSON.parse(stdout);
   const uniqueMessages = parsed.messages.filter(isAxisResearchMail).filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index);
+  const archiveIndex = indexAxisPdfArchive(AXIS_PDF_ARCHIVE_PATH);
   return {
     total: parsed.totalCount,
-    items: uniqueMessages.map((message) => mailItem(message, true, true)),
+    items: uniqueMessages.map((message) => mailItem(message, true, true, archiveIndex)),
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -777,8 +844,10 @@ function macroEvidence(newsletters, axisItems) {
 
 async function readPodcasts() {
   const schema = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, "PRAGMA table_info(ZMTEPISODE);"], { timeout: 15000, maxBuffer: 2 * 1024 * 1024 });
+  const podcastSchema = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, "PRAGMA table_info(ZMTPODCAST);"], { timeout: 15000, maxBuffer: 2 * 1024 * 1024 });
   const columns = new Set(JSON.parse(schema.stdout || "[]").map((column) => column.name));
-  const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, podcastQuery(columns)], { timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
+  const podcastColumns = new Set(JSON.parse(podcastSchema.stdout || "[]").map((column) => column.name));
+  const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, podcastQuery(columns, podcastColumns)], { timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
   const summarizer = configuredPodcastSummarizer();
   const previousByTitle = new Map(
     (lastSnapshot?.podcasts || []).map((item) => [normalizeEpisodeTitle(item.title), item]),
@@ -789,7 +858,13 @@ async function readPodcasts() {
     const title = cleanText(episode.title);
     const time = formatTime(`${episode.published.replace(" ", "T")}+05:30`);
     const transcript = readLocalPodcastTranscript(episode.transcriptIdentifier);
-    const episodeUrl = String(episode.episodeUrl || "");
+    const episodeUrl = preferApplePodcastsEpisodeUrl({
+      storeCollectionId: episode.storeCollectionId,
+      storeTrackId: episode.storeTrackId,
+      storeCleanUrl: episode.storeCleanUrl,
+      storeShortUrl: episode.storeShortUrl,
+      episodeUrl: episode.episodeUrl,
+    });
     if (!transcript) {
       items.push({
         source,
@@ -1002,14 +1077,49 @@ async function settle(task) {
   }
 }
 
-/** Axis Recommended Stocks: trading-day as-of (today or last NSE session). */
-function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt) {
+async function refreshAxisPdfRecommendations({ force = false } = {}) {
+  const snapshotPath = process.env.AXIS_PDF_RECOMMENDATIONS_PATH
+    ?? fileURLToPath(new URL("../artifacts/private/axis-pdf-recommendations.json", import.meta.url));
+  const extractor = join(SCRIPT_DIR, "extract-axis-pdf-recommendations.py");
+  const python = join(SCRIPT_DIR, "..", ".venv-flask", "bin", "python");
+  const archive = process.env.AXIS_RESEARCH_DIR ?? AXIS_PDF_ARCHIVE_PATH;
+  try {
+    const existing = loadAxisPdfRecommendationSnapshot(snapshotPath);
+    const ageMs = existing.asOf ? Date.now() - Date.parse(existing.asOf) : Number.POSITIVE_INFINITY;
+    const stale = !Number.isFinite(ageMs) || ageMs > 6 * 60 * 60 * 1000;
+    if (!force && !existing.missing && !stale) return existing;
+    await execFileAsync(python, [extractor, archive], {
+      timeout: 120_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+  } catch (error) {
+    console.error("[content-digest] Axis PDF recommendation extract failed:", error);
+  }
+  return loadAxisPdfRecommendationSnapshot(snapshotPath);
+}
+
+/** Axis Recommended Stocks: PDF archive primary, mail-window fills gaps. */
+async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt, { forcePdfExtract = false } = {}) {
   const axisScoped = extractAxisRecommendationsForTradingAsOf(axisItems, {
     calendarDate: ANALYSIS_DATE,
     lookbackDays: AXIS_LOOKBACK_DAYS,
   });
+  const pdfSnapshot = await refreshAxisPdfRecommendations({ force: forcePdfExtract });
+  const mailRecommendations = axisScoped.recommendations.map((recommendation) => ({
+    ...recommendation,
+    tags: classifyAxisTags(`${recommendation.name} ${recommendation.call} ${recommendation.thesis}`),
+  }));
+  const merged = mergeAxisRecommendations({
+    pdfRecommendations: pdfSnapshot.recommendations,
+    mailRecommendations,
+    limit: 200,
+  }).map((recommendation) => ({
+    ...recommendation,
+    tags: recommendation.tags ?? classifyAxisTags(`${recommendation.name} ${recommendation.call} ${recommendation.thesis}`),
+  }));
+  const audit = axisPdfAuditFromSnapshot(pdfSnapshot);
   return {
-    policy: "Mail-first: Axis Recommended Stocks use today's Axis Research when NSE is open; on weekends/holidays they use the last trading day's mails. Local archive PDFs are evidence inventory only, not a stock-call count.",
+    policy: "PDF-archive primary: Axis Recommended Stocks are extracted from the local Axis Research PDF archive (text layer), merged with the NSE trading-day Axis Research mail window. Progress-to-target uses Kite holding CMP when available, else Axis PDF/mail CMP. PDFs without a reliable call are skipped.",
     analysisWindowStart: ANALYSIS_WINDOW_START,
     analysisDate: ANALYSIS_DATE,
     axisLookbackDays: AXIS_LOOKBACK_DAYS,
@@ -1021,10 +1131,13 @@ function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt) 
     latestAxisAt: axisItems[0]?.time ?? "No qualifying Axis report in the rolling window",
     axisLastFetchedAt,
     latestNewsletterAt: newsletters[0]?.time ?? "No newsletter available",
-    axisRecommendations: axisScoped.recommendations.map((recommendation) => ({
-      ...recommendation,
-      tags: classifyAxisTags(`${recommendation.name} ${recommendation.call} ${recommendation.thesis}`),
-    })),
+    axisRecommendations: merged,
+    axisPdfArchive: {
+      ...audit,
+      counts: pdfSnapshot.counts ?? null,
+      mailWindowCalls: mailRecommendations.length,
+      shownCalls: merged.length,
+    },
     macroEvidence: macroEvidence(newsletters, axisItems),
   };
 }
@@ -1086,7 +1199,7 @@ async function refresh() {
     calendar: calendarValue,
     healthNote: healthNoteValue,
     marketCalendar: marketCalendarValue,
-    investment: buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt),
+    investment: await buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt),
     sources: {
       newsletters: { status: newsletters.status === "fulfilled" ? "live" : "error", count: newsletterValue.total, displayedCount: newsletterValue.items.length, observedAt: new Date().toISOString(), message: newsletters.status === "rejected" ? String(newsletters.reason) : undefined },
       axisResearch: { status: axisResearch.status === "fulfilled" ? "live" : "error", count: axisValue.total, displayedCount: axisValue.items.length, observedAt: axisValue.fetchedAt ?? new Date().toISOString(), message: axisResearch.status === "rejected" ? String(axisResearch.reason) : undefined },
@@ -1230,7 +1343,7 @@ async function refreshAndCache() {
       message: `${retained.sources.marketCalendar?.message ?? "Latest market-calendar refresh failed."} Retaining the last validated market calendar.`,
     };
   }
-  retained.investment = buildInvestmentIntelligence(
+  retained.investment = await buildInvestmentIntelligence(
     retained.newsletters,
     retained.axisResearch,
     retained.sources.axisResearch?.observedAt,
