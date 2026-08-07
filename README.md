@@ -306,4 +306,6 @@ hosting paths are needed later.
 
 Made for personal use by Aditya · 🇮🇳 tracking Indian equities, one refresh at a time
 
+_✅ MCP verification: this line was committed and pushed by a custom `github_mcp` server (branch → commit → PR), not edited by hand._
+
 </div>
