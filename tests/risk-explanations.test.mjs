@@ -6,6 +6,7 @@ import { buildRiskExplanation, riskScoreBand } from "../app/risk-explanations.ts
 
 const workspacePath = new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url);
 const cssPath = new URL("../app/globals.css", import.meta.url);
+const visualCssPath = new URL("../app/visual-overhaul.css", import.meta.url);
 
 test("selected-company explanations switch without including unselected companies", () => {
   const icici = buildRiskExplanation(portfolioRiskProfiles.find((profile) => profile.symbol === "ICICIBANK"), riskAxes);
@@ -66,26 +67,45 @@ test("generated bullets avoid probability and investment-advice claims", () => {
 });
 
 test("risk panel uses selected tab semantics and remains content-sized", async () => {
-  const [workspace, css] = await Promise.all([
+  const [workspace, css, visualCss] = await Promise.all([
     readFile(workspacePath, "utf8"),
     readFile(cssPath, "utf8"),
+    readFile(visualCssPath, "utf8"),
   ]);
 
   assert.match(workspace, /buildRiskExplanation\(profile, riskAxes\)/);
   assert.match(workspace, /role="tablist"[\s\S]*role="tab"[\s\S]*aria-selected=\{item\.symbol === profile\.symbol\}/);
   assert.match(workspace, /onClick=\{\(\) => onSelect\(item\.symbol\)\}/);
+  assert.match(workspace, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(workspace, /aria-live="polite"/);
   assert.match(workspace, /<h5>Overview<\/h5>[\s\S]*<h5>Axis explanations<\/h5>/);
   assert.match(workspace, /idPrefix="portfolio-holdings-risk" explainSelected/);
+  assert.match(workspace, /<h5>Evidence<\/h5>/);
+  assert.match(workspace, /Kite \{evidenceContext\.asOf\}/);
+  assert.match(workspace, /evidenceContext=\{\{ holdings, asOf: snapshot\.asOf, classification \}\}/);
+  assert.match(workspace, /const chartHeight = explainSelected \? 320 : 440/);
+  assert.match(workspace, /risk-series-key/);
+  assert.match(workspace, /Selected vs portfolio average/);
+  assert.match(workspace, /Exact axis scores/);
+  assert.match(workspace, /item\.score - item\.average/);
+  assert.match(workspace, /!explainSelected && <Legend/);
   assert.match(workspace, /not a probability of loss or investment recommendation/);
 
-  const riskPanelRule = css.match(/\.risk-panel\s*\{[^}]*\}/)?.[0] ?? "";
+  const riskPanelRule = css.match(/^\.risk-panel\s*\{[^}]*\}/m)?.[0] ?? "";
   const riskGridRule = css.match(/\.investment-risk-grid\s*\{[^}]*\}/)?.[0] ?? "";
   const explanationRules = css.slice(css.indexOf(".risk-explanation"), css.indexOf(".sector-overview"));
   assert.match(riskPanelRule, /align-self:start/);
-  assert.match(riskGridRule, /align-items:start/);
+  assert.match(riskGridRule, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(riskGridRule, /align-items:stretch/);
   assert.doesNotMatch(riskPanelRule, /(?:min-)?height\s*:/);
   assert.doesNotMatch(explanationRules, /(?:^|[;{]\s*)(?:min-)?height\s*:|100vh|100dvh/);
-  assert.match(css, /\.risk-selector\s*\{[^}]*flex-wrap:wrap;[^}]*overflow:visible;/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-radar-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, 0\.92fr\) minmax\(0, 1\.08fr\)/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-radar-visual-column/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-selector\s*\{[^}]*display:\s*grid;[^}]*overflow:\s*visible;/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-explanation\s*\{[^}]*display:\s*flex;/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-radar-workbench\s*\{[^}]*flex:\s*1;/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-comparison\s*\{/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-evidence dl/);
   assert.match(css, /@media \(max-width:620px\)[\s\S]*?\.risk-axis-list\s*\{\s*grid-template-columns:1fr;/);
 });

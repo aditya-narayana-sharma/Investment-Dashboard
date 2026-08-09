@@ -6,18 +6,18 @@ import {
   COMPLETED_FEED_LABEL,
   SCHEDULED_FEED_LABEL,
   WORK_JOBS_LABEL,
-  groupCalendarItemsBySource,
   isEarningsCalendar,
   isScheduledRemindersCalendar,
   partitionReminderSmartGroups,
   sortCalendarItems,
 } from "../calendar-action-feeds";
-import type { AppleCalendarItem, AppleTaskItem, ContentDigestSnapshot, DigestItem } from "../content-types";
+import type { AppleTaskItem, ContentDigestSnapshot, DigestItem, PodcastInsight } from "../content-types";
 import { digestItemBullets, isDigestContentWorthy } from "../digest-bullets";
 import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
 import { findEarningsHolidayConflicts } from "../market-calendar";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
+import { AppleMonthlyCalendar } from "./AppleMonthlyCalendar";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
 import { WaveformStrip } from "./visual-components";
 import { DIGEST_PAGE_SIZE, earningsReconciliationStats, mergeEarningsCalendarEvents } from "./utils";
@@ -45,9 +45,58 @@ const REMINDER_TOPIC_FALLBACKS: Record<AppleTaskItem["topic"], { color: string; 
   Other: { color: "#64748B", text: "#FFF" },
 };
 
-function DigestBulletList({ bullets, evidenceChips = false }: { bullets: string[]; evidenceChips?: boolean }) {
+const REMINDER_LIST_COLORS: Record<string, string> = {
+  "guitar chords": "#8B5CF6",
+  subscriptions: "#06B6D4",
+  tasks: "#F59E0B",
+  log: "#10B981",
+  earnings: "#2563EB",
+  daily: "#EC4899",
+  "job 🔍": "#F97316",
+};
+
+function reminderListColor(list?: string) {
+  const normalized = (list || "Unknown list").trim().toLocaleLowerCase("en");
+  const configured = REMINDER_LIST_COLORS[normalized];
+  if (configured) return configured;
+
+  // Keep every Apple Reminders list visually stable across refreshes without
+  // coupling presentation to the reminder's topic or scheduled state.
+  let hash = 0;
+  for (const character of normalized) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
+  return `hsl(${hash % 360} 72% 52%)`;
+}
+
+function DigestBulletList({
+  bullets,
+  evidenceChips = false,
+  podcastInsights,
+}: {
+  bullets: string[];
+  evidenceChips?: boolean;
+  podcastInsights?: PodcastInsight[];
+}) {
   const [focused, setFocused] = useState<string | null>(null);
   if (!bullets.length) return null;
+  if (podcastInsights) {
+    return (
+      <div className="podcast-insight-list" role="list" aria-label="AI-generated Podcast summary bullets">
+        {podcastInsights.map((insight, index) => (
+          <article
+            className={`podcast-insight-card outcome-${insight.outcome.toLowerCase()} sentiment-${insight.sentiment.toLowerCase()}`}
+            role="listitem"
+            key={`${insight.text}-${index}`}
+          >
+            <div className="podcast-insight-labels">
+              <span>Outcome · {insight.outcome}</span>
+              <span>Sentiment · {insight.sentiment}</span>
+            </div>
+            <p>{insight.text}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
   if (!evidenceChips) return <ul className="digest-summary-bullets">{bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>;
   return <div className="digest-evidence-chips" role="list">
     {bullets.map((bullet) => (
@@ -175,19 +224,38 @@ function DigestMailItem({
   const hasTranscriptSummary = kind === "podcast"
     && item.contentSource === "transcript"
     && item.summaryStatus === "generated";
+  const hasGeneratedPodcastSummary = kind === "podcast"
+    && item.contentSource !== "none"
+    && item.summaryStatus === "generated";
+  const hasDescriptionSummary = hasGeneratedPodcastSummary && item.contentSource === "description";
+  const hasDescriptionEvidence = kind === "podcast" && item.contentSource === "description";
   const bullets = kind === "podcast"
     // Defense-in-depth: re-apply the shared promo/CTA/contact filter client-side too, so a
     // summarizer-generated takeaway that slipped past server-side filtering never renders.
-    ? (hasTranscriptSummary ? (item.keyTakeaways ?? []).filter(isDigestContentWorthy) : [])
+    ? hasTranscriptSummary
+      ? (item.keyTakeaways ?? []).filter(isDigestContentWorthy)
+      : hasDescriptionSummary
+        ? (item.keyTakeaways ?? []).filter(isDigestContentWorthy)
+        : hasDescriptionEvidence
+        ? digestItemBullets({ ...item, kind })
+        : []
     : digestItemBullets({ ...item, kind });
+  const podcastInsights = kind === "podcast"
+    ? bullets.map((bullet, index) => item.podcastInsights?.[index] ?? {
+        text: bullet,
+        outcome: "Mixed" as const,
+        sentiment: "Neutral" as const,
+      })
+    : undefined;
   const tags = item.tags ? [...item.tags.sector, ...item.tags.thesis, ...item.tags.conviction] : [];
   const sentimentClass = item.sentiment ? `sentiment-${item.sentiment.toLowerCase()}` : "sentiment-neutral";
   const podcastEvidenceLabel = (() => {
     if (kind !== "podcast") return null;
-    if (hasTranscriptSummary) return "Transcript summary";
+    if (hasTranscriptSummary) return "AI transcript summary";
     if (item.contentSource === "transcript") return "Summary not generated";
-    // AGENTS.md: label non-transcript podcast evidence as description, never as transcript.
-    return "Description";
+    if (hasDescriptionSummary) return "AI description summary";
+    if (hasDescriptionEvidence) return "Description";
+    return "Evidence unavailable";
   })();
   return (
     <article className={`digest-item ${sentimentClass}`}>
@@ -217,26 +285,32 @@ function DigestMailItem({
                 ? "transcript"
                 : item.contentSource === "transcript"
                   ? "unavailable"
-                  : "description"
+                  : hasDescriptionEvidence
+                    ? "description"
+                    : "unavailable"
             }`}>
               {podcastEvidenceLabel}
             </span>
           )}
         </div>
         {kind === "podcast" && <WaveformStrip seed={item.title.length} />}
-        <DigestBulletList bullets={bullets} evidenceChips={kind !== "podcast"} />
+        <DigestBulletList bullets={bullets} evidenceChips={kind !== "podcast"} podcastInsights={podcastInsights} />
         {kind === "podcast" && hasTranscriptSummary && bullets.length > 0 && (
           <div className="podcast-chapters" aria-label="Key takeaway markers">
             {bullets.slice(0, 4).map((bullet, index) => <span className="chapter-marker" key={`${bullet}-${index}`}>Ch {index + 1}</span>)}
           </div>
         )}
-        {kind === "podcast" && !hasTranscriptSummary && (
+        {kind === "podcast" && !hasGeneratedPodcastSummary && (
           <p className="podcast-summary-unavailable">
             {item.contentSource === "transcript"
               ? item.summaryReason === "transcript_too_short"
                 ? "Transcript available, but too little substantive content remained after sanitization."
                 : "Transcript available — summary not generated. Configure the private local summarizer to create it."
-              : "Description evidence only — transcript summary not generated"}
+              : hasDescriptionEvidence
+                ? item.summaryReason === "summarizer_not_configured"
+                  ? "Publisher description evidence shown — AI summary requires a configured private local model."
+                  : "Publisher description evidence — AI summary not generated."
+                : "Transcript and substantive episode description unavailable."}
           </p>
         )}
         <DigestSourceLinks item={item} kind={kind} />
@@ -321,26 +395,6 @@ function formatShortWhen(value?: string | null) {
   }).format(date);
 }
 
-function CalendarFeedItem({ item }: { item: AppleCalendarItem }) {
-  const sourceDate = item.allDay && /^\d{4}-\d{2}-\d{2}$/.test(item.sourceDate ?? "")
-    ? new Date(`${item.sourceDate}T12:00:00+05:30`)
-    : new Date(item.startsAt);
-  const starts = item.allDay ? "All day" : formatShortWhen(item.startsAt);
-  const ends = !item.allDay && item.endsAt && item.endsAt !== item.startsAt ? formatShortWhen(item.endsAt) : "";
-  return (
-    <div className="topic-feed-item">
-      <b>{Number.isNaN(sourceDate.getTime()) ? "Undated" : sourceDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}</b>
-      <div>
-        <strong>{item.title}</strong>
-        {item.marketHoliday && <span className="market-holiday-badge">{item.marketHoliday.market} CLOSED</span>}
-        <small className="topic-feed-meta">
-          {[item.calendar, starts ? `Starts ${starts}` : "", ends ? `Ends ${ends}` : ""].filter(Boolean).join(" · ")}
-        </small>
-      </div>
-    </div>
-  );
-}
-
 function ReminderFeedItem({
   item,
   marker = "TODO",
@@ -363,15 +417,17 @@ function ReminderFeedItem({
   const canComplete = Boolean(onComplete) && !item.completed;
   const fallbackVisual = REMINDER_TOPIC_FALLBACKS[item.topic];
   const topicColor = item.topicColor ?? fallbackVisual.color;
+  const listColor = reminderListColor(item.list);
   const reminderStyle = {
-    "--reminder-bg": item.backgroundColor ?? `${topicColor}80`,
-    "--reminder-text": item.textColor ?? fallbackVisual.text,
+    "--reminder-list-color": listColor,
+    "--reminder-text": "var(--ink)",
     "--reminder-topic": topicColor,
   } as CSSProperties;
   return (
     <div
       className={`topic-feed-item topic-feed-reminder${item.completed ? " topic-feed-item-done" : ""}`}
       style={reminderStyle}
+      data-reminder-list={item.list || "Unknown list"}
     >
       <label className="topic-feed-check">
         <input
@@ -569,7 +625,6 @@ export function SectorIntelligenceDigest({
     () => sortCalendarItems(content.calendar.filter((item) => !isScheduledRemindersCalendar(item) && !isEarningsCalendar(item.calendar))),
     [content.calendar],
   );
-  const calendarGroups = useMemo(() => groupCalendarItemsBySource(calendar), [calendar]);
   const reminderGroups = useMemo(() => partitionReminderSmartGroups(reminders), [reminders]);
   const {
     completedReminders,
@@ -588,6 +643,9 @@ export function SectorIntelligenceDigest({
   const visibleAxis = showAllAxis ? axisResearch : axisResearch.slice(0, DIGEST_PAGE_SIZE);
   const visiblePodcasts = showAllPodcasts ? podcasts : podcasts.slice(0, DIGEST_PAGE_SIZE);
   const generatedPodcastCount = podcasts.filter(
+    (item) => item.summaryStatus === "generated" && item.contentSource !== "none",
+  ).length;
+  const transcriptPodcastCount = podcasts.filter(
     (item) => item.contentSource === "transcript" && item.summaryStatus === "generated",
   ).length;
 
@@ -715,7 +773,7 @@ export function SectorIntelligenceDigest({
           <div>
             <h3>Podcast summaries</h3>
             <p>
-              {generatedPodcastCount} transcript summaries · {podcasts.length - generatedPodcastCount} not generated · complete unfiltered episode list
+              {generatedPodcastCount} AI summaries · {transcriptPodcastCount} transcript-derived · {podcasts.length - generatedPodcastCount} not generated · complete unfiltered episode list
             </p>
           </div>
           <Mic2 size={18} />
@@ -765,22 +823,7 @@ export function SectorIntelligenceDigest({
             {calendar.length === 0 && (
               <p className="intelligence-feed-empty">No Apple Calendar events were available in the refreshed window.</p>
             )}
-            <div className="calendar-complete-feed" aria-label="All calendar events grouped by source">
-              {calendarGroups.map((group, groupIndex) => {
-                const headingId = `calendar-source-${groupIndex}`;
-                return (
-                  <section className="calendar-source-group" aria-labelledby={headingId} key={group.calendar}>
-                    <h4 id={headingId}>
-                      <span>{group.calendar}</span>
-                      <b aria-label={`${group.items.length} events`}>{group.items.length}</b>
-                    </h4>
-                    <div className="calendar-source-items">
-                      {group.items.map((item) => <CalendarFeedItem key={`${item.id}-${item.sourceDate ?? item.startsAt}`} item={item} />)}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+            {calendar.length > 0 && <AppleMonthlyCalendar events={calendar} />}
           </IntelligenceFeedSection>
           <IntelligenceFeedSection
             kind="reminders"

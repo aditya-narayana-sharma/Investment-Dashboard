@@ -17,10 +17,11 @@ Optional environment:
 
 ## Private podcast transcript summaries
 
-Podcast descriptions are metadata only and are never summarized or displayed as
-summary evidence. The content service generates a summary only when the exact
-episode has a local Apple Podcasts TTML transcript and a summarizer is explicitly
-configured.
+The content service generates AI bullet summaries when a private local summarizer
+is explicitly configured. It prefers the exact episode's locally cached Apple
+Podcasts TTML transcript. When Apple Podcasts has not cached that transcript, it
+may summarize the sanitized publisher description, which remains explicitly
+labelled as description evidence and is never called a transcription.
 
 The adapter is Ollama-compatible and defaults to the local-only endpoint
 `http://127.0.0.1:11434/api/generate`. Set:
@@ -32,6 +33,9 @@ The adapter is Ollama-compatible and defaults to the local-only endpoint
 No model is pulled automatically. No remote host is contacted unless both a
 remote URL and the explicit remote opt-in are configured. Long transcripts are
 sanitized, summarized chunk-by-chunk, and synthesized into 3–6 final bullets.
+Every generated bullet includes explicit Outcome (Positive / Mixed / Negative)
+and Sentiment (Positive / Neutral / Negative) labels for the coloured insight
+boxes in Market Intelligence.
 
 ## Canonical market calendar
 

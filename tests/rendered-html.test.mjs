@@ -109,6 +109,10 @@ test("Market Intelligence digests collapse newsletters by sender and Axis by top
   assert.match(intelligenceWorkspace, /DigestSourceLinks/);
   assert.match(intelligenceWorkspace, /return "Description"/);
   assert.match(intelligenceWorkspace, /keyTakeaways/);
+  assert.match(intelligenceWorkspace, /AI transcript summary/);
+  assert.match(intelligenceWorkspace, /AI description summary/);
+  assert.match(intelligenceWorkspace, /Outcome · \{insight\.outcome\}/);
+  assert.match(intelligenceWorkspace, /Sentiment · \{insight\.sentiment\}/);
   assert.match(contentTypes, /messageUrl\?:/);
   assert.match(contentTypes, /pdfUrl\?:/);
   assert.match(contentTypes, /topicGroup\?:/);
@@ -121,6 +125,8 @@ test("Market Intelligence digests collapse newsletters by sender and Axis by top
   assert.match(pdfRoute, /application\/pdf/);
   assert.match(pdfRoute, /AXIS_PDF_ARCHIVE_PATH|Downloads\/Axis Research/);
   assert.match(globalCss, /\.digest-source-link\s*\{/);
+  assert.match(globalCss, /\.podcast-insight-card\.outcome-positive/);
+  assert.match(globalCss, /\.podcast-insight-card\.sentiment-negative/);
 });
 
 test("Sectoral Analytics uses full-width collapsible sections without overview thumbnails", async () => {
@@ -195,6 +201,7 @@ test("Phase 3 Market Intelligence automation remains wired to local source paths
   assert.match(contentServer, /classifyNewsletterSentiment/);
   assert.match(contentServer, /keyTakeaways: contentBullets/);
   assert.match(contentServer, /summarizePodcastTranscript\(transcript/);
+  assert.match(contentServer, /summarizePodcastDescription\(descriptionEvidence/);
   assert.match(podcastSummarizer, /chunkPodcastTranscript/);
   assert.match(podcastSummarizer, /configuredPodcastSummarizer/);
   assert.match(contentServer, /reminderVisual\(topic\)/);
@@ -203,12 +210,14 @@ test("Phase 3 Market Intelligence automation remains wired to local source paths
   assert.match(workspace, /dashboard-saved-items-v1/);
   assert.match(workspace, /Read Later/);
   assert.match(workspace, /findEarningsHolidayConflicts/);
-  assert.match(workspace, /Transcript summary/);
-  assert.match(workspace, /Description evidence only — transcript summary not generated/);
-  assert.doesNotMatch(workspace, /Episode description/);
+  assert.match(workspace, /AI transcript summary/);
+  assert.match(workspace, /Publisher description evidence — AI summary not generated/);
+  assert.match(workspace, /Evidence unavailable/);
   assert.match(workspace, /Open in Podcasts/);
   assert.match(globalCss, /font-size:12px/);
-  assert.match(globalCss, /background:var\(--reminder-bg\)/);
+  assert.match(workspace, /data-reminder-list=\{item\.list \|\| "Unknown list"\}/);
+  assert.match(workspace, /const listColor = reminderListColor\(item\.list\)/);
+  assert.match(globalCss, /background:color-mix\(in srgb,var\(--reminder-list-color\) 30%,transparent\)/);
   assert.match(cron, /0 \* \* \* \*/);
 });
 
@@ -265,6 +274,16 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
   for (const workspace of [investment, sectors, intelligence, health]) {
     assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(/);
   }
+});
+
+test("collapsed section preview is not constrained by the section-number badge", async () => {
+  const [sharedUi, globalCss] = await Promise.all([
+    readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(sharedUi, /className="shutter-preview"[\s\S]*?<em>preview<\/em>/);
+  assert.match(globalCss, /\.section-heading>span:first-child\s*\{[^}]*width:36px;[^}]*height:36px;/s);
+  assert.doesNotMatch(globalCss, /\.section-heading>span\s*\{[^}]*width:36px;[^}]*height:36px;/s);
 });
 
 test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", async () => {
@@ -390,6 +409,7 @@ test("server-renders the print report and keeps controls interactive", async () 
       readFile(new URL("../app/calendar-action-feeds.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/calendar-holiday-feeds.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/EarningsMonthCalendar.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/AppleMonthlyCalendar.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
     ]).then((parts) => parts.join("\n")),
@@ -544,11 +564,16 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Earnings calendar/);
   assert.match(page, /partitionReminderSmartGroups/);
   assert.match(page, /sortCalendarItems/);
-  assert.match(page, /groupCalendarItemsBySource/);
-  assert.match(page, /calendarGroups\.map/);
-  assert.match(page, /className="calendar-source-group"/);
-  assert.match(page, /aria-labelledby=\{headingId\}/);
-  assert.match(page, /group\.items\.map/);
+  assert.match(page, /AppleMonthlyCalendar/);
+  assert.match(page, /<AppleMonthlyCalendar events=\{calendar\}/);
+  assert.match(page, /Navigate Apple Calendar months/);
+  assert.match(page, /apple-month-grid/);
+  assert.match(page, /CELL_PREVIEW = 4/);
+  assert.match(page, /formula\\s\*1\|\\bf1\\b/);
+  assert.match(page, /astronom\|space\|moon\|solar\|lunar/);
+  assert.match(page, /coursera\|course\|learning\|study/);
+  assert.match(page, /family\|birthday\|anniversary/);
+  assert.match(page, /sourceDate/);
   assert.match(page, /data-feed-section=\{kind\}/);
   assert.equal((page.match(/kind="calendar"/g) ?? []).length, 1);
   assert.equal((page.match(/kind="reminders"/g) ?? []).length, 1);
@@ -584,11 +609,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /intelligence-feed-stack topic-feed agenda-ribbon/);
   assert.match(globalCss, /\.intelligence-feed-collapse:focus-visible\s*\{[^}]*outline:/s);
   assert.match(globalCss, /\.reminder-smart-groups\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s);
-  assert.match(globalCss, /\.calendar-complete-feed\s*\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\);/s);
-  assert.match(globalCss, /\.calendar-complete-feed\s*\{[^}]*overflow-x:hidden;[^}]*overflow-y:auto;/s);
-  assert.match(globalCss, /max-width:1200px[^}]*\.calendar-complete-feed\s*\{\s*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s);
-  assert.match(globalCss, /max-width:900px[^}]*\.calendar-complete-feed\s*\{\s*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/s);
-  assert.match(globalCss, /max-width:620px[^}]*\.calendar-complete-feed\s*\{\s*grid-template-columns:minmax\(0,1fr\)/s);
+  assert.match(globalCss, /\.apple-month-grid\s*\{[^}]*grid-template-columns:repeat\(7,minmax\(0,1fr\)\);/s);
+  assert.match(globalCss, /\.apple-month-scroll\s*\{[^}]*overflow-x:auto;/s);
+  assert.match(globalCss, /\.apple-month-weekdays,[\s\S]*?\.apple-month-grid\s*\{[^}]*min-width:760px;/s);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.apple-calendar-event\s*\{[^}]*background:var\(--calendar-paper\);[^}]*color:var\(--calendar-paper-text\);/s);
   assert.match(globalCss, /digest-panel-podcasts/);
   assert.match(globalCss, /topic-feed-check/);
   assert.match(page, /topic-feed-completed[\s\S]*?topic-feed-scheduled[\s\S]*?topic-feed-work/);
@@ -1129,6 +1153,18 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.section-heading p[\s\S]*?color:var\(--ink\)/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.trigger-dial b[\s\S]*?color:\s*var\(--ink\)\s*!important/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.trigger-dial small[\s\S]*?color:\s*var\(--ink\)\s*!important/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.sector-selector\.sector-prism button span/);
+  assert.match(visualCss, /--sepia-positive-ink:\s*#075b32/);
+  assert.match(visualCss, /--sepia-warning-ink:\s*#704600/);
+  assert.match(visualCss, /--sepia-negative-ink:\s*#8f1d2c/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.recharts-cartesian-axis-tick-value/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.section-heading > \.shutter-preview em/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.portfolio-map-legend/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-no-evidence b/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.linked-insight h4/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.linked-insight-scroll > div/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.podcast-summary-unavailable/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.earnings-month-cell\.today \.earnings-month-daynum/);
   assert.match(globalCss, /\.kanban-card[\s\S]*color:var\(--ink\)/);
   assert.match(globalCss, /\.kanban-lane>header[\s\S]*background:var\(--btn-bg\)/);
   assert.match(globalCss, /\.kanban-lane>header b[\s\S]*color:var\(--btn-fg\)/);
@@ -1156,4 +1192,17 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.risk-panel\.threat-flower[\s\S]*var\(--bg-panel\) !important/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-workbench\.scenario-weather \.macro-event-tabs button\.active/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.lifecycle-panel\.evolution-river \.chart-wrap/);
+});
+
+test("source freshness details reserve layout space above the sticky workspace navigation", async () => {
+  const [visualComponents, visualCss] = await Promise.all([
+    readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(visualComponents, /className="source-freshness-region"/);
+  assert.match(visualComponents, /className="pulse-detail-lane"/);
+  assert.doesNotMatch(visualComponents, /className="pulse-popover"/);
+  assert.match(visualCss, /\.pulse-detail-lane\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.doesNotMatch(visualCss, /\.pulse-detail-lane\s*\{[\s\S]{0,240}position:\s*absolute/);
 });

@@ -232,7 +232,7 @@ function SectorWorkspaceShell({
     </div>
 
     <div id="sector-s3" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status}</span>}>
+      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</span>}>
         <SectionPageNav section="s3" activePage={activePages.s3} onSelect={selectPage}/>
         <div id="sector-s3-panel" className="sector-full-section-body s3" role="tabpanel" aria-labelledby={`sector-s3-tab-${activePages.s3}`}>
           <SectorDecisionLab page={activePages.s3 as SectorDecisionPage} benchmarks={benchmarks} marketsBySector={sectorMarketById}/>

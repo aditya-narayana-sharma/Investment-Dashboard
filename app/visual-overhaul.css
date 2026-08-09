@@ -78,6 +78,9 @@
 }
 
 /* ——— Pulse constellation (source freshness) ——— */
+.source-freshness-region {
+  min-width: 0;
+}
 .source-freshness-strip.pulse-constellation {
   display: flex;
   gap: 10px;
@@ -136,20 +139,17 @@
 .pulse-constellation .pulse-node span { display: grid; gap: 1px; }
 .pulse-constellation .pulse-node b { font-size: 10px; color: var(--ink); font-weight: 900; text-transform: uppercase; }
 .pulse-constellation .pulse-node small { font-size: 10px; color: var(--muted); text-transform: capitalize; }
-.pulse-constellation .pulse-popover {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
-  min-width: 220px;
-  max-width: 280px;
+.pulse-detail-lane {
+  margin: -6px 0 12px;
   padding: 10px 12px;
   border: 2px solid #3b82f6;
   background: var(--bg-panel);
   box-shadow: var(--brutalist-shadow);
   color: #d4d4d8;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 
@@ -521,6 +521,99 @@
 .macro-workbench.scenario-weather .scenario-body.green { box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35); }
 .macro-workbench.scenario-weather .scenario-body.amber { box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.35); }
 .macro-workbench.scenario-weather .scenario-body.red { box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.4); }
+.macro-regime-card .macro-ai-evidence {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.macro-regime-card .macro-ai-evidence > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.macro-regime-card .macro-ai-evidence > header svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--blue);
+}
+.macro-regime-card .macro-ai-evidence > header div {
+  display: grid;
+  gap: 1px;
+}
+.macro-regime-card .macro-ai-evidence > header b {
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.macro-regime-card .macro-ai-evidence > header span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.3;
+}
+.macro-regime-card .macro-ai-evidence ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.macro-regime-card .macro-ai-evidence li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.macro-regime-card .macro-ai-evidence li.outcome-positive {
+  background: rgba(34, 197, 94, 0.30);
+  border-color: rgba(34, 197, 94, 0.55);
+}
+.macro-regime-card .macro-ai-evidence li.outcome-negative {
+  background: rgba(239, 68, 68, 0.30);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+.macro-regime-card .macro-ai-evidence li.outcome-neutral {
+  background: rgba(217, 160, 28, 0.30);
+  border-color: rgba(217, 160, 28, 0.58);
+}
+.macro-regime-card .macro-ai-evidence .macro-ai-bullet {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+.macro-regime-card .macro-ai-evidence li > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.macro-regime-card .macro-ai-evidence li small {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.macro-regime-card .macro-ai-evidence li p,
+.macro-regime-card .macro-ai-evidence .macro-ai-empty {
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.macro-regime-card .macro-ai-evidence .macro-ai-empty {
+  padding: 8px 9px;
+  border: 1px solid rgba(217, 160, 28, 0.58);
+  border-radius: 5px;
+  background: rgba(217, 160, 28, 0.30);
+}
 .weather-altitude {
   display: flex;
   gap: 6px;
@@ -583,6 +676,18 @@
   grid-template-columns: minmax(160px, 0.34fr) minmax(0, 1fr);
   gap: 12px 20px;
 }
+.risk-panel.threat-flower.holdings-stack .risk-radar-layout {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.risk-panel.threat-flower.holdings-stack {
+  display: flex;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-radar-workbench {
+  flex: 1;
+}
 /* Axis recommended list: hex chip wrap (honeycomb) */
 .risk-panel.threat-flower:not(.holdings-stack) .risk-selector {
   display: flex;
@@ -605,17 +710,23 @@
   clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);
   padding: 8px 10px;
 }
-/* Portfolio holdings: equal-width vertical stack filling the left column */
-.risk-panel.threat-flower.holdings-stack .risk-selector {
+/* Portfolio holdings: selector + radar left, explanation + evidence right. */
+.risk-panel.threat-flower.holdings-stack .risk-radar-visual-column {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  justify-content: flex-start;
-  align-content: stretch;
+  justify-content: space-between;
+  gap: 12px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   width: 100%;
   min-width: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
   margin-bottom: 0;
   padding: 2px 4px 4px 2px;
 }
@@ -634,6 +745,160 @@
 .risk-panel.threat-flower .risk-chart {
   min-height: 440px;
 }
+.risk-panel.threat-flower.holdings-stack .risk-chart {
+  min-height: 320px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 12px;
+  min-height: 24px;
+  color: #d9e0e7;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key i {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key i.average {
+  background: #8f98a2;
+}
+.risk-panel.threat-flower.holdings-stack .risk-explanation {
+  min-width: 0;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-axis-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dl {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: 8px 12px;
+  margin: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison {
+  border: 1px solid #303a44;
+  background: #0d1217;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid #303a44;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison h5 {
+  margin: 0;
+  color: #8fb9e2;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison header span {
+  min-width: 0;
+  color: #8f98a2;
+  font-size: 9px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #d9e0e7;
+  font-size: 9px;
+  line-height: 1.25;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison th,
+.risk-panel.threat-flower.holdings-stack .risk-comparison td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #28313a;
+  text-align: right;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison th:first-child {
+  width: 38%;
+  text-align: left;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison thead th {
+  color: #8f98a2;
+  font-weight: 800;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison abbr {
+  text-decoration: none;
+}
+.risk-panel.threat-flower.holdings-stack .risk-comparison tbody th {
+  color: #d9e0e7;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence div {
+  min-width: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dt {
+  color: #8fb9e2;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dd {
+  margin: 3px 0 0;
+  color: #d9e0e7;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence a {
+  color: #72aaff;
+  font-weight: 800;
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-series-key,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence dd {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence dt,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence a {
+  color: var(--blue);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison {
+  border-color: var(--line);
+  background: var(--paper);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison header,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison th,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison td {
+  border-color: var(--line);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison h5 {
+  color: var(--blue);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison table,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison tbody th {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison header span,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-comparison thead th {
+  color: var(--muted);
+}
 .risk-panel.threat-flower .panel-title h3::after {
   content: " · threat flower";
   color: #71717a;
@@ -649,9 +914,25 @@
     justify-content: center;
   }
   .risk-panel.threat-flower.holdings-stack .risk-selector {
+    max-width: none;
+    margin-inline: 0;
+  }
+}
+@media (max-width: 520px) {
+  .risk-panel.threat-flower.holdings-stack .risk-radar-layout {
+    grid-template-columns: 1fr;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-explanation {
+    display: block;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-radar-visual-column {
     justify-content: flex-start;
-    max-width: min(280px, 100%);
-    margin-inline: auto;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-axis-list {
+    grid-template-columns: 1fr;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-evidence dl {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1487,7 +1768,7 @@ html[data-appearance="sepia"] .instrument-gauge .redline {
 /* Hardcoded dark-theme grays → black on paper surfaces */
 html[data-appearance="sepia"] .shutter-preview,
 html[data-appearance="sepia"] .pulse-orb .orb-satellites span,
-html[data-appearance="sepia"] .pulse-constellation .pulse-popover,
+html[data-appearance="sepia"] .pulse-detail-lane,
 html[data-appearance="sepia"] .health-guardrail-slab,
 html[data-appearance="sepia"] .explain-dwell .explain-pop {
   color: var(--ink) !important;
@@ -1498,4 +1779,158 @@ html[data-appearance="sepia"] .health-guardrail-slab {
 }
 html[data-appearance="sepia"] .pulse-orb .orb-satellites span {
   border-color: var(--line);
+}
+
+/* Sepia contrast enforcement
+ *
+ * globals.css intentionally paperizes the dashboard in Sepia, but a handful of
+ * component-level dark-theme rules still win on leaf text (most visibly the
+ * S-2 sector-prism labels). Keep this final layer theme-scoped and distinguish
+ * paper text from the few controls that deliberately retain dark chrome.
+ */
+html[data-appearance="sepia"] {
+  --sepia-positive-ink: #075b32;
+  --sepia-warning-ink: #704600;
+  --sepia-negative-ink: #8f1d2c;
+  --sepia-blue-ink: #174b9a;
+}
+
+/* Paper cards, tabs, tables, feeds and visualisation labels use dark ink. */
+html[data-appearance="sepia"] .sector-selector.sector-prism button,
+html[data-appearance="sepia"] .sector-selector.sector-prism button span,
+html[data-appearance="sepia"] .sector-selector.sector-prism button small,
+html[data-appearance="sepia"] .pulse-orb,
+html[data-appearance="sepia"] .pulse-orb span,
+html[data-appearance="sepia"] .pulse-orb small,
+html[data-appearance="sepia"] .pulse-orb p,
+html[data-appearance="sepia"] .ladder-duel .ladder li,
+html[data-appearance="sepia"] .mece-loom .loom-thread,
+html[data-appearance="sepia"] .mece-loom .loom-thread header,
+html[data-appearance="sepia"] .mece-loom .loom-bead,
+html[data-appearance="sepia"] .health-organ-portal,
+html[data-appearance="sepia"] .health-organ-portal small,
+html[data-appearance="sepia"] .health-organ-portal span,
+html[data-appearance="sepia"] .health-organ-portal b,
+html[data-appearance="sepia"] .health-organ-portal strong {
+  color: var(--ink) !important;
+}
+
+/* Semantic meaning remains color-coded, using sepia-safe dark variants. */
+html[data-appearance="sepia"] .positive,
+html[data-appearance="sepia"] .good,
+html[data-appearance="sepia"] .pill.green,
+html[data-appearance="sepia"] .sector-news-source.live,
+html[data-appearance="sepia"] .status-panel div b.live,
+html[data-appearance="sepia"] .flows-donut-center.positive b {
+  color: var(--sepia-positive-ink) !important;
+}
+html[data-appearance="sepia"] .warning,
+html[data-appearance="sepia"] .amber-text,
+html[data-appearance="sepia"] .moderate,
+html[data-appearance="sepia"] .pill.amber,
+html[data-appearance="sepia"] .sector-news-source.unavailable,
+html[data-appearance="sepia"] .status-panel div b.snapshot,
+html[data-appearance="sepia"] .status-panel div b.partial,
+html[data-appearance="sepia"] .status-panel div b.auth_required,
+html[data-appearance="sepia"] .flows-donut-center.neutral b {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .negative,
+html[data-appearance="sepia"] .bad,
+html[data-appearance="sepia"] .pill.red,
+html[data-appearance="sepia"] .status-panel div b.unavailable,
+html[data-appearance="sepia"] .flows-donut-center.negative b {
+  color: var(--sepia-negative-ink) !important;
+}
+html[data-appearance="sepia"] .pill.blue {
+  color: var(--sepia-blue-ink) !important;
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-panel));
+}
+
+/* Matrix signals are text glyphs, so their dark variants must meet text
+   contrast instead of relying on the brighter chart-mark palette. */
+html[data-appearance="sepia"] .signal.tailwind { color: var(--sepia-positive-ink) !important; }
+html[data-appearance="sepia"] .signal.two-way { color: var(--sepia-warning-ink) !important; }
+html[data-appearance="sepia"] .signal.headwind { color: var(--sepia-negative-ink) !important; }
+html[data-appearance="sepia"] .signal.na { color: var(--ink) !important; }
+
+/* Colored badges on light paper need dark ink; dark control chrome keeps its
+   cream foreground. */
+html[data-appearance="sepia"] .sector-lead-score em { color: var(--ink) !important; }
+html[data-appearance="sepia"] .section-heading > .shutter-preview,
+html[data-appearance="sepia"] .section-heading > .shutter-preview em,
+html[data-appearance="sepia"] .appearance-toggle button.active,
+html[data-appearance="sepia"] .incognito-toggle,
+html[data-appearance="sepia"] .incognito-toggle small,
+html[data-appearance="sepia"] .collapse-button,
+html[data-appearance="sepia"] .workspace-tabs button.active,
+html[data-appearance="sepia"] .workspace-tabs button.active small,
+html[data-appearance="sepia"] .workspace-tabs button.active em {
+  color: var(--btn-fg) !important;
+}
+
+/* Investment visualisation legends and macro evidence are paper surfaces. */
+html[data-appearance="sepia"] .portfolio-map-legend,
+html[data-appearance="sepia"] .portfolio-map-legend span,
+html[data-appearance="sepia"] .scenario-body b,
+html[data-appearance="sepia"] .scenario-body .scenario-range,
+html[data-appearance="sepia"] .scenario-body p,
+html[data-appearance="sepia"] .scenario-body small,
+html[data-appearance="sepia"] .scenario-copy span,
+html[data-appearance="sepia"] .macro-no-evidence b,
+html[data-appearance="sepia"] .macro-no-evidence p,
+html[data-appearance="sepia"] .macro-dial-chips b,
+html[data-appearance="sepia"] .macro-dial-chips span,
+html[data-appearance="sepia"] .macro-dial-chips small,
+html[data-appearance="sepia"] .framework-interpretation > p,
+html[data-appearance="sepia"] .framework-interpretation > small,
+html[data-appearance="sepia"] .framework-pressure-list span,
+html[data-appearance="sepia"] .framework-pressure-list b {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button:not(.active) small {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button.active small {
+  color: var(--btn-fg) !important;
+}
+
+/* S-2 linked chart narratives and legends must not retain dark-theme grays. */
+html[data-appearance="sepia"] .bubble-axis-legend em,
+html[data-appearance="sepia"] .linked-insight h4,
+html[data-appearance="sepia"] .linked-insight b,
+html[data-appearance="sepia"] .linked-insight span,
+html[data-appearance="sepia"] .linked-insight p,
+html[data-appearance="sepia"] .linked-insight-note {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .linked-insight-scroll > div {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+}
+
+/* Market Intelligence evidence and calendar glyphs use dark semantic ink. */
+html[data-appearance="sepia"] .podcast-summary-unavailable,
+html[data-appearance="sepia"] .earnings-holding-star {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-month-cell.today .earnings-month-daynum {
+  color: var(--sepia-blue-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-day-summary-item h5,
+html[data-appearance="sepia"] .earnings-day-summary-item h5 small {
+  color: var(--ink) !important;
+}
+
+/* Recharts and custom SVG text inherit the sepia chart tokens. Slice labels
+   remain light because they sit directly on dark/coloured arcs. */
+html[data-appearance="sepia"] .recharts-cartesian-axis-tick-value,
+html[data-appearance="sepia"] .recharts-label,
+html[data-appearance="sepia"] .recharts-legend-item-text,
+html[data-appearance="sepia"] .bubble-label,
+html[data-appearance="sepia"] .sector-total-label,
+html[data-appearance="sepia"] .exposure-total-label,
+html[data-appearance="sepia"] .spark-filament-label {
+  color: var(--chart-label) !important;
+  fill: var(--chart-label) !important;
 }

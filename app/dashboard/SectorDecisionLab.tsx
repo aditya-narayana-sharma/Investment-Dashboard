@@ -73,6 +73,7 @@ export function SectorDecisionLab({
     }
     return [...rows.values()].sort((left, right) => String(left.date).localeCompare(String(right.date)));
   }, [selectedBenchmarks]);
+  const chartReadyBenchmarks = selectedBenchmarks.filter((index) => index.indexedHistory.length >= 2);
   const allInvestabilityFactors = sectors.map((item) => buildInvestabilityFactors(
     item,
     sectorCompanies[item.id] ?? [],
@@ -126,7 +127,7 @@ export function SectorDecisionLab({
 
   if (page === "benchmarks") {
     return <section className="decision-lab-page benchmark-page">
-      <div className="decision-purpose"><BarChart3 size={17}/><span><b>Reference-index comparison</b><small>Compare sector leadership with broad, sector and factor benchmarks. Delayed/EOD series are never labelled live.</small></span><em className={`pill ${benchmarks.status === "live" ? "green" : benchmarks.status === "partial" || benchmarks.status === "cached" ? "amber" : "red"}`}>{benchmarks.status}</em></div>
+      <div className="decision-purpose"><BarChart3 size={17}/><span><b>Reference-index comparison</b><small>Compare sector leadership with broad, sector and factor benchmarks. Delayed/EOD series are never labelled live.</small></span><em className={`pill ${benchmarks.status === "live" ? "green" : benchmarks.status === "partial" || benchmarks.status === "cached" ? "amber" : "red"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</em></div>
       {!benchmarks.indices.length ? <div className="live-empty compact"><b>Benchmark registry unavailable</b><p>{benchmarks.message}</p></div> : null}
       <div className="benchmark-selector" role="group" aria-label="Select up to three benchmark indices">
         {benchmarks.indices.map((index) => {
@@ -137,6 +138,7 @@ export function SectorDecisionLab({
       <div className="decision-chart-layout">
         <article className="panel decision-main-chart benchmark-panel index-race-tape">
           <div className="chart-wrap decision-chart-canvas">
+          {!chartReadyBenchmarks.length ? <div className="live-empty compact benchmark-chart-empty" role="status"><b>No chart-ready history</b><p>The selected indices need at least two verified daily closes. Check each card for the failed source; a single latest print is not rendered as a time series.</p></div> :
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={history} margin={{ top: 10, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false}/>
@@ -144,13 +146,13 @@ export function SectorDecisionLab({
               <YAxis domain={["auto", "auto"]} width={42} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
               <Tooltip/>
               <Legend/>
-              {selectedBenchmarks.map((index) => <Line key={index.id} dataKey={index.id} name={index.officialName} stroke={INDEX_COLORS[benchmarks.indices.findIndex((item) => item.id === index.id)]} dot={false} strokeWidth={2} connectNulls/>)}
+              {chartReadyBenchmarks.map((index) => <Line key={index.id} dataKey={index.id} name={index.officialName} stroke={INDEX_COLORS[benchmarks.indices.findIndex((item) => item.id === index.id)]} dot={false} strokeWidth={2} connectNulls/>)}
             </LineChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
           </div>
         </article>
         <aside className="benchmark-return-grid">
-          {selectedBenchmarks.map((index) => <article className="panel" key={index.id}><span>{index.officialName}</span><b>{index.level === null ? "Unavailable" : index.level.toLocaleString("en-IN")}</b><div>{(["day", "month", "quarter", "year"] as const).map((period) => <small className={(index.returns[period] ?? 0) >= 0 ? "positive" : "negative"} key={period}>{period}: {index.returns[period] === null ? "—" : `${index.returns[period]! >= 0 ? "+" : ""}${index.returns[period]!.toFixed(2)}%`}</small>)}</div><em>{index.source} · {index.observedAt}</em></article>)}
+          {selectedBenchmarks.map((index) => <article className="panel" key={index.id}><span>{index.officialName}</span><b>{index.level === null ? "Unavailable" : index.level.toLocaleString("en-IN")}</b><div>{(["day", "month", "quarter", "year"] as const).map((period) => <small className={(index.returns[period] ?? 0) >= 0 ? "positive" : "negative"} key={period}>{period}: {index.returns[period] === null ? "—" : `${index.returns[period]! >= 0 ? "+" : ""}${index.returns[period]!.toFixed(2)}%`}</small>)}</div><em>{index.source} · {index.observedAt} · {index.indexedHistory.length} closes</em></article>)}
         </aside>
       </div>
     </section>;

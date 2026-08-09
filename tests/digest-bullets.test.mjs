@@ -198,16 +198,39 @@ test("podcast digest bullets drop CTAs and do not pad to five with promo", () =>
   assert.ok(bullets.some((item) => /Noah Smith|sovereign wealth|fertility/i.test(item)));
 });
 
-test("preferPodcastContentSource uses transcripts and rejects descriptions as summary evidence", () => {
+test("preferPodcastContentSource prefers transcripts and falls back to sanitized descriptions", () => {
   assert.equal(
     preferPodcastContentSource("Host discusses tariff policy and oil supply risks in depth today.", "Follow us on Twitter").source,
     "transcript",
   );
   assert.equal(
     preferPodcastContentSource("", "Oil hits $100 and drives a global bond sell-off amid Middle East risk.").source,
-    "none",
+    "description",
+  );
+  assert.doesNotMatch(
+    preferPodcastContentSource("", "Oil rose as supply tightened. Follow us on Twitter for more updates.").text,
+    /follow|twitter/i,
   );
   assert.equal(preferPodcastContentSource("", "").source, "none");
+});
+
+test("digest cleaning rejects navigation, archive promos, and helpdesk residue", () => {
+  const promos = [
+    "Explore more of McKinsey's latest research.",
+    "MISSED LAST WEEK'S FEATURED CHART?",
+    "Get our latest thinking on your mobile device.",
+    "Helpdesk co-ordinates are available for account queries.",
+    "BOOKS AND RESOURCES Inquire about the author's masterclass.",
+    "NEW TO THE SHOW? Get smarter through the Intrinsic Value Newsletter.",
+    "Try our tool for picking stock winners and managing portfolios.",
+    "Enjoy exclusive perks from our favorite apps and services.",
+    "McKinsey & Company, 3 World Trade Center, 175 Greenwich Street, New York, NY 10007",
+    "TLDR subscribers actively choose to open their inbox daily, making it a different ad channel.",
+    "Every subscriber has already opted into tech coverage, so there's no wasted reach.",
+  ];
+  for (const line of promos) {
+    assert.equal(isDigestPromoOrNoise(line), true, `expected promo: ${line}`);
+  }
 });
 
 test("digest cleaning strips international/US-style phone numbers, not just Indian mobiles", () => {

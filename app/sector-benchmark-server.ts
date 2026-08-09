@@ -20,6 +20,9 @@ type RawIndex = {
   maxDrawdown?: number;
   squeezeWidth?: number;
   observedAt?: string;
+  source?: string;
+  sourceUrl?: string;
+  period?: string;
   error?: string;
 };
 
@@ -67,8 +70,7 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
     const now = new Date().toISOString();
     const indices: SectorBenchmarkIndex[] = SECTOR_BENCHMARK_REGISTRY.map((item) => {
       const row = byId.get(item.id);
-      const hasTicker = Boolean(item.ticker);
-      const available = Boolean(row?.level != null && (row.indexedHistory?.length ?? 0) > 0);
+      const available = Boolean(row?.level != null && (row.indexedHistory?.length ?? 0) >= 2);
       return {
         id: item.id,
         officialName: item.officialName,
@@ -79,43 +81,37 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
         volatility: row?.volatility ?? null,
         maxDrawdown: row?.maxDrawdown ?? null,
         squeezeWidth: row?.squeezeWidth ?? null,
-        source: available ? "Yahoo Finance delayed NSE index history" : "NSE Indices canonical definition",
-        sourceUrl: BENCHMARK_FACTSHEET_URL,
+        source: available ? row?.source ?? "Exact-index delayed EOD history" : "NSE Indices canonical definition",
+        sourceUrl: available ? row?.sourceUrl ?? BENCHMARK_FACTSHEET_URL : BENCHMARK_FACTSHEET_URL,
         observedAt: row?.observedAt ?? now,
-        period: available
-          ? (row?.indexedHistory?.length ?? 0) >= 2
-            ? "Up to one year of daily closes"
-            : "Latest public print only · full Yahoo history not published for this series"
-          : hasTicker
-            ? "Configured ticker returned no exact market series"
-            : "Definition only · no exact public Yahoo series (ETF proxies not substituted)",
+        period: available ? row?.period ?? "Up to one year of daily closes" : row?.error ?? "Official NSE and exact-index fallback returned insufficient history",
         freshness: available ? "public_delayed" : "unavailable",
       };
     });
-    const tickerBacked = SECTOR_BENCHMARK_REGISTRY.filter((item) => Boolean(item.ticker));
-    const availableTickerBacked = tickerBacked.filter((item) => {
+    const availableIndices = SECTOR_BENCHMARK_REGISTRY.filter((item) => {
       const index = indices.find((candidate) => candidate.id === item.id);
-      return Boolean(index?.level !== null && index.indexedHistory.length);
+      return Boolean(index?.level !== null && index.indexedHistory.length >= 2);
     }).length;
-    const definitionOnly = SECTOR_BENCHMARK_REGISTRY.filter((item) => !item.ticker).map((item) => item.officialName);
-    const status: SectorBenchmarkSnapshot["status"] = availableTickerBacked === tickerBacked.length && tickerBacked.length > 0
+    const totalIndices = SECTOR_BENCHMARK_REGISTRY.length;
+    const unavailableNames = indices.filter((index) => index.freshness === "unavailable").map((index) => index.officialName);
+    const status: SectorBenchmarkSnapshot["status"] = availableIndices === totalIndices && totalIndices > 0
       ? "live"
-      : availableTickerBacked > 0
+      : availableIndices > 0
         ? "partial"
         : "unavailable";
     const snapshot: SectorBenchmarkSnapshot = {
       status,
       asOf: now,
       message: status === "live"
-        ? `${availableTickerBacked}/${tickerBacked.length} ticker-backed index histories live. Definition-only residual gap (no exact public series; ETF proxies not substituted): ${definitionOnly.join(", ") || "none"}.`
+        ? `${availableIndices}/${totalIndices} official or exact-index daily histories available.`
         : status === "partial"
-          ? `${availableTickerBacked}/${tickerBacked.length} ticker-backed histories available. Failed or empty series demote freshness; definition-only indices remain ${definitionOnly.join(", ") || "none"}.`
-          : `No ticker-backed NSE index histories available. Definition-only indices: ${definitionOnly.join(", ") || "none"}.`,
+          ? `${availableIndices}/${totalIndices} daily histories available. Insufficient series: ${unavailableNames.join(", ") || "none"}.`
+          : `No benchmark has the minimum two official or exact-index closing observations required for a chart.`,
       indices,
     };
     state.snapshot = snapshot;
     state.expiresAt = Date.now() + 5 * 60_000;
-    if (availableTickerBacked) state.lastGood = snapshot;
+    if (availableIndices) state.lastGood = snapshot;
     return snapshot;
   } catch (error) {
     if (state.lastGood) return { ...state.lastGood, status: "cached", message: `Benchmark refresh failed; preserving last validated snapshot. ${String(error)}` };

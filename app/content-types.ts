@@ -1,3 +1,9 @@
+export type PodcastInsight = {
+  text: string;
+  outcome: "Positive" | "Mixed" | "Negative";
+  sentiment: "Positive" | "Neutral" | "Negative";
+};
+
 export type DigestItem = {
   source: string;
   time: string;
@@ -6,7 +12,7 @@ export type DigestItem = {
   summary: string;
   /** Source-backed summary points for Market Intelligence (≥5 when body supports it). */
   bullets?: string[];
-  /** Podcast evidence. `description` is legacy metadata and never summary evidence. */
+  /** Podcast evidence. Descriptions are sanitized and explicitly labelled when no transcript exists. */
   contentSource?: "transcript" | "description" | "none";
   /** Deterministic newsletter tone; absent on older snapshots and non-newsletters. */
   sentiment?: "Positive" | "Neutral" | "Negative";
@@ -31,14 +37,18 @@ export type DigestItem = {
   pdfUrl?: string | null;
   /** Podcast URL from the local Podcasts database, when available. */
   episodeUrl?: string;
-  /** Transcript-only takeaways. Description-only episodes intentionally keep this empty. */
+  /** AI-generated takeaways; `contentSource` identifies transcript versus description evidence. */
   keyTakeaways?: string[];
-  /** Generated only from the exact episode's local transcript. */
+  /** Per-bullet outcome and sentiment metadata used by Podcast insight cards. */
+  podcastInsights?: PodcastInsight[];
+  /** Generated only from the exact episode evidence identified by `contentSource`. */
   summaryStatus?: "generated" | "unavailable" | "error";
-  summaryReason?: "transcript_unavailable" | "transcript_too_short" | "summarizer_not_configured" | "summarizer_failed" | null;
+  summaryReason?: "transcript_unavailable" | "transcript_too_short" | "evidence_too_short" | "summarizer_not_configured" | "summarizer_failed" | null;
   summaryModel?: string | null;
   summaryGeneratedAt?: string | null;
   summaryChunkCount?: number;
+  /** Hash for reusing an unchanged transcript or description summary. */
+  evidenceFingerprint?: string | null;
   /** Hash for summary reuse without persisting or exposing transcript text. */
   transcriptFingerprint?: string;
   /** Safe timestamp links derived from local transcript markers and the episode URL. */

@@ -8,7 +8,10 @@ export const DIGEST_BULLET_MAX = 8;
  * Content takeaways only — never follow/subscribe/learn-more padding.
  */
 const NOISE =
-  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|shop\b.{0,20}presented|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
+  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email|explore)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|missed last week|get our latest thinking on|helpdesk co-ordinates|helpdesk coordinates|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|shop\b.{0,20}presented|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
+
+const RESOURCE_PROMO =
+  /^(?:books? and resources?|new to the show|get smarter\b|try our tool\b|enjoy exclusive perks\b|inquire about\b)|\b(?:favorite|favourite) apps?\b|\bintrinsic value newsletter\b|\bworld trade center\b|\bsubscribers actively choose\b|\bevery subscriber\b.{0,80}\bopted\b|\bno wasted reach\b/i;
 
 /** Provenance / scheduling labels — never used as content summary bullets for Mail or Podcasts. */
 const PROVENANCE_LINE =
@@ -54,7 +57,7 @@ function cleanFragment(value: string) {
       .replace(/https?:\/\/\S+/g, " "),
   )
     .replace(/\s+/g, " ")
-    .replace(/^[\s\-–—•·*]+/, "")
+    .replace(/^[\s,;:\-–—•·*]+/, "")
     .replace(/\s*[·•]\s*$/, "")
     .trim();
 }
@@ -111,6 +114,7 @@ export function isDigestPromoOrNoise(value: string): boolean {
   const item = cleanFragment(value);
   if (!item) return true;
   if (NOISE.test(item)) return true;
+  if (RESOURCE_PROMO.test(item)) return true;
   if (EMAIL_LIKE.test(item)) return true;
   // Bare URL / handle leftovers after URL stripping.
   if (/^(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/\S*)?$/i.test(item)) return true;
@@ -123,18 +127,22 @@ export function isDigestPromoOrNoise(value: string): boolean {
 }
 
 /**
- * Accept locally available transcript text only. Publisher descriptions are
- * metadata and must never become summary content.
+ * Prefer locally available transcript text. When none exists, use only a
+ * sanitized, substantive publisher description as explicitly labelled evidence.
  */
 export function preferPodcastContentSource(
   transcript?: string | null,
   description?: string | null,
-): { text: string; source: "transcript" | "none" } {
+): { text: string; source: "transcript" | "description" | "none" } {
   const transcriptText = cleanFragment(String(transcript ?? "").replace(/\n+/g, "\n")).trim();
   if (transcriptText.length >= 40) {
     return { text: String(transcript ?? "").trim(), source: "transcript" };
   }
-  void description;
+  const descriptionText = String(description ?? "").trim();
+  const descriptionBullets = extractContentBullets(descriptionText);
+  if (descriptionBullets.length > 0) {
+    return { text: descriptionBullets.join("\n"), source: "description" };
+  }
   return { text: "", source: "none" };
 }
 

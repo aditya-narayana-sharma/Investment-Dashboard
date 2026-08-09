@@ -339,7 +339,7 @@ export function HealthWorkspace({
     fit();
     window.addEventListener("resize", fit);
     const layoutObserver = new ResizeObserver(fit);
-    document.querySelectorAll(".masthead, .live-feed-banner, .source-freshness-strip, .workspace-navigation").forEach((element) => layoutObserver.observe(element));
+    document.querySelectorAll(".masthead, .live-feed-banner, .source-freshness-region, .workspace-navigation").forEach((element) => layoutObserver.observe(element));
     const mutationObserver = new MutationObserver(() => window.requestAnimationFrame(fit));
     const dashboardRoot = document.querySelector(".dashboard-app");
     if (dashboardRoot) mutationObserver.observe(dashboardRoot, { childList: true, characterData: true, subtree: true });
