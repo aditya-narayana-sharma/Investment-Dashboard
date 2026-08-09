@@ -161,10 +161,65 @@ export function sanitizeGeneratedSummary(value) {
   }).slice(0, 6);
 }
 
+const POSITIVE_OUTCOME = /\b(?:beat|benefit|improv|gain|growth|recover|resilien|strong|support|upside|win)\w*\b/i;
+const NEGATIVE_OUTCOME = /\b(?:declin|deteriorat|downside|fail|fell|loss|risk|slow|threat|weak|worsen)\w*\b/i;
+const POSITIVE_SENTIMENT = /\b(?:bullish|confiden|constructive|encourag|optimis|positive)\w*\b/i;
+const NEGATIVE_SENTIMENT = /\b(?:bearish|cautious|concern|negative|pessimis|skeptic|uncertain|worr)\w*\b/i;
+
+export function classifyPodcastInsight(value) {
+  const text = String(value ?? "").trim();
+  const positiveOutcome = POSITIVE_OUTCOME.test(text);
+  const negativeOutcome = NEGATIVE_OUTCOME.test(text);
+  const positiveSentiment = POSITIVE_SENTIMENT.test(text);
+  const negativeSentiment = NEGATIVE_SENTIMENT.test(text);
+  return {
+    text,
+    outcome: positiveOutcome === negativeOutcome ? "Mixed" : positiveOutcome ? "Positive" : "Negative",
+    sentiment: positiveSentiment === negativeSentiment ? "Neutral" : positiveSentiment ? "Positive" : "Negative",
+  };
+}
+
+function normalizedLabel(value, allowed, fallback) {
+  const label = String(value ?? "").trim().toLowerCase();
+  return allowed.find((candidate) => candidate.toLowerCase() === label) ?? fallback;
+}
+
+export function sanitizeGeneratedInsights(value) {
+  const source = String(value ?? "").trim();
+  let candidates = [];
+  try {
+    const parsed = JSON.parse(source);
+    if (Array.isArray(parsed)) candidates = parsed;
+    else if (Array.isArray(parsed?.bullets)) candidates = parsed.bullets;
+    else if (Array.isArray(parsed?.insights)) candidates = parsed.insights;
+  } catch {
+    candidates = source.split(/\n+/).map((line) => line.replace(/^\s*(?:[-*•]|\d+[).])\s*/, ""));
+  }
+  const seen = new Set();
+  return candidates.flatMap((candidate) => {
+    const rawText = typeof candidate === "object" && candidate !== null
+      ? candidate.text ?? candidate.bullet ?? candidate.summary ?? ""
+      : candidate;
+    const cleanItems = sanitizeGeneratedSummary(JSON.stringify({ bullets: [rawText] }));
+    if (!cleanItems.length) return [];
+    const text = cleanItems[0];
+    const key = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const inferred = classifyPodcastInsight(text);
+    return [{
+      text,
+      outcome: normalizedLabel(candidate?.outcome, ["Positive", "Mixed", "Negative"], inferred.outcome),
+      sentiment: normalizedLabel(candidate?.sentiment, ["Positive", "Neutral", "Negative"], inferred.sentiment),
+    }];
+  }).slice(0, 6);
+}
+
 function chunkPrompt(chunk, index, total) {
   return [
     "Summarize this transcript chunk using only claims present in the chunk.",
-    "Return JSON: {\"bullets\":[\"...\"]}. Use 2-4 complete substantive bullets.",
+    "Return JSON: {\"bullets\":[{\"text\":\"...\",\"outcome\":\"Positive|Mixed|Negative\",\"sentiment\":\"Positive|Neutral|Negative\"}]}. Use 2-4 complete substantive bullets.",
+    "Outcome classifies the consequence described; sentiment classifies the speaker's expressed stance.",
     "Capture arguments, evidence, conclusions, and disagreements. Omit ads, sponsors, promotions, contacts, and show boilerplate.",
     `Chunk ${index + 1} of ${total}:`,
     chunk,
@@ -174,7 +229,8 @@ function chunkPrompt(chunk, index, total) {
 function synthesisPrompt(chunkSummaries) {
   return [
     "Create the final summary of one complete podcast from the ordered chunk summaries below.",
-    "Return JSON: {\"bullets\":[\"...\"]}. Use 3-6 concise complete bullets.",
+    "Return JSON: {\"bullets\":[{\"text\":\"...\",\"outcome\":\"Positive|Mixed|Negative\",\"sentiment\":\"Positive|Neutral|Negative\"}]}. Use 3-6 concise complete bullets.",
+    "Outcome classifies the consequence described; sentiment classifies the speaker's expressed stance.",
     "Cover the episode end-to-end: major arguments, evidence, conclusions, and disagreements.",
     "Use only supplied material. Omit ads, sponsors, promotions, contacts, URLs, and follow/subscribe requests.",
     ...chunkSummaries.map((summary, index) => `CHUNK ${index + 1}:\n${summary}`),
@@ -187,14 +243,14 @@ export async function summarizePodcastTranscript(transcript, {
   maxChunkChars = DEFAULT_CHUNK_CHARS,
 } = {}) {
   if (!String(transcript ?? "").trim()) {
-    return { status: "unavailable", reason: "transcript_unavailable", bullets: [], model: null, chunkCount: 0 };
+    return { status: "unavailable", reason: "transcript_unavailable", bullets: [], insights: [], model: null, chunkCount: 0 };
   }
   const sanitizedTranscript = sanitizePodcastTranscript(transcript);
   if (sanitizedTranscript.length < MIN_TRANSCRIPT_CHARS) {
-    return { status: "unavailable", reason: "transcript_too_short", bullets: [], model: null, chunkCount: 0 };
+    return { status: "unavailable", reason: "transcript_too_short", bullets: [], insights: [], model: null, chunkCount: 0 };
   }
   if (typeof generate !== "function") {
-    return { status: "unavailable", reason: "summarizer_not_configured", bullets: [], model: null, chunkCount: 0 };
+    return { status: "unavailable", reason: "summarizer_not_configured", bullets: [], insights: [], model: null, chunkCount: 0 };
   }
   const chunks = chunkPodcastTranscript(sanitizedTranscript, maxChunkChars);
   const chunkSummaries = [];
@@ -205,27 +261,65 @@ export async function summarizePodcastTranscript(transcript, {
         index,
         total: chunks.length,
       });
-      const clean = sanitizeGeneratedSummary(output);
+      const clean = sanitizeGeneratedInsights(output);
       if (!clean.length) throw new Error(`chunk ${index + 1} returned no substantive summary`);
-      chunkSummaries.push(clean.join("\n"));
+      chunkSummaries.push(clean.map((insight) => insight.text).join("\n"));
     }
     const finalOutput = await generate(synthesisPrompt(chunkSummaries), {
       phase: "synthesis",
       total: chunks.length,
     });
-    const bullets = sanitizeGeneratedSummary(finalOutput);
-    if (bullets.length < 3) throw new Error("final synthesis returned fewer than three substantive bullets");
+    const insights = sanitizeGeneratedInsights(finalOutput);
+    if (insights.length < 3) throw new Error("final synthesis returned fewer than three substantive bullets");
     return {
       status: "generated",
       reason: null,
-      bullets,
+      bullets: insights.map((insight) => insight.text),
+      insights,
       model,
       chunkCount: chunks.length,
       sanitizedChars: sanitizedTranscript.length,
       summarizedChars: chunks.reduce((total, chunk) => total + chunk.length, 0),
     };
   } catch {
-    return { status: "error", reason: "summarizer_failed", bullets: [], model, chunkCount: chunks.length };
+    return { status: "error", reason: "summarizer_failed", bullets: [], insights: [], model, chunkCount: chunks.length };
+  }
+}
+
+export async function summarizePodcastDescription(description, {
+  generate,
+  model = "configured-local-model",
+} = {}) {
+  const evidence = sanitizePodcastTranscript(description);
+  if (evidence.length < 80) {
+    return { status: "unavailable", reason: "evidence_too_short", bullets: [], insights: [], model: null, chunkCount: 0 };
+  }
+  if (typeof generate !== "function") {
+    return { status: "unavailable", reason: "summarizer_not_configured", bullets: [], insights: [], model: null, chunkCount: 0 };
+  }
+  try {
+    const output = await generate([
+      "Summarize this publisher episode description using only claims present in the description.",
+      "Return JSON: {\"bullets\":[{\"text\":\"...\",\"outcome\":\"Positive|Mixed|Negative\",\"sentiment\":\"Positive|Neutral|Negative\"}]}. Use 2-5 substantive bullets.",
+      "Outcome classifies the consequence described; sentiment classifies the expressed stance.",
+      "Omit ads, sponsors, promotions, contacts, URLs, credits, and follow/subscribe requests.",
+      "DESCRIPTION:",
+      evidence,
+    ].join("\n\n"), { phase: "description", total: 1 });
+    const insights = sanitizeGeneratedInsights(output);
+    if (insights.length < 2) throw new Error("description synthesis returned fewer than two substantive bullets");
+    return {
+      status: "generated",
+      reason: null,
+      bullets: insights.map((insight) => insight.text),
+      insights,
+      model,
+      chunkCount: 1,
+      sanitizedChars: evidence.length,
+      summarizedChars: evidence.length,
+    };
+  } catch {
+    return { status: "error", reason: "summarizer_failed", bullets: [], insights: [], model, chunkCount: 1 };
   }
 }
 

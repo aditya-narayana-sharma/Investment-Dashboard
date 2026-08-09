@@ -24,6 +24,20 @@ type PortfolioMapDatum = Pick<LiveHolding, "symbol" | "name" | "qty" | "avg" | "
 
 type PortfolioMapRect = PortfolioMapDatum & { x: number; y: number; width: number; height: number };
 
+type RiskEvidenceContext = {
+  holdings: LiveHolding[];
+  asOf: string;
+  classification: KiteSnapshot["classification"];
+};
+
+type MacroEvidenceOutcome = "positive" | "neutral" | "negative";
+
+type MacroEvidenceSummary = {
+  text: string;
+  outcome: MacroEvidenceOutcome;
+  source: string;
+};
+
 function portfolioReturnColor(returnPct: number): string {
   const tone = portfolioReturnTone(returnPct);
   return tone === "gain" ? "#137a43" : tone === "loss" ? "#a92f39" : "#9a6b12";
@@ -68,42 +82,119 @@ function ThesisBulletList({ bullets, className = "thesis-bullet-list" }: { bulle
   return <ul className={className}>{bullets.map((bullet) => <li key={`${bullet.marker}-${bullet.text}`} className={bullet.tone}><span aria-hidden="true">{bullet.marker}</span><span>{bullet.text}</span></li>)}</ul>;
 }
 
-function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, explainSelected = false, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; idPrefix: string; explainSelected?: boolean; emptyLabel?: string }) {
+function macroEvidenceOutcome(item: Pick<ContentDigestSnapshot["investment"]["macroEvidence"][number]["items"][number], "sentiment">, text: string): MacroEvidenceOutcome {
+  if (item.sentiment === "Positive") return "positive";
+  if (item.sentiment === "Negative") return "negative";
+  if (item.sentiment === "Neutral") return "neutral";
+  const inferred = thesisBullets(text, { limit: 1 })[0]?.tone;
+  return inferred === "positive" ? "positive" : inferred === "negative" ? "negative" : "neutral";
+}
+
+const macroEvidenceRelevance: Record<MacroEventKey, RegExp> = {
+  oilWar: /\b(?:oil|crude|brent|fuel|freight|iran|war|missile|geopolit|hormuz)\b/i,
+  flows: /\b(?:fii|dii|foreign|institutional|cash|flow|buying|selling|exchange|net)\b/i,
+  rates: /\b(?:inr|rupee|rate|yield|forex|reserve|inflation|debt|bond|rbi|fed)\b/i,
+  breadth: /\b(?:breadth|vix|volatil|nifty|sensex|index|market|stocks?|closing.price|correction)\b/i,
+  earnings: /\b(?:earnings?|profit|revenue|margin|results?|dividend|guidance|reported|beat|cash.flow|kpi|target price|\btp\b)\b/i,
+};
+
+function compactEvidenceText(item: Pick<ContentDigestSnapshot["investment"]["macroEvidence"][number]["items"][number], "title" | "summary" | "bullets">, eventKey: MacroEventKey): string {
+  const source = [...(item.bullets ?? []), item.summary, item.title].filter(Boolean).join(". ");
+  const clean = source.replace(/\s+/g, " ").replace(/^[\s•·\-–—]+/, "").trim();
+  const boilerplate = /(?:difficult to read|view in browser|unsubscribe|subscribe|follow us|contact us|click here|website|manage preferences|privacy policy|international cat day|autumnal ambassadors|must-read tech news)/i;
+  const candidates = (clean.match(/[^.!?]+[.!?]?/g) ?? [clean]).map((part) => part.trim());
+  const sentence = candidates.find((part) => part.length > 28 && !boilerplate.test(part) && macroEvidenceRelevance[eventKey].test(part)) ?? "";
+  if (!sentence) return "";
+  return sentence.length > 180 ? `${sentence.slice(0, 177).trim()}…` : sentence;
+}
+
+function buildMacroEvidenceSummaries(
+  items: ContentDigestSnapshot["investment"]["macroEvidence"][number]["items"],
+  eventKey: MacroEventKey,
+  limit = 5,
+): MacroEvidenceSummary[] {
+  const summaries: MacroEvidenceSummary[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const text = compactEvidenceText(item, eventKey);
+    const key = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!text || text.length < 18 || seen.has(key)) continue;
+    seen.add(key);
+    summaries.push({ text, outcome: macroEvidenceOutcome(item, `${item.title}. ${text}`), source: item.source });
+    if (summaries.length >= limit) break;
+  }
+  return summaries;
+}
+
+function AiEvidenceSummaries({ summaries }: { summaries: MacroEvidenceSummary[] }) {
+  return <section className="macro-ai-evidence" aria-labelledby="macro-ai-evidence-title">
+    <header><Sparkles size={14}/><div><b id="macro-ai-evidence-title">AI-generated evidence summaries</b><span>Source-derived · outcome classified</span></div></header>
+    {summaries.length ? <ul>{summaries.map((summary) => <li key={`${summary.source}-${summary.text}`} className={`outcome-${summary.outcome}`} aria-label={`${summary.outcome} outcome`}>
+      <span className="macro-ai-bullet" aria-hidden="true">•</span>
+      <div><small>{summary.outcome} outcome · {summary.source}</small><p>{summary.text}</p></div>
+    </li>)}</ul> : <p className="macro-ai-empty">No source-derived summary is available for this event window.</p>}
+  </section>;
+}
+
+function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, explainSelected = false, evidenceContext, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; idPrefix: string; explainSelected?: boolean; evidenceContext?: RiskEvidenceContext; emptyLabel?: string }) {
   if (!profiles.length) return <div className="live-empty compact"><Mail size={22}/><b>{emptyLabel}</b><p>The refreshed source set did not produce a verified profile for the selected analysis window.</p></div>;
   const profile = profiles.find((item) => item.symbol === selected) ?? profiles[0];
   const explanation = explainSelected ? buildRiskExplanation(profile, riskAxes) : null;
+  const evidenceHolding = evidenceContext?.holdings.find((holding) => holding.symbol === profile.symbol);
   const data = riskAxes.map((axis, index) => ({
     axis,
     score: profile.scores[index],
     average: Number((profiles.reduce((sum, item) => sum + item.scores[index], 0) / profiles.length).toFixed(1)),
   }));
   const tabPanelId = `${idPrefix}-panel`;
+  const chartHeight = explainSelected ? 320 : 440;
 
-  return <div className="risk-radar-layout">
-    <div className="risk-selector" role="tablist" aria-label="Select risk profile">{profiles.map((item) => <button type="button" role="tab" id={`${idPrefix}-tab-${item.symbol}`} aria-controls={tabPanelId} aria-selected={item.symbol === profile.symbol} key={item.symbol} onClick={() => onSelect(item.symbol)} className={item.symbol === profile.symbol ? "active" : ""} aria-label={`${item.name} (${item.symbol})`}>{item.symbol}</button>)}</div>
-    <div className="risk-radar-chart-col" role="tabpanel" id={tabPanelId} aria-labelledby={`${idPrefix}-tab-${profile.symbol}`}>
-      <div className="risk-chart"><ResponsiveContainer width="100%" height={440}>
-        <RadarChart data={data} outerRadius="78%" margin={{ top: 20, right: 42, bottom: 16, left: 42 }}>
+  const selector = <div className="risk-selector" role="tablist" aria-label="Select risk profile">{profiles.map((item) => <button type="button" role="tab" id={`${idPrefix}-tab-${item.symbol}`} aria-controls={tabPanelId} aria-selected={item.symbol === profile.symbol} key={item.symbol} onClick={() => onSelect(item.symbol)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item.symbol); } }} className={item.symbol === profile.symbol ? "active" : ""} aria-label={`${item.name} (${item.symbol})`}>{item.symbol}</button>)}</div>;
+  const chartPanel = <div className="risk-radar-chart-col" role="tabpanel" id={tabPanelId} aria-labelledby={`${idPrefix}-tab-${profile.symbol}`}>
+      <div className="risk-chart"><ResponsiveContainer width="100%" height={chartHeight}>
+        <RadarChart data={data} outerRadius={explainSelected ? "72%" : "78%"} margin={explainSelected ? { top: 18, right: 24, bottom: 18, left: 24 } : { top: 20, right: 42, bottom: 16, left: 42 }}>
           <PolarGrid stroke="#3b444e" />
           <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--chart-label)", fontSize: 11, fontWeight: 700 }} />
           <PolarRadiusAxis angle={90} domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 10 }} />
           <Radar name={averageLabel} dataKey="average" stroke="#8f98a2" fill="#8f98a2" fillOpacity={0.08} strokeDasharray="5 4" isAnimationActive={false} />
           <Radar name={profile.name} dataKey="score" stroke={profile.color} fill={profile.color} fillOpacity={0.25} strokeWidth={2.5} isAnimationActive={false} />
-          <Legend />
+          {!explainSelected && <Legend />}
           <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} / 5`, "Risk score"]} />
         </RadarChart>
       </ResponsiveContainer></div>
+      {explainSelected && <div className="risk-series-key" aria-label="Radar series"><span><i style={{background:profile.color}}/>{profile.name}</span><span><i className="average"/>{averageLabel}</span></div>}
       <div className="risk-scale"><span><i className="dot green"/>1-2 lower</span><span><i className="dot amber"/>3 moderate</span><span><i className="dot red"/>4-5 elevated</span><em>Qualitative monitoring score, not a probability of loss or investment recommendation.</em></div>
-      {explanation && <aside className="risk-explanation" aria-live="polite" aria-labelledby={`${idPrefix}-explanation-title`}>
+    </div>;
+  const comparisonPanel = explainSelected && <section className="risk-comparison" aria-labelledby={`${idPrefix}-comparison-title`}>
+      <header><h5 id={`${idPrefix}-comparison-title`}>Selected vs portfolio average</h5><span>Exact axis scores</span></header>
+      <table>
+        <thead><tr><th scope="col">Axis</th><th scope="col"><abbr title="Selected holding">Sel.</abbr></th><th scope="col"><abbr title="Portfolio average">Avg.</abbr></th><th scope="col"><abbr title="Risk score difference">Δ</abbr></th></tr></thead>
+        <tbody>{data.map((item) => {
+          const delta = Number((item.score - item.average).toFixed(1));
+          return <tr key={item.axis}><th scope="row">{item.axis}</th><td>{item.score.toFixed(1)}</td><td>{item.average.toFixed(1)}</td><td className={delta > 0 ? "negative" : delta < 0 ? "positive" : "neutral"}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}</td></tr>;
+        })}</tbody>
+      </table>
+    </section>;
+  const explanationPanel = explanation && <aside className="risk-explanation" aria-live="polite" aria-labelledby={`${idPrefix}-explanation-title`}>
         <header><span>Selected holding</span><h4 id={`${idPrefix}-explanation-title`}>{explanation.profileLabel}</h4></header>
         <section><h5>Overview</h5><ul className="risk-overview-list">{explanation.overview.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul></section>
         <section><h5>Axis explanations</h5><ul className="risk-axis-list">{explanation.axes.map((item) => <li key={item.axis} data-band={item.band}><b>{item.axis}</b><span>{item.score}/5 · {item.band}</span><p>{item.text.slice(item.text.indexOf(":") + 2)}</p></li>)}</ul></section>
-      </aside>}
-    </div>
-  </div>;
+        <section className="risk-evidence"><h5>Evidence</h5>{evidenceHolding && evidenceContext ? <dl>
+          <div><dt>Live exposure</dt><dd>{inr.format(evidenceHolding.value)} · {evidenceHolding.weight.toFixed(2)}% weight</dd></div>
+          <div><dt>Position</dt><dd>{evidenceHolding.qty} @ {inr.format(evidenceHolding.avg)} · last {inr.format(evidenceHolding.price)}</dd></div>
+          <div><dt>Unrealised P&amp;L</dt><dd className={evidenceHolding.pnl >= 0 ? "positive" : "negative"}>{evidenceHolding.pnl >= 0 ? "+" : ""}{inr.format(evidenceHolding.pnl)} · {evidenceHolding.pnlPct >= 0 ? "+" : ""}{evidenceHolding.pnlPct.toFixed(2)}%</dd></div>
+          <div><dt>Day P&amp;L</dt><dd className={evidenceHolding.dayPnl >= 0 ? "positive" : "negative"}>{evidenceHolding.dayPnl >= 0 ? "+" : ""}{inr.format(evidenceHolding.dayPnl)} · {evidenceHolding.dayPct >= 0 ? "+" : ""}{evidenceHolding.dayPct.toFixed(2)}%</dd></div>
+          <div><dt>Classification</dt><dd>{evidenceHolding.sector} · {evidenceHolding.subSector} · {evidenceHolding.marketCap} · {evidenceHolding.risk} risk</dd></div>
+          <div><dt>Sources</dt><dd>Kite {evidenceContext.asOf} · <a href={evidenceContext.classification.industryUrl} target="_blank" rel="noreferrer">{evidenceContext.classification.industrySource}</a> + <a href={evidenceContext.classification.marketCapUrl} target="_blank" rel="noreferrer">{evidenceContext.classification.marketCapSource}</a> ({evidenceContext.classification.asOf})</dd></div>
+        </dl> : <p>Live holding evidence is unavailable for this profile.</p>}</section>
+      </aside>;
+
+  return explainSelected
+    ? <div className="risk-radar-layout risk-radar-workbench"><div className="risk-radar-visual-column">{selector}{chartPanel}{comparisonPanel}</div>{explanationPanel}</div>
+    : <div className="risk-radar-layout">{selector}{chartPanel}</div>;
 }
 
-function FlowsRegimePanel({ bandTone, range, evidence, sectors, trigger }: { bandTone: string; range: string; evidence: string; sectors: string; trigger: string }) {
+function FlowsRegimePanel({ bandTone, range, evidence, sectors, trigger, summaries }: { bandTone: string; range: string; evidence: string; sectors: string; trigger: string; summaries: MacroEvidenceSummary[] }) {
   const snapshot = fiiDiiFlowsSnapshot;
   const fiveDayFii = fiveDayFiiNetCr(snapshot);
   const fiveDayDii = fiveDayDiiNetCr(snapshot);
@@ -141,6 +232,7 @@ function FlowsRegimePanel({ bandTone, range, evidence, sectors, trigger }: { ban
     <strong>{range}</strong>
     <p>{evidence}</p>
     <small>{sectors}</small>
+    <AiEvidenceSummaries summaries={summaries}/>
     <em>{trigger}</em>
   </article>;
 }
@@ -187,6 +279,13 @@ function MacroScenarioBoard({ eventKey, bandKey, onEventChange, onBandChange, co
   const mail = content.investment.macroEvidence.find((item) => item.key === eventKey);
   const mailCount = mail?.count ?? 0;
   const mailItems = mail?.items ?? [];
+  const summaryItems = eventKey === "flows"
+    ? [
+        ...fiiDiiFlowsSnapshot.evidence.map((item) => ({ source: item.source, time: item.asOf, title: item.title, summary: item.summary })),
+        ...mailItems,
+      ]
+    : mailItems;
+  const evidenceSummaries = buildMacroEvidenceSummaries(summaryItems, eventKey);
   return <section className="macro-workbench scenario-weather">
     <div className={`investment-mail-source ${content.status}`}><Mail size={16}/><span><b>Investment evidence refreshed from Mail for {analysisWindowLabel(content)}</b><small>iCloud → Axis Research ({content.sources.axisResearch.displayedCount ?? content.axisResearch.length} qualifying reports) + iCloud → Newsletters ({content.sources.newsletters.displayedCount ?? content.newsletters.length} items) · refreshed {content.asOf}</small></span></div>
     <div className="weather-altitude" aria-hidden="true"><span className={bandKey === "supportive" ? "active" : ""}>Supportive altitude</span><span className={bandKey === "base" ? "active" : ""}>Base altitude</span><span className={bandKey === "stress" ? "active" : ""}>Stress altitude</span></div>
@@ -197,9 +296,9 @@ function MacroScenarioBoard({ eventKey, bandKey, onEventChange, onBandChange, co
     </div>
     <div className={`macro-event-detail${eventKey === "flows" ? " flows-detail" : ""}`}>
       {eventKey === "flows" ? (
-        <FlowsRegimePanel bandTone={band.tone} range={band.range} evidence={event.evidence} sectors={event.sectors} trigger={event.trigger}/>
+        <FlowsRegimePanel bandTone={band.tone} range={band.range} evidence={event.evidence} sectors={event.sectors} trigger={event.trigger} summaries={evidenceSummaries}/>
       ) : (
-        <article className={`macro-regime-card ${band.tone}`}><div><span className={`dot ${band.tone}`}/><b>{event.label}</b></div><strong>{band.range}</strong><p>{event.evidence}</p><small>{event.sectors}</small><em>{event.trigger}</em></article>
+        <article className={`macro-regime-card ${band.tone}`}><div><span className={`dot ${band.tone}`}/><b>{event.label}</b></div><strong>{band.range}</strong><p>{event.evidence}</p><small>{event.sectors}</small><AiEvidenceSummaries summaries={evidenceSummaries}/><em>{event.trigger}</em></article>
       )}
       {eventKey === "flows" ? (
         <FlowsEvidencePanel content={content} mailCount={mailCount} mailItems={mailItems}/>
@@ -773,7 +872,7 @@ export function InvestmentWorkspace({
               <p className="exposure-method">Method: six 1-5 monitoring inputs contribute equally. Segment width = raw score ÷ 6; the full bar = their average. This is a prioritisation aid, not probability of loss.</p>
             </> : <div className="live-empty compact"><ShieldAlert size={24}/><b>Risk composition waits for live positions</b><p>No stored price snapshot is displayed.</p></div>}
           </section>
-          <article className="panel risk-panel threat-flower holdings-stack"><div className="panel-title"><div><h3>Portfolio / holdings risk</h3><p>{livePortfolioRiskProfiles.length} current Kite holdings · selectable against live-portfolio average</p></div><ScanSearch size={18}/></div><RiskRadar profiles={livePortfolioRiskProfiles} selected={portfolioRisk} onSelect={setPortfolioRisk} averageLabel="Current portfolio average" idPrefix="portfolio-holdings-risk" explainSelected emptyLabel="No live holding risk profiles" /></article>
+          <article className="panel risk-panel threat-flower holdings-stack"><div className="panel-title"><div><h3>Portfolio / holdings risk</h3><p>{livePortfolioRiskProfiles.length} current Kite holdings · selectable against live-portfolio average</p></div><ScanSearch size={18}/></div><RiskRadar profiles={livePortfolioRiskProfiles} selected={portfolioRisk} onSelect={setPortfolioRisk} averageLabel="Current portfolio average" idPrefix="portfolio-holdings-risk" explainSelected evidenceContext={{ holdings, asOf: snapshot.asOf, classification }} emptyLabel="No live holding risk profiles" /></article>
         </div>
       </CollapsibleSection>
       </div>

@@ -99,8 +99,8 @@ export async function GET(request: Request) {
     benchmarks?.status === "live" ? "live" : benchmarks?.status === "partial" ? "partial" : benchmarks?.status === "cached" ? "cached" : "unavailable",
     benchmarks?.asOf ?? refreshedAt,
     benchmarks?.status === "live"
-      ? "5-minute ticker-backed levels · daily history"
-      : "5-minute supported levels · daily history",
+      ? "official or exact-index EOD · daily history"
+      : "supported EOD · daily history",
     false,
     benchmarks?.message ?? String(benchmarkResult.status === "rejected" ? benchmarkResult.reason : "Benchmarks unavailable"),
   ));

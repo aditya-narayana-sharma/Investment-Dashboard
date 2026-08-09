@@ -28,9 +28,11 @@ import {
 } from "./content-automation.mjs";
 import { loadMarketCalendar } from "./market-calendar-adapter.mjs";
 import {
+  classifyPodcastInsight,
   configuredPodcastSummarizer,
   deduplicatePodcastEpisodes,
   normalizeEpisodeTitle,
+  summarizePodcastDescription,
   summarizePodcastTranscript,
 } from "./podcast-summarizer.mjs";
 import { formatIstDateLabel } from "./nse-trading-day.mjs";
@@ -459,7 +461,10 @@ const BARE_NAME_LINE =
 
 /** Mail boilerplate + podcast CTA / promo / credit-roll — never used as content bullets. */
 const DIGEST_PROMO_OR_CTA =
-  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
+  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email|explore)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|missed last week|get our latest thinking on|helpdesk co-ordinates|helpdesk coordinates|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
+
+const DIGEST_RESOURCE_PROMO =
+  /^(?:books? and resources?|new to the show|get smarter\b|try our tool\b|enjoy exclusive perks\b|inquire about\b)|\b(?:favorite|favourite) apps?\b|\bintrinsic value newsletter\b|\bworld trade center\b|\bsubscribers actively choose\b|\bevery subscriber\b.{0,80}\bopted\b|\bno wasted reach\b/i;
 
 const PROMOTIONAL_MESSAGE =
   /\*{3,}\s*spam\s*\*{3,}|today(?:'|\u2019)s paper|daily newspaper is now ready|read complete epaper|micro investing|invest ₹?1,?000|start investing today|webinar|masterclass|workshop|wealth expo|wealth gathering|limited[- ]time offer|exclusive offer|special offer|register now|book your seat|buy now|shop now|unlock (?:your )?(?:wealth|investment)|gift city.{0,80}(?:summit|conference)|where the conversations shaping|axis mutual fund.{0,80}(?:invest|sip)|want to invest ₹/i;
@@ -486,6 +491,7 @@ function isDigestPromoOrNoise(value) {
   const item = cleanText(value);
   if (!item) return true;
   if (DIGEST_PROMO_OR_CTA.test(item)) return true;
+  if (DIGEST_RESOURCE_PROMO.test(item)) return true;
   if (EMAIL_LIKE.test(item)) return true;
   if (/^(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/\S*)?$/i.test(item)) return true;
   if (/^@\w+$/i.test(item)) return true;
@@ -795,10 +801,11 @@ async function readNewsletters() {
       if ((item.bullets?.length || 0) > 0) return item;
       const previous = previousByKey.get(newsletterMessageKey(item.title, item.receivedAt));
       if (previous?.bullets?.length) {
+        const sanitizedBullets = summaryBullets(previous.bullets.join("\n"), { max: DIGEST_BULLET_MAX });
         return {
           ...item,
-          bullets: previous.bullets,
-          summary: previous.summary || item.summary,
+          bullets: sanitizedBullets,
+          summary: sanitizedBullets.join(" ") || item.summary,
         };
       }
       return item;
@@ -866,16 +873,57 @@ async function readPodcasts() {
       episodeUrl: episode.episodeUrl,
     });
     if (!transcript) {
+      const descriptionBullets = summaryBullets(episode.description, { max: DIGEST_BULLET_MAX });
+      const descriptionEvidence = descriptionBullets.join("\n");
+      const evidenceFingerprint = descriptionEvidence
+        ? createHash("sha256").update(descriptionEvidence).digest("hex")
+        : null;
+      const previous = previousByTitle.get(normalizeEpisodeTitle(title));
+      const canReuseDescription = previous?.summaryStatus === "generated"
+        && previous.contentSource === "description"
+        && previous.evidenceFingerprint === evidenceFingerprint
+        && Array.isArray(previous.keyTakeaways)
+        && previous.keyTakeaways.length >= 2;
+      const generated = canReuseDescription
+        ? {
+            status: "generated",
+            reason: null,
+            bullets: previous.keyTakeaways,
+            insights: previous.podcastInsights ?? previous.keyTakeaways.map(classifyPodcastInsight),
+            model: previous.summaryModel ?? "cached description summary",
+            chunkCount: previous.summaryChunkCount ?? 1,
+          }
+        : await summarizePodcastDescription(descriptionEvidence, {
+            generate: summarizer.generate,
+            model: summarizer.model ?? "unconfigured",
+          });
+      const generatedInsights = generated.status === "generated"
+        ? (generated.insights ?? generated.bullets.map(classifyPodcastInsight))
+          .map((insight) => ({ ...insight, text: cleanText(insight.text) }))
+          .filter((insight) => insight.text && !isDigestPromoOrNoise(insight.text) && isDigestContentWorthy(insight.text))
+        : [];
+      const contentBullets = generatedInsights.length
+        ? generatedInsights.map((insight) => insight.text)
+        : descriptionBullets;
       items.push({
         source,
         time,
         title,
-        summary: "Transcript unavailable — summary not generated.",
-        bullets: [],
-        keyTakeaways: [],
-        contentSource: "none",
-        summaryStatus: "unavailable",
-        summaryReason: "transcript_unavailable",
+        summary: contentBullets.join(" ") || "Transcript and substantive episode description unavailable.",
+        bullets: contentBullets,
+        keyTakeaways: generatedInsights.map((insight) => insight.text),
+        podcastInsights: generatedInsights.length
+          ? generatedInsights
+          : descriptionBullets.map(classifyPodcastInsight),
+        contentSource: descriptionBullets.length > 0 ? "description" : "none",
+        summaryStatus: generatedInsights.length ? "generated" : generated.status,
+        summaryReason: generatedInsights.length ? null : generated.reason ?? "transcript_unavailable",
+        summaryModel: generatedInsights.length ? generated.model : null,
+        summaryGeneratedAt: generatedInsights.length
+          ? canReuseDescription ? previous.summaryGeneratedAt : new Date().toISOString()
+          : null,
+        summaryChunkCount: generated.chunkCount,
+        evidenceFingerprint,
         episodeUrl,
         timestampLinks: [],
       });
@@ -893,6 +941,7 @@ async function readPodcasts() {
       ? {
           status: "generated",
           bullets: previous.keyTakeaways,
+          insights: previous.podcastInsights ?? previous.keyTakeaways.map(classifyPodcastInsight),
           model: previous.summaryModel ?? "cached transcript summary",
           chunkCount: previous.summaryChunkCount ?? 0,
         }
@@ -902,9 +951,12 @@ async function readPodcasts() {
         });
     // Defense-in-depth: re-apply the shared Mail/Podcast promo filter to LLM-generated
     // takeaways so any sponsor/CTA/contact line the summarizer missed never reaches the UI.
-    const contentBullets = generated.status === "generated"
-      ? generated.bullets.map(cleanText).filter((bullet) => bullet && !isDigestPromoOrNoise(bullet) && isDigestContentWorthy(bullet))
+    const contentInsights = generated.status === "generated"
+      ? (generated.insights ?? generated.bullets.map(classifyPodcastInsight))
+        .map((insight) => ({ ...insight, text: cleanText(insight.text) }))
+        .filter((insight) => insight.text && !isDigestPromoOrNoise(insight.text) && isDigestContentWorthy(insight.text))
       : [];
+    const contentBullets = contentInsights.map((insight) => insight.text);
     items.push({
       source,
       time,
@@ -918,6 +970,7 @@ async function readPodcasts() {
       ),
       bullets: contentBullets,
       keyTakeaways: contentBullets,
+      podcastInsights: contentInsights,
       contentSource: "transcript",
       summaryStatus: generated.status,
       summaryReason: generated.reason ?? null,
@@ -1184,10 +1237,11 @@ async function refresh() {
   const transcriptWithoutSummary = podcastValue.filter(
     (item) => item.contentSource === "transcript" && item.summaryStatus !== "generated",
   ).length;
-  const unavailablePodcastTranscripts = podcastValue.filter((item) => item.contentSource !== "transcript").length;
+  const podcastDescriptions = podcastValue.filter((item) => item.contentSource === "description").length;
+  const unavailablePodcastEvidence = podcastValue.filter((item) => item.contentSource === "none").length;
   const podcastSourceState = sourceState(podcasts, podcastValue.length, true);
   if (podcasts.status === "fulfilled") {
-    podcastSourceState.message = `${generatedPodcastSummaries} transcript summaries · ${transcriptWithoutSummary} transcripts without summaries · ${unavailablePodcastTranscripts} transcripts unavailable.`;
+    podcastSourceState.message = `${generatedPodcastSummaries} transcript summaries · ${transcriptWithoutSummary} transcripts without summaries · ${podcastDescriptions} descriptions · ${unavailablePodcastEvidence} episodes without substantive evidence.`;
   }
   return {
     status: liveRequiredSources === requiredSources.length ? "live" : liveRequiredSources ? "partial" : "unavailable",

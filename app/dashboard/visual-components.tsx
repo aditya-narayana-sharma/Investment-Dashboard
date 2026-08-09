@@ -43,39 +43,45 @@ export function PulseConstellation({
 
   if (!sources.length) return null;
 
+  const activeSource = hovered ? sources.find((source) => source.source === hovered) : undefined;
+  const activeWorkspace = activeSource ? resolveSourceWorkspace(activeSource.source) : null;
+
   return (
-    <section className="source-freshness-strip pulse-constellation" aria-label="Complete dashboard source freshness">
-      {sources.map((source) => {
-        const failed = source.state === "unavailable" || source.state === "stale" || source.state === "permission_required";
-        const workspace = resolveSourceWorkspace(source.source);
-        return (
-          <button
-            key={source.source}
-            type="button"
-            className={`pulse-node${failed ? " failed" : ""}`}
-            title={source.message}
-            onMouseEnter={() => setHovered(source.source)}
-            onMouseLeave={() => setHovered(null)}
-            onFocus={() => setHovered(source.source)}
-            onBlur={() => setHovered(null)}
-            onClick={() => {
-              if (workspace && onNavigate) onNavigate(workspace, source);
-            }}
-          >
-            <i className={`pulse-core ${source.state}`} aria-hidden="true" />
-            <span>
-              <b>{source.source}</b>
-              <small>{source.state.replaceAll("_", " ")} · {source.period}</small>
-            </span>
-            {hovered === source.source && (
-              <aside className="pulse-popover" role="status">
-                {source.message}
-                {workspace ? ` · Open ${workspace}` : ""}
-              </aside>
-            )}
-          </button>
-        );
-      })}
+    <section className="source-freshness-region" aria-label="Complete dashboard source freshness">
+      <div className="source-freshness-strip pulse-constellation">
+        {sources.map((source) => {
+          const failed = source.state === "unavailable" || source.state === "stale" || source.state === "permission_required";
+          const workspace = resolveSourceWorkspace(source.source);
+          return (
+            <button
+              key={source.source}
+              type="button"
+              className={`pulse-node${failed ? " failed" : ""}`}
+              title={source.message}
+              aria-describedby={hovered === source.source ? "source-freshness-detail" : undefined}
+              onMouseEnter={() => setHovered(source.source)}
+              onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(source.source)}
+              onBlur={() => setHovered(null)}
+              onClick={() => {
+                if (workspace && onNavigate) onNavigate(workspace, source);
+              }}
+            >
+              <i className={`pulse-core ${source.state}`} aria-hidden="true" />
+              <span>
+                <b>{source.source}</b>
+                <small>{source.state.replaceAll("_", " ")} · {source.period}</small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {activeSource && (
+        <aside id="source-freshness-detail" className="pulse-detail-lane" role="status" aria-live="polite">
+          {activeSource.message}
+          {activeWorkspace ? ` · Open ${activeWorkspace}` : ""}
+        </aside>
+      )}
     </section>
   );
 }

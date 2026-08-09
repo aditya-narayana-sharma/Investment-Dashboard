@@ -13,10 +13,13 @@ import {
 } from "../scripts/content-automation.mjs";
 import { loadMarketCalendar } from "../scripts/market-calendar-adapter.mjs";
 import {
+  classifyPodcastInsight,
   configuredPodcastSummarizer,
   deduplicatePodcastEpisodes,
+  sanitizeGeneratedInsights,
   sanitizeGeneratedSummary,
   sanitizePodcastTranscript,
+  summarizePodcastDescription,
   summarizePodcastTranscript,
 } from "../scripts/podcast-summarizer.mjs";
 import { findEarningsHolidayConflicts } from "../app/market-calendar.ts";
@@ -95,6 +98,48 @@ test("podcast summarization covers every transcript chunk end-to-end", async () 
   assert.match(chunkInput, /closing-marker/);
   assert.equal(calls.at(-1).context.phase, "synthesis");
   assert.equal(result.bullets.length, 3);
+  assert.equal(result.insights.length, 3);
+  assert.deepEqual(Object.keys(result.insights[0]).sort(), ["outcome", "sentiment", "text"]);
+});
+
+test("podcast insights preserve model labels and classify legacy bullets", () => {
+  const insights = sanitizeGeneratedInsights(JSON.stringify({ bullets: [
+    {
+      text: "Management expects stronger growth as demand recovers across the core market.",
+      outcome: "Positive",
+      sentiment: "Positive",
+    },
+    "The speakers remain cautious because downside risks and uncertainty persist.",
+  ] }));
+  assert.deepEqual(insights[0], {
+    text: "Management expects stronger growth as demand recovers across the core market.",
+    outcome: "Positive",
+    sentiment: "Positive",
+  });
+  assert.deepEqual(classifyPodcastInsight(insights[1].text), {
+    text: insights[1].text,
+    outcome: "Negative",
+    sentiment: "Negative",
+  });
+});
+
+test("publisher descriptions can be AI summarized without being labelled transcripts", async () => {
+  const result = await summarizePodcastDescription(
+    "The episode examines stronger economic growth and improving demand. The speakers also discuss downside risks from inflation and remain cautious about the outlook.",
+    {
+      model: "test-local-model",
+      async generate(_prompt, context) {
+        assert.equal(context.phase, "description");
+        return JSON.stringify({ bullets: [
+          { text: "Economic growth and demand improved across the period under discussion.", outcome: "Positive", sentiment: "Positive" },
+          { text: "Inflation creates downside risk and keeps the speakers cautious about the outlook.", outcome: "Negative", sentiment: "Negative" },
+        ] });
+      },
+    },
+  );
+  assert.equal(result.status, "generated");
+  assert.equal(result.bullets.length, 2);
+  assert.equal(result.insights[1].sentiment, "Negative");
 });
 
 test("podcast sanitizer removes ads, contacts, CTAs, and show boilerplate", () => {
