@@ -12,6 +12,8 @@ import { buildRiskExplanation } from "../risk-explanations";
 import { thesisBullets, type ThesisBullet } from "../thesis-bullets";
 import type { MacroBandKey, MacroEventKey } from "./types";
 import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, HoldingLabel, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { KiteAlertTicket, type KiteAlertSelection } from "./KiteAlertTicket";
+import { KiteGttTicket, type KiteGttSelection } from "./KiteGttTicket";
 import { KiteOrderTicket, type KiteOrderSelection } from "./KiteOrderTicket";
 import { InstrumentGauge } from "./visual-components";
 import { analysisWindowLabel, exposureFactors, holdingOuterFill, inr, macroEvents } from "./utils";
@@ -205,9 +207,9 @@ function FlowsRegimePanel({ bandTone, range, evidence, sectors, trigger, summari
     <div><span className={`dot ${bandTone}`}/><b>FII / DII flows</b></div>
     <div className="flows-donut-card" aria-label="FII versus DII composition donut">
       <div className="flows-donut-wrap">
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={slices} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="48%" outerRadius="92%" startAngle={90} endAngle={-270} paddingAngle={2} stroke="#0d1013" strokeWidth={4} isAnimationActive={false}>
+            <Pie data={slices} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="46%" outerRadius="88%" startAngle={90} endAngle={-270} paddingAngle={2} stroke="#0d1013" strokeWidth={3} isAnimationActive={false}>
               {slices.map((slice) => <Cell key={slice.name} fill={slice.color}/>)}
             </Pie>
             <Tooltip formatter={(_value, _name, item) => {
@@ -496,7 +498,7 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
   </section>;
 }
 
-export type PortfolioActivityView = "holdings" | "orders" | "positions" | "gtts" | "tsls";
+export type PortfolioActivityView = "holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts";
 
 const INVESTMENT_SECTIONS = [
   { id: "i1", label: "Action Board" },
@@ -582,8 +584,11 @@ export function InvestmentWorkspace({
   const [selectedHoldingSymbol, setSelectedHoldingSymbol] = useState<string | null>(null);
   const [engagedHoldingSymbol, setEngagedHoldingSymbol] = useState<string | null>(null);
   const [orderSelection, setOrderSelection] = useState<KiteOrderSelection>(null);
+  const [gttSelection, setGttSelection] = useState<KiteGttSelection>(null);
+  const [alertSelection, setAlertSelection] = useState<KiteAlertSelection>(null);
   const { holdings, portfolio, orders, gtts, marketCapAllocation, sectorAllocation, subSectorAllocation, classification } = snapshot;
   const positions = snapshot.positions ?? [];
+  const alerts = snapshot.alerts ?? [];
   const entryGtts = gtts.filter((item) => (item.kind ?? "gtt") !== "tsl");
   const tsls = gtts.filter((item) => item.kind === "tsl");
   const unavailable = new Set(snapshot.unavailableSections ?? []);
@@ -596,6 +601,7 @@ export function InvestmentWorkspace({
     { key: "positions", label: "Positions" },
     { key: "gtts", label: "GTTs" },
     { key: "tsls", label: "TSLs" },
+    { key: "alerts", label: "Alerts" },
   ];
   const positiveValueHoldings = holdings.filter((holding) => holding.value > 0);
   const currentPortfolioValue = positiveValueHoldings.reduce((sum, holding) => sum + holding.value, 0);
@@ -682,7 +688,7 @@ export function InvestmentWorkspace({
       </div>
 
       <div id="investment-i2" className="workspace-section">
-      <CollapsibleSection number="I-2" title="Portfolio" note="Holdings, orders, positions, GTTs, TSLs and nested allocation">
+      <CollapsibleSection number="I-2" title="Portfolio" note="Holdings, orders, positions, GTTs, TSLs, alerts and nested allocation">
       <section className="instrument-cluster" aria-label="Portfolio instrument cluster">
         <InstrumentGauge
           label="Portfolio value"
@@ -797,8 +803,21 @@ export function InvestmentWorkspace({
           : <div className="table-empty">No static positions are shown. Connect Kite to load the live portfolio.</div>)}
         {view === "orders" && <div className="activity-single">{orders.map(o=><div className="activity-row" key={o.id}><div><b>{o.symbol}</b><small>{o.side} {o.qty} · {o.type}</small></div><strong>{inr.format(o.price)}</strong><span className={`pill ${o.status.toLowerCase()==="complete"?"green":"amber"}`}>{o.status}</span></div>)}{!orders.length&&<div className="table-empty">{unavailable.has("orders") ? "Kite orders are temporarily unavailable." : "No live orders."}</div>}</div>}
         {view === "positions" && <div className="activity-single">{positions.map(p=><div className="activity-row" key={p.id}><div><b>{p.symbol}</b><small>{p.side} {p.qty} · {p.product}</small></div><strong className={p.pnl>=0?"positive":"negative"}>{p.pnl>=0?"+":""}{inr.format(p.pnl)}</strong><span className="pill blue">{inr.format(p.price)}</span></div>)}{!positions.length&&<div className="table-empty">{unavailable.has("positions") ? "Kite positions are temporarily unavailable." : "No open day/net positions beyond the holdings book."}</div>}</div>}
-        {view === "gtts" && <div className="activity-single">{entryGtts.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · trigger {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}{!entryGtts.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs are temporarily unavailable." : "No active entry GTTs."}</div>}</div>}
-        {view === "tsls" && <div className="activity-single">{tsls.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · stop {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}{!tsls.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs/TSLs are temporarily unavailable." : "No protective TSL / stop-loss GTTs."}</div>}</div>}
+        {view === "gtts" && <div className="activity-single">
+          <div className="activity-create-bar"><button type="button" className="create-gtt" disabled={!isLive} title={isLive ? "Open Create GTT ticket" : "Live Kite authentication is required"} onClick={() => setGttSelection({ kind: "gtt" })}>Create GTT</button></div>
+          {entryGtts.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · trigger {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}
+          {!entryGtts.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs are temporarily unavailable." : "No active entry GTTs."}</div>}
+        </div>}
+        {view === "tsls" && <div className="activity-single">
+          <div className="activity-create-bar"><button type="button" className="create-tsl" disabled={!isLive} title={isLive ? "Open Create TSL ticket" : "Live Kite authentication is required"} onClick={() => setGttSelection({ kind: "tsl" })}>Create TSL</button></div>
+          {tsls.map(g=><div className="activity-row" key={g.id}><div><b>{g.symbol}</b><small>{g.side} {g.qty} · stop {inr.format(g.trigger)}</small></div><strong>{inr.format(g.limit)}</strong><span className={`pill ${g.status.toLowerCase()==="active"?"amber":"green"}`}>{g.status}</span></div>)}
+          {!tsls.length&&<div className="table-empty">{unavailable.has("GTTs") ? "Kite GTTs/TSLs are temporarily unavailable." : "No protective TSL / stop-loss GTTs."}</div>}
+        </div>}
+        {view === "alerts" && <div className="activity-single">
+          <div className="activity-create-bar"><button type="button" className="create-alert" disabled={!isLive} title={isLive ? "Open Create price alert ticket" : "Live Kite authentication is required"} onClick={() => setAlertSelection({})}>Create price alert</button></div>
+          {alerts.map((alert) => <div className="activity-row" key={alert.id}><div><b>{alert.symbol}</b><small>{alert.exchange} · LTP {alert.operator || (alert.direction === "above" ? "≥" : alert.direction === "below" ? "≤" : "?")} {inr.format(alert.trigger)}{alert.note ? ` · ${alert.note}` : ""}</small></div><strong>{alert.direction === "above" ? "Above" : alert.direction === "below" ? "Below" : alert.operator}</strong><span className={`pill ${alert.status.toLowerCase()==="enabled"?"amber":"green"}`}>{alert.status}</span></div>)}
+          {!alerts.length&&<div className="table-empty">{unavailable.has("alerts") ? "Kite price alerts are temporarily unavailable." : "No Kite price alerts."}</div>}
+        </div>}
       </section>
 
       <section className="panel portfolio-map-panel gravity-well" aria-labelledby="portfolio-map-title">
@@ -839,7 +858,9 @@ export function InvestmentWorkspace({
         </div> : <div className="live-empty compact"><Activity size={22}/><b>Concentration map unavailable</b><p>Connect Kite to load current holding values.</p></div>}
       </section>
       </div>
-      {orderSelection && <KiteOrderTicket key={`${orderSelection.side}-${orderSelection.holding.symbol}`} selection={orderSelection} onClose={() => setOrderSelection(null)} onSubmitted={onKiteRefresh}/>} 
+      {orderSelection && <KiteOrderTicket key={`${orderSelection.side}-${orderSelection.holding.symbol}`} selection={orderSelection} onClose={() => setOrderSelection(null)} onSubmitted={onKiteRefresh}/>}
+      {gttSelection && <KiteGttTicket key={`${gttSelection.kind}-${gttSelection.holding?.symbol ?? "new"}`} selection={gttSelection} holdings={holdings} onClose={() => setGttSelection(null)} onSubmitted={onKiteRefresh}/>}
+      {alertSelection && <KiteAlertTicket key={alertSelection.holding?.symbol ?? "new-alert"} selection={alertSelection} holdings={holdings} onClose={() => setAlertSelection(null)} onSubmitted={onKiteRefresh}/>}
       </div>
       </CollapsibleSection>
       </div>
@@ -883,24 +904,25 @@ export function InvestmentWorkspace({
           <div className="panel-title"><div><h3>Analyst call matrix</h3><p>Targets are reference points, not quarter forecasts</p></div><Target size={18}/></div>
           <div className="table-scroll">
             <table className="analyst-table">
-              <thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>Target</th><th>Implied vs live</th><th>Published</th><th>What matters</th></tr></thead>
+              <thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>CMP</th><th>Target</th><th>Implied vs CMP</th><th>Published</th><th>What matters</th></tr></thead>
               <tbody>{analystRows.map((a) => {
                 const current = currentBySymbol.get(a.symbol);
                 const implied = current && a.target ? (a.target / current - 1) * 100 : null;
                 const bullets = thesisBullets(a.thesis, { symbol: a.symbol, call: a.rating, limit: 4 });
-                return <tr key={`${a.symbol}-${a.house}`}>
+                return <tr key={`${a.symbol}-${a.house}-${a.rating}-${a.target ?? "na"}-${a.date}`}>
                   <td data-label="Stock"><b>{a.symbol}</b>{a.mail && <small className="mail-row-label">WINDOW MAIL</small>}</td>
                   <td data-label="Source / house">{a.house}</td>
                   <td data-label="Call"><span className="pill blue">{a.rating}</span></td>
+                  <td data-label="CMP">{current ? inr.format(current) : "—"}</td>
                   <td data-label="Target">{a.target ? inr.format(a.target) : "—"}</td>
-                  <td data-label="Implied vs live" className={implied === null ? "" : implied >= 0 ? "positive" : "negative"}>{implied === null ? "—" : `${implied >= 0 ? "+" : ""}${implied.toFixed(1)}%`}</td>
+                  <td data-label="Implied vs CMP" className={implied === null ? "" : implied >= 0 ? "positive" : "negative"}>{implied === null ? "—" : `${implied >= 0 ? "+" : ""}${implied.toFixed(1)}%`}</td>
                   <td data-label="Published">{a.date}</td>
                   <td data-label="What matters"><ThesisBulletList bullets={bullets} className="thesis-bullet-list" /></td>
                 </tr>;
               })}</tbody>
             </table>
           </div>
-          <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol. Other houses remain explicitly labelled supplementary references. Implied upside uses each live Kite last price.</span></div>
+          <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol (trading over fundamental when BUY/TRADING BUY share the same target and date). Other houses remain explicitly labelled supplementary references. CMP prefers Kite last price when held; otherwise a yfinance delayed NSE quote. Em dash only when both are unavailable.</span></div>
         </section>
         <AxisRecommendationWorkbench recommendations={mailAxisRecommendations} content={content} kiteBySymbol={resolvedKiteBySymbol} yfinanceBySymbol={resolvedYfinanceBySymbol}/>
         <article className="panel risk-panel threat-flower"><div className="panel-title"><div><h3>Recommended risk radar</h3><p>{axisAsOfLabel} · {mailAxisProfiles.length} deduplicated Axis calls from iCloud → Axis Research</p></div><Target size={18}/></div><RiskRadar profiles={mailAxisProfiles} selected={axisRisk} onSelect={setAxisRisk} averageLabel="Axis list average" idPrefix="axis-recommended-risk" emptyLabel={`No Axis risk profiles for ${mailWindow}`} /></article>

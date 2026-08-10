@@ -9,10 +9,13 @@ const DEFAULT_SNAPSHOT = fileURLToPath(new URL("../artifacts/private/axis-pdf-re
 const recommendationColors = ["#4c8fff", "#42c878", "#b38cff", "#ff7f6e", "#21b5c5", "#e3b844", "#f08bd3", "#79a7ff"];
 
 function recommendationBucket(item) {
+  if (item.bucket === "technical" || item.bucket === "trading" || item.bucket === "fundamental") {
+    return item.bucket;
+  }
   const call = String(item.call ?? "").toUpperCase();
   const horizon = String(item.horizon ?? "").toLowerCase();
-  if (item.bucket === "technical" || call.includes("TECHNICAL") || horizon.includes("technical")) return "technical";
-  if (item.bucket === "trading" || call.includes("TRADING") || horizon.includes("punch")) return "trading";
+  if (call.includes("TECHNICAL") || horizon.includes("technical")) return "technical";
+  if (call.includes("TRADING") || horizon.includes("punch")) return "trading";
   return "fundamental";
 }
 
@@ -20,9 +23,99 @@ function dedupeKey(item) {
   return `${item.symbol}|${recommendationBucket(item)}`;
 }
 
+function dateRank(item) {
+  if (!item.dateKey) return 0;
+  return Number(String(item.dateKey).replaceAll("-", "")) || 0;
+}
+
 function richness(item, origin) {
-  const dateNum = item.dateKey ? Number(String(item.dateKey).replaceAll("-", "")) : 0;
-  return (item.cmp ? 4 : 0) + (item.target ? 4 : 0) + (origin === "pdf" ? 1 : 0) + dateNum / 1e8;
+  return (item.cmp ? 4 : 0) + (item.target ? 4 : 0) + (origin === "pdf" ? 1 : 0) + dateRank(item) / 1e8;
+}
+
+function bucketPriority(bucket) {
+  switch (bucket) {
+    case "trading":
+      return 3;
+    case "technical":
+      return 2;
+    case "fundamental":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function normalizeCallFamily(call) {
+  const upper = String(call ?? "").toUpperCase();
+  if (upper.includes("TECHNICAL")) return "technical";
+  if (upper.includes("TRADING")) return "trading";
+  return "plain";
+}
+
+function preferCall(next, prev) {
+  const nextBucket = recommendationBucket(next);
+  const prevBucket = recommendationBucket(prev);
+  if (bucketPriority(nextBucket) !== bucketPriority(prevBucket)) {
+    return bucketPriority(nextBucket) > bucketPriority(prevBucket);
+  }
+  const nextDate = dateRank(next);
+  const prevDate = dateRank(prev);
+  if (nextDate !== prevDate) return nextDate > prevDate;
+  return richness(next, next.origin) >= richness(prev, prev.origin);
+}
+
+function logicalCallKey(item) {
+  const call = String(item.call ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+  const target = item.target == null ? "" : String(item.target);
+  const published = item.dateKey ?? item.date ?? "";
+  return `${item.symbol}|${call}|${target}|${published}|${recommendationBucket(item)}`;
+}
+
+function nearDuplicateKey(item) {
+  const target = item.target == null ? "" : String(item.target);
+  const published = item.dateKey ?? item.date ?? "";
+  return `${item.symbol}|${target}|${published}`;
+}
+
+/**
+ * Exact key: symbol + call + target + published date (+ bucket).
+ * Near-dup: BUY vs TRADING BUY with same symbol/target/date → keep trading.
+ */
+export function collapseNearDuplicateAxisCalls(recommendations = []) {
+  const exact = new Map();
+  for (const item of recommendations) {
+    if (!item?.symbol || !item?.call) continue;
+    const next = { ...item, bucket: recommendationBucket(item) };
+    const key = logicalCallKey(next);
+    const prev = exact.get(key);
+    if (!prev || preferCall(next, prev)) exact.set(key, next);
+  }
+
+  const near = new Map();
+  for (const item of exact.values()) {
+    const key = nearDuplicateKey(item);
+    const prev = near.get(key);
+    if (!prev) {
+      near.set(key, item);
+      continue;
+    }
+    const prevFamily = normalizeCallFamily(prev.call);
+    const nextFamily = normalizeCallFamily(item.call);
+    const buyLikePair =
+      (prevFamily === "plain" && nextFamily === "trading")
+      || (prevFamily === "trading" && nextFamily === "plain");
+    if (buyLikePair) {
+      near.set(key, nextFamily === "trading" ? item : prev);
+      continue;
+    }
+    if (preferCall(item, prev)) near.set(key, item);
+  }
+
+  return [...near.values()].sort(
+    (left, right) => String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? ""))
+      || left.symbol.localeCompare(right.symbol)
+      || bucketPriority(recommendationBucket(right)) - bucketPriority(recommendationBucket(left)),
+  );
 }
 
 function toMailRecommendation(row, index = 0) {
@@ -80,7 +173,8 @@ export function loadAxisPdfRecommendationSnapshot(path = process.env.AXIS_PDF_RE
 
 /**
  * PDF archive is primary for Axis Recommended Stocks; mail fills gaps / same-day updates.
- * Dedupes by symbol + Fundamental/Technical/Trading bucket (richer + newer wins).
+ * Dedupes by symbol + Fundamental/Technical/Trading bucket (richer + newer wins),
+ * then collapses BUY vs TRADING BUY near-duplicates that share symbol/target/date.
  */
 export function mergeAxisRecommendations({ pdfRecommendations = [], mailRecommendations = [], limit = 200 } = {}) {
   const merged = new Map();
@@ -99,7 +193,7 @@ export function mergeAxisRecommendations({ pdfRecommendations = [], mailRecommen
     };
     const key = dedupeKey(next);
     const prev = merged.get(key);
-    if (!prev || richness(next, origin) >= richness(prev, prev.origin)) {
+    if (!prev || preferCall(next, prev)) {
       merged.set(key, next);
     }
   };
@@ -107,8 +201,7 @@ export function mergeAxisRecommendations({ pdfRecommendations = [], mailRecommen
   for (const item of pdfRecommendations) consider(item, "pdf");
   for (const item of mailRecommendations) consider(item, "mail");
 
-  return [...merged.values()]
-    .sort((left, right) => String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? "")) || left.symbol.localeCompare(right.symbol))
+  return collapseNearDuplicateAxisCalls([...merged.values()])
     .slice(0, limit)
     .map((item, index) => ({
       ...item,

@@ -8,6 +8,7 @@ import { analystCalls, earningsCalendar, podcastNotes, scenarios, sources } from
 import type { ContentDigestSnapshot } from "../content-types";
 import type { DashboardRefreshResult } from "../dashboard-types";
 import type { AllocationSlice, KiteSnapshot, LiveHolding } from "../live-types";
+import { dedupeAxisCallsBySymbol } from "../axis-holding-trading-calls";
 import { sortDonutHoldings } from "../portfolio-donut";
 import { sectorCompanies } from "../sector-company-data";
 import { macroDials, sectorImpactRows, squeezeWidths, type ImpactSignal } from "../sector-analytics-data";
@@ -100,6 +101,33 @@ async function promptPdfDownload(downloadUrl: string, filename: string) {
   return "anchor" as const;
 }
 
+async function fetchYfinanceBySymbol(symbols: string[]): Promise<Map<string, number>> {
+  const next = new Map<string, number>();
+  const unique = [...new Set(symbols.filter(Boolean))];
+  const chunkSize = 12;
+  const chunks: string[][] = [];
+  for (let offset = 0; offset < unique.length; offset += chunkSize) {
+    chunks.push(unique.slice(offset, offset + chunkSize));
+  }
+  const settled = await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const response = await fetch(`/api/quotes/yfinance?symbols=${chunk.join(",")}`, { cache: "no-store" });
+      const data = await response.json() as { quotes?: Record<string, { price?: number | null }> };
+      if (!response.ok) return [] as Array<[string, number]>;
+      return Object.entries(data.quotes ?? {})
+        .filter((entry): entry is [string, { price: number }] => entry[1]?.price != null && entry[1].price > 0)
+        .map(([symbol, quote]) => [symbol, quote.price] as [string, number]);
+    } catch {
+      // Leave missing symbols as —; never invent prices.
+      return [] as Array<[string, number]>;
+    }
+  }));
+  for (const entries of settled) {
+    for (const [symbol, price] of entries) next.set(symbol, price);
+  }
+  return next;
+}
+
 function polarPoint(radius: number, angle: number) {
   const radians = angle * Math.PI / 180;
   return { x: 180 + radius * Math.cos(radians), y: 180 + radius * Math.sin(radians) };
@@ -157,6 +185,7 @@ function PrintNestedDonut({ holdings, marketCap, sectors, subSectors, value, pnl
 export default function Report() {
   const [snapshot, setSnapshot] = useState<KiteSnapshot | null>(null);
   const [content, setContent] = useState<ContentDigestSnapshot | null>(null);
+  const [yfinanceBySymbol, setYfinanceBySymbol] = useState<Map<string, number>>(new Map());
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
   const [preparedDownload, setPreparedDownload] = useState<{ filename: string; url: string } | null>(null);
@@ -175,7 +204,19 @@ export default function Report() {
       const latest = complete.kite;
       const latestContent = complete.content;
       if (!completeResponse.ok || !latest || !latestContent) throw new Error("Complete dashboard refresh did not return the required report sources.");
-      flushSync(() => { setSnapshot(latest); setContent(latestContent); });
+      const kiteSymbols = new Set(latest.holdings.filter((holding) => holding.price > 0).map((holding) => holding.symbol));
+      const axisUnique = dedupeAxisCallsBySymbol(latestContent.investment.axisRecommendations);
+      const matrixSymbols = [
+        ...axisUnique.map((call) => call.symbol),
+        ...analystCalls.filter((call) => !axisUnique.some((axis) => axis.symbol === call.symbol)).map((call) => call.symbol),
+      ];
+      const missingQuotes = [...new Set(matrixSymbols)].filter((symbol) => !kiteSymbols.has(symbol));
+      const yfinanceQuotes = missingQuotes.length ? await fetchYfinanceBySymbol(missingQuotes) : new Map<string, number>();
+      flushSync(() => {
+        setSnapshot(latest);
+        setContent(latestContent);
+        setYfinanceBySymbol(yfinanceQuotes);
+      });
       const mailReady = latestContent.sources.axisResearch.status === "live" && latestContent.sources.newsletters.status === "live";
       if (!mailReady) throw new Error("Current Axis Research and Newsletters mail must refresh before the report can be generated.");
       const reportSources = new Map(complete.sources.map((source) => [source.source, source.state]));
@@ -352,10 +393,15 @@ export default function Report() {
   const currentSymbols = new Set(holdings.map((holding) => holding.symbol));
   const latestReported = earningsCalendar.filter((event) => event.reported).at(-1);
   const latestPortfolioResult = earningsCalendar.filter((event) => event.reported && currentSymbols.has(event.symbol)).at(-1);
-  const mailCalls = content.investment.axisRecommendations.filter((call) => currentSymbols.has(call.symbol) && call.target).map((call) => ({ symbol: call.symbol, house: `${call.source} / iCloud Axis Research`, rating: call.call, target: call.target!, implied: 0, date: call.date, thesis: call.thesis }));
-  const liveAnalystCalls = [...mailCalls, ...analystCalls.filter((call) => currentSymbols.has(call.symbol) && !mailCalls.some((axis) => axis.symbol === call.symbol))].map((call) => {
-    const price = holdings.find((holding) => holding.symbol === call.symbol)?.price;
-    return { ...call, implied: price ? (call.target / price - 1) * 100 : call.implied };
+  const kiteBySymbol = new Map(holdings.filter((holding) => holding.price > 0).map((holding) => [holding.symbol, holding.price] as const));
+  const mailCalls = dedupeAxisCallsBySymbol(
+    content.investment.axisRecommendations.filter((call) => call.target != null && call.target > 0),
+  ).map((call) => ({ symbol: call.symbol, house: `${call.source} / iCloud Axis Research`, rating: call.call, target: call.target!, implied: 0, date: call.date, thesis: call.thesis }));
+  const liveAnalystCalls = [...mailCalls, ...analystCalls.filter((call) => !mailCalls.some((axis) => axis.symbol === call.symbol))].map((call) => {
+    const kite = kiteBySymbol.get(call.symbol);
+    const yf = yfinanceBySymbol.get(call.symbol);
+    const cmp = kite != null && kite > 0 ? kite : yf != null && yf > 0 ? yf : null;
+    return { ...call, cmp, implied: cmp ? (call.target / cmp - 1) * 100 : call.implied };
   });
   const byOil = holdings.slice().sort((left, right) => right.oil - left.oil);
   const byFlow = holdings.slice().sort((left, right) => right.flow - left.flow);
@@ -417,9 +463,9 @@ export default function Report() {
 
     <section className={styles.page}><PageHeader section="Analyst positioning" page={5} asOf={asOf}/>
       <h1 className={styles.title}>4. Analyst recommendations</h1><p className={styles.deck}>Targets are expectations anchors. They are not live fair values and can change after results, macro shocks or model revisions.</p>
-      <table className={styles.roomy}><thead><tr><th>Stock</th><th>House / source</th><th>Rating</th><th>Target</th><th>Implied</th><th>Evidence and caveat</th></tr></thead><tbody>{liveAnalystCalls.map(a=><tr key={a.symbol}><td><b>{a.symbol}</b></td><td>{a.house}<small>{a.date} 2026</small></td><td><span className={`${styles.pill} ${styles.blue}`}>{a.rating}</span></td><td>{inr.format(a.target)}</td><td className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</td><td>{a.thesis}</td></tr>)}</tbody></table>
+      <table className={styles.roomy}><thead><tr><th>Stock</th><th>House / source</th><th>Rating</th><th>CMP</th><th>Target</th><th>Implied</th><th>Evidence and caveat</th></tr></thead><tbody>{liveAnalystCalls.map(a=><tr key={a.symbol}><td><b>{a.symbol}</b></td><td>{a.house}<small>{a.date} 2026</small></td><td><span className={`${styles.pill} ${styles.blue}`}>{a.rating}</span></td><td>{a.cmp != null ? inr.format(a.cmp) : "—"}</td><td>{inr.format(a.target)}</td><td className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</td><td>{a.thesis}</td></tr>)}</tbody></table>
       <div className={styles.targetBars}>{liveAnalystCalls.map(a=><div key={a.symbol}><span>{a.symbol}</span><div><i className={a.implied<0?styles.down:undefined} style={{width:`${Math.max(3,Math.min(100,Math.abs(a.implied)*2.6))}%`}}/></div><b className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</b></div>)}</div>
-      <div className={styles.twoCol}><Callout title="Current-position coverage">The matrix is filtered to symbols present in the latest Kite holdings. Implied upside is recalculated from the current session price immediately before rendering.</Callout><Callout tone="amber" title="Weakest current target signal">{weakestCall ? `${weakestCall.symbol}: ${weakestCall.implied>=0?"+":""}${weakestCall.implied.toFixed(1)}% implied versus the latest Kite price.` : "No current holding has a mapped analyst target."} Treat targets as expectations anchors, not trade instructions.</Callout></div>
+      <div className={styles.twoCol}><Callout title="Price basis">CMP prefers Kite last price when the symbol is held; otherwise a yfinance delayed NSE quote. Implied upside uses that CMP. Em dash only when both quotes are unavailable.</Callout><Callout tone="amber" title="Weakest current target signal">{weakestCall ? `${weakestCall.symbol}: ${weakestCall.implied>=0?"+":""}${weakestCall.implied.toFixed(1)}% implied versus CMP.` : "No analyst target is currently mapped."} Treat targets as expectations anchors, not trade instructions.</Callout></div>
       <Callout tone="blue" title="NSE source role">NSE is the primary source for corporate filings, board meetings, financial results and market/flow data. It does not publish buy/sell recommendations.</Callout>
     </section>
 

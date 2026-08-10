@@ -170,10 +170,10 @@ export function SectorDecisionLab({
   }));
 
   if (page !== "macro") {
-    return <section className="decision-lab-page decision-lab-panel decision-hex-shield">
+    return <section className={`decision-lab-page decision-lab-panel decision-hex-shield${page === "investability" ? " investability-page" : ""}`}>
       {sectorSelector}
       <div className="decision-purpose"><span>{radarConfig.icon}</span><span><b>{radarConfig.title}</b><small>{radarConfig.note}</small></span><em className={`pill ${decision.tone}`}>{decision.label}</em></div>
-      <div className="decision-chart-layout">
+      <div className="decision-chart-layout decision-radar-split">
         <article className="panel decision-main-chart risk-chart">
           <div className="chart-wrap decision-chart-canvas">
           <ResponsiveContainer width="100%" height="100%">
@@ -188,7 +188,7 @@ export function SectorDecisionLab({
           </ResponsiveContainer>
           </div>
         </article>
-        <aside className="panel decision-evidence">
+        <aside className="panel decision-gate-panel">
           <h3>Decision gate</h3><strong>{decision.label} · {decisionScore.toFixed(1)} / 5</strong><p>{decision.action}</p>
           {page === "investability" && <div className="investability-factor-grid" aria-label={`${sector.name} investability factor scores`}>
             {investabilityData.map((factor) => <div className={factor.score === null ? "unavailable" : ""} key={factor.axis}>
@@ -197,12 +197,14 @@ export function SectorDecisionLab({
               <small>{factor.basis}</small>
             </div>)}
           </div>}
-          <div><b>Evidence</b><span>{sector.summary}</span></div>
-          <div><b>Monitor</b><span>{sector.watch}</span></div>
-          <div><b>Invalidation</b><span>Reassess when reported KPIs, breadth or macro conditions move against the current stance.</span></div>
-          <small>Confidence: research framework · methodology: six equally weighted factors after each factor&apos;s stated composition. Unsupported evidence remains unavailable.</small>
         </aside>
       </div>
+      <aside className="panel decision-evidence-band" aria-label="Decision evidence">
+        <div><b>Evidence</b><span>{sector.summary}</span></div>
+        <div><b>Monitor</b><span>{sector.watch}</span></div>
+        <div><b>Invalidation</b><span>Reassess when reported KPIs, breadth or macro conditions move against the current stance.</span></div>
+        <small>Confidence: research framework · methodology: six equally weighted factors after each factor&apos;s stated composition. Unsupported evidence remains unavailable.</small>
+      </aside>
     </section>;
   }
 

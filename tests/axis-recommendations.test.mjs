@@ -81,3 +81,65 @@ test("mergeAxisRecommendations prefers richer PDF calls and keeps category bucke
   assert.equal(bySymbol["FLUOROCHEM|technical"]?.call, "TECHNICAL BUY");
   assert.equal(merged.length, 3);
 });
+
+test("mergeAxisRecommendations collapses BUY vs TRADING BUY near-duplicates", async () => {
+  const { mergeAxisRecommendations } = await import("../scripts/axis-pdf-recommendations.mjs");
+  const merged = mergeAxisRecommendations({
+    pdfRecommendations: [
+      { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: 1978, horizon: "Result update", source: "Axis PDF", date: "6 Aug", dateKey: "2026-08-06", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3], bucket: "fundamental" },
+      { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "TRADING BUY", target: 2530, cmp: 1964, horizon: "Axis Investment Picks", source: "Axis PDF", date: "6 Aug", dateKey: "2026-08-06", thesis: "Bharti Airtel: TRADING BUY", color: "#21b5c5", scores: [3, 3, 3, 3, 3, 3], bucket: "trading" },
+      { symbol: "JSWENERGY", name: "JSW Energy", call: "BUY", target: 614, cmp: 500, horizon: "Axis Alpha", source: "Axis PDF", date: "11 Jun", dateKey: "2026-06-11", thesis: "JSW Energy: BUY", color: "#e3b844", scores: [3, 3, 3, 3, 3, 3], bucket: "fundamental" },
+      { symbol: "JSWENERGY", name: "JSW Energy", call: "TRADING BUY", target: 630, cmp: 566, horizon: "Axis Investment Picks", source: "Axis PDF", date: "7 Aug", dateKey: "2026-08-07", thesis: "JSW Energy: TRADING BUY", color: "#e3b844", scores: [3, 3, 3, 3, 3, 3], bucket: "trading" },
+    ],
+  });
+  const bharti = merged.filter((item) => item.symbol === "BHARTIARTL");
+  assert.equal(bharti.length, 1);
+  assert.equal(bharti[0].call, "TRADING BUY");
+  assert.equal(bharti[0].bucket, "trading");
+
+  const jsw = merged.filter((item) => item.symbol === "JSWENERGY");
+  assert.equal(jsw.length, 2, "different target/date pairs stay distinct");
+  assert.ok(jsw.some((item) => item.call === "TRADING BUY" && item.target === 630));
+  assert.ok(jsw.some((item) => item.call === "BUY" && item.target === 614));
+});
+
+test("mergeHoldingTradingCalls does not duplicate live trading rows and collapses near-dups", async () => {
+  const {
+    mergeHoldingTradingCalls,
+    dedupeAxisCallsBySymbol,
+  } = await import("../app/axis-holding-trading-calls.ts");
+
+  const live = [
+    { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: 1978, upside: "—", horizon: "Result update", source: "Axis PDF", date: "6 Aug", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-06", bucket: "fundamental", origin: "pdf" },
+    { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "TRADING BUY", target: 2530, cmp: 1960, upside: "—", horizon: "Axis Investment Picks", source: "Axis PDF", date: "7 Aug", thesis: "Bharti Airtel: TRADING BUY", color: "#21b5c5", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-07", bucket: "trading", origin: "pdf", evidenceFile: "Axis_MorningNote-2026-08-07.pdf" },
+    { symbol: "JSWENERGY", name: "JSW Energy", call: "BUY", target: 614, cmp: 500, upside: "—", horizon: "Axis Alpha", source: "Axis PDF", date: "11 Jun", thesis: "JSW Energy: BUY", color: "#e3b844", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-06-11", bucket: "fundamental", origin: "pdf" },
+    { symbol: "JSWENERGY", name: "JSW Energy", call: "TRADING BUY", target: 630, cmp: 566, upside: "—", horizon: "Axis Investment Picks", source: "Axis PDF", date: "7 Aug", thesis: "JSW Energy: TRADING BUY", color: "#e3b844", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-07", bucket: "trading", origin: "pdf", evidenceFile: "Axis_MorningNote-2026-08-07.pdf" },
+    { symbol: "OBEROIRLTY", name: "Oberoi Realty", call: "TRADING BUY", target: 1985, cmp: 1807, upside: "—", horizon: "Axis Punch", source: "Axis PDF", date: "6 Aug", thesis: "Oberoi Realty: TRADING BUY", color: "#42c878", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-06", bucket: "trading", origin: "pdf" },
+  ];
+
+  const merged = mergeHoldingTradingCalls(live);
+  const bharti = merged.filter((item) => item.symbol === "BHARTIARTL");
+  assert.equal(bharti.length, 2, "different published dates stay distinct until matrix symbol dedupe");
+  assert.equal(bharti.find((item) => item.bucket === "trading")?.dateKey, "2026-08-07", "newer live trading call must not be overwritten by hardcoded Aug-6 holding row");
+  assert.equal(bharti.find((item) => item.bucket === "trading")?.evidenceFile, "Axis_MorningNote-2026-08-07.pdf");
+  assert.equal(bharti.find((item) => item.bucket === "fundamental")?.call, "BUY");
+
+  const jsw = merged.filter((item) => item.symbol === "JSWENERGY");
+  assert.equal(jsw.length, 2);
+  assert.equal(jsw.find((item) => item.bucket === "trading")?.dateKey, "2026-08-07");
+
+  const matrix = dedupeAxisCallsBySymbol(merged);
+  assert.equal(matrix.filter((item) => item.symbol === "BHARTIARTL").length, 1);
+  assert.equal(matrix.filter((item) => item.symbol === "JSWENERGY").length, 1);
+  assert.equal(matrix.find((item) => item.symbol === "BHARTIARTL")?.call, "TRADING BUY");
+  assert.equal(matrix.find((item) => item.symbol === "JSWENERGY")?.call, "TRADING BUY");
+  assert.equal(matrix.length, new Set(matrix.map((item) => item.symbol)).size);
+
+  const sameDayNearDup = mergeHoldingTradingCalls([
+    { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: 1978, upside: "—", horizon: "Result update", source: "Axis PDF", date: "6 Aug", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-06", bucket: "fundamental", origin: "pdf" },
+  ]);
+  const injected = sameDayNearDup.filter((item) => item.symbol === "BHARTIARTL");
+  assert.equal(injected.length, 1);
+  assert.equal(injected[0].call, "TRADING BUY");
+  assert.equal(injected[0].bucket, "trading");
+});
