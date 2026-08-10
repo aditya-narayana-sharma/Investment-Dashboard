@@ -51,7 +51,48 @@ test("Kite ticker orders require an exact reviewed confirmation before place_ord
   assert.match(ticket, /`Place \$\{selection\.side\} order`/);
   assert.match(route, /expectedConfirmation = `\$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("place_order"/);
-  assert.match(page, /orders require an explicit reviewed order ticket and typed confirmation/);
+  assert.match(page, /orders, GTTs\/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation/);
+});
+
+test("Portfolio activity GTT and TSL creates require reviewed confirmation before create_gtt", async () => {
+  const [workspace, ticket, route, server] = await Promise.all([
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteGttTicket.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/kite/gtt/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspace, />Create GTT<\/button>/);
+  assert.match(workspace, />Create TSL<\/button>/);
+  assert.match(workspace, /setGttSelection\(\{ kind: "gtt" \}\)/);
+  assert.match(workspace, /setGttSelection\(\{ kind: "tsl" \}\)/);
+  assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
+  assert.match(ticket, /`Create \$\{label\}`/);
+  assert.match(ticket, /fetch\("\/api\/kite\/gtt"/);
+  assert.match(route, /expectedConfirmation = `\$\{label\} \$\{side\} \$\{quantity\} \$\{symbol\}`/);
+  assert.match(server, /callKiteTool\("create_gtt"/);
+  assert.match(server, /confirm: true/);
+});
+
+test("Portfolio activity price alerts require reviewed confirmation before create_alert", async () => {
+  const [workspace, ticket, route, server, page] = await Promise.all([
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteAlertTicket.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/kite/alert/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspace, /key: "alerts", label: "Alerts"/);
+  assert.match(workspace, />Create price alert<\/button>/);
+  assert.match(workspace, /setAlertSelection\(\{\}\)/);
+  assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
+  assert.match(ticket, /`ALERT \$\{directionLabel\(direction\)\} \$\{normalizedSymbol\} \$\{triggerText\}`/);
+  assert.match(ticket, /fetch\("\/api\/kite\/alert"/);
+  assert.match(ticket, /Create price alert/);
+  assert.match(route, /expectedConfirmation = `\$\{label \? `ALERT \$\{label\}` : "ALERT"\} \$\{symbol\} \$\{triggerPrice\}`/);
+  assert.match(server, /callKiteTool\("create_alert"/);
+  assert.match(server, /callKiteTool\("get_alerts"/);
+  assert.match(server, /confirm: true/);
+  assert.match(page, /"alerts"/);
 });
 
 test("nested portfolio allocation markup remains protected", async () => {
@@ -525,7 +566,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(liveServer, /tokenExpiresAt/);
   assert.match(liveServer, /kiteDailyExpiryHint/);
   assert.match(liveServer, /reauthSuggested: false/);
-  assert.match(reportPage, /06:00 IST/);
+  assert.match(reportPage, /<th>CMP<\/th><th>Target<\/th><th>Implied<\/th>/);
+  assert.match(reportPage, /a\.cmp != null \? inr\.format\(a\.cmp\) : "—"/);
   assert.match(page, /No static positions are shown/);
   assert.match(page, /Shaded outer segment = negative day P&amp;L/);
   assert.match(page, /Verified industry and sub-sector/);
@@ -656,6 +698,30 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /number="I-6" title="Axis recommended stocks"/);
   assert.match(page, /className="panel analyst-matrix"/);
   assert.match(page, /className="analyst-table"/);
+  assert.match(page, /<th>CMP<\/th><th>Target<\/th>/);
+  assert.match(page, /data-label="CMP"/);
+  assert.match(page, /current \? inr\.format\(current\) : "—"/);
+  assert.match(page, /Implied vs CMP/);
+  assert.match(page, /analystMatrixSymbols/);
+  assert.match(page, /missingYfinanceKey/);
+  assert.match(page, /CMP for every analyst-matrix symbol/);
+  assert.match(page, /\/api\/quotes\/yfinance\?symbols=/);
+  assert.match(page, /Kite last price when held; otherwise a yfinance delayed NSE quote/);
+  assert.match(reportPage, /fetchYfinanceBySymbol/);
+  assert.match(reportPage, /yfinanceBySymbol/);
+  assert.match(reportPage, /Price basis/);
+  assert.match(reportPage, /yfinance delayed NSE quote/);
+  assert.doesNotMatch(reportPage, /Current-position coverage/);
+  const yfinanceRoute = await readFile(new URL("../app/api/quotes/yfinance/route.ts", import.meta.url), "utf8");
+  assert.match(yfinanceRoute, /process\.cwd\(\)/);
+  assert.match(yfinanceRoute, /status: "public_delayed"/);
+  assert.match(yfinanceRoute, /yf\.download/);
+  assert.match(yfinanceRoute, /YFINANCE_NSE_ALIASES/);
+  assert.match(yfinanceRoute, /MAXHEALTHCARE: "MAXHEALTH"/);
+  assert.match(yfinanceRoute, /Prefer history over fast_info/);
+  assert.match(yfinanceRoute, /currentTradingPeriod/);
+  assert.match(yfinanceRoute, /RAINBOWCHILDRE: "RAINBOW"/);
+  assert.match(yfinanceRoute, /KALYANISTEELS: "KSL"/);
   assert.match(page, /data-label="What matters"/);
   assert.match(page, /thesisBullets\(/);
   assert.match(page, /ThesisBulletList/);
@@ -665,7 +731,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /last trading day/);
   assert.match(globalCss, /\.thesis-bullet-list/);
   assert.match(globalCss, /\.analyst-matrix/);
-  assert.match(globalCss, /grid-template-areas:[\s\S]*"stock call"/);
+  assert.match(globalCss, /grid-template-areas:[\s\S]*"stock call"[\s\S]*"cmp cmp"[\s\S]*"target target"/);
+  assert.match(globalCss, /\.analyst-table td:nth-child\(4\) \{ grid-area:cmp; \}/);
   assert.match(page, /function AxisRecommendationWorkbench/);
   assert.match(page, /formatAxisTargetLine/);
   assert.match(page, /TARGET - \$\{label\} \(\$\{sourceLabel\}\)/);
@@ -674,7 +741,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Progress to target/);
   assert.match(page, /CMP ÷ Axis target \(capped 100%\)|Kite CMP ÷ Axis target|yfinance CMP ÷ Axis target/);
   assert.match(page, /axis-pick-cmp/);
-  assert.match(page, /mergeHoldingTradingCalls|axisHoldingTradingCalls|AXIS_HOLDING_TRADING_SYMBOLS/);
+  assert.match(page, /mergeHoldingTradingCalls|dedupeAxisCallsBySymbol|axisHoldingTradingCalls|AXIS_HOLDING_TRADING_SYMBOLS/);
   assert.match(page, /ETERNAL|ICICIBANK|JSWENERGY|BHARTIARTL/);
   assert.match(globalCss, /\.axis-pick-list button \{[^}]*flex-direction:column/);
   assert.match(globalCss, /\.axis-target-line/);

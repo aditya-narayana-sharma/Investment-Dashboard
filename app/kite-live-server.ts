@@ -1,7 +1,7 @@
 import { classificationSources, securityClassifications, securitySymbolAliases } from "./portfolio-data";
 import { buildContiguousAllocations, sortDonutHoldings } from "./portfolio-donut";
 import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
-import type { KiteAuthStatus, KiteSnapshot, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
+import type { KiteAuthStatus, KiteSnapshot, LiveAlert, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
 
 type JsonObject = Record<string, unknown>;
 export type KiteOrderRequest = {
@@ -12,6 +12,27 @@ export type KiteOrderRequest = {
   orderType: "MARKET" | "LIMIT" | "SL" | "SL-M";
   price?: number;
   triggerPrice?: number;
+};
+
+/** Single-leg GTT / protective TSL create payload (both map to Kite PlaceGTT). */
+export type KiteGttRequest = {
+  symbol: string;
+  side: "BUY" | "SELL";
+  quantity: number;
+  product: "CNC" | "MIS" | "NRML" | "MTF";
+  triggerPrice: number;
+  limitPrice: number;
+  lastPrice?: number;
+  kind: "gtt" | "tsl";
+};
+
+/** Simple Kite Connect price alert (LTP vs constant). */
+export type KiteAlertRequest = {
+  symbol: string;
+  exchange: "NSE" | "BSE" | "NFO" | "CDS" | "BCD" | "MCX" | "INDICES";
+  direction: "above" | "below";
+  triggerPrice: number;
+  note?: string;
 };
 type McpState = {
   sessionId?: string;
@@ -181,6 +202,111 @@ export async function placeKiteOrder(order: KiteOrderRequest) {
   return result;
 }
 
+/**
+ * Submit an explicitly confirmed single-leg GTT (entry or protective TSL).
+ * Dashboard confirmation is enforced by the API route before this runs.
+ * Uses kite-mcp `create_gtt` with confirm=true so Kite PlaceGTT is invoked.
+ */
+export async function placeKiteGtt(order: KiteGttRequest) {
+  const symbol = order.symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9&.-]{1,32}$/.test(symbol)) throw new Error("Invalid Kite trading symbol.");
+  if (!Number.isInteger(order.quantity) || order.quantity < 1 || order.quantity > 1_000_000) throw new Error("Quantity must be a positive whole number.");
+  if (!["BUY", "SELL"].includes(order.side)) throw new Error("Invalid transaction side.");
+  if (!["CNC", "MIS", "NRML", "MTF"].includes(order.product)) throw new Error("Invalid Kite product.");
+  switch (order.kind) {
+    case "gtt":
+    case "tsl":
+      break;
+    default: {
+      const _exhaustive: never = order.kind;
+      throw new Error(`Invalid GTT kind: ${String(_exhaustive)}`);
+    }
+  }
+  if (!(order.triggerPrice > 0)) throw new Error("A positive trigger price is required.");
+  if (!(order.limitPrice > 0)) throw new Error("A positive limit price is required.");
+  if (order.kind === "tsl" && order.side !== "SELL") throw new Error("Protective TSLs must be SELL GTTs.");
+  if (order.lastPrice !== undefined && !(order.lastPrice > 0)) throw new Error("Last price must be positive when provided.");
+
+  const result = await callKiteTool("create_gtt", {
+    tradingsymbol: symbol,
+    exchange: "NSE",
+    transaction_type: order.side,
+    product: order.product,
+    trigger_price: order.triggerPrice,
+    quantity: order.quantity,
+    limit_price: order.limitPrice,
+    ...(order.lastPrice && order.lastPrice > 0 ? { last_price: order.lastPrice } : {}),
+    confirm: true,
+  });
+
+  if (result && typeof result === "object" && (result as JsonObject).submitted === false) {
+    throw new Error("Kite returned a GTT preview instead of a submission. Confirmation did not reach create_gtt.");
+  }
+
+  lastLiveAt = 0;
+  return result;
+}
+
+/**
+ * Submit an explicitly confirmed simple price alert.
+ * Dashboard confirmation is enforced by the API route before this runs.
+ * Uses kite-mcp `create_alert` with confirm=true so Kite CreateAlert is invoked.
+ */
+export async function placeKiteAlert(alert: KiteAlertRequest) {
+  const symbol = alert.symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9&.\- ]{1,48}$/.test(symbol)) throw new Error("Invalid Kite trading symbol.");
+  if (!(alert.triggerPrice > 0)) throw new Error("A positive trigger price is required.");
+  switch (alert.direction) {
+    case "above":
+    case "below":
+      break;
+    default: {
+      const _exhaustive: never = alert.direction;
+      throw new Error(`Invalid alert direction: ${String(_exhaustive)}`);
+    }
+  }
+  switch (alert.exchange) {
+    case "NSE":
+    case "BSE":
+    case "NFO":
+    case "CDS":
+    case "BCD":
+    case "MCX":
+    case "INDICES":
+      break;
+    default: {
+      const _exhaustive: never = alert.exchange;
+      throw new Error(`Invalid alert exchange: ${String(_exhaustive)}`);
+    }
+  }
+
+  let result: unknown;
+  try {
+    result = await callKiteTool("create_alert", {
+      tradingsymbol: symbol,
+      exchange: alert.exchange,
+      direction: alert.direction,
+      trigger_price: alert.triggerPrice,
+      ...(alert.note?.trim() ? { name: alert.note.trim().slice(0, 80) } : {}),
+      confirm: true,
+    });
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error);
+    if (/unknown tool|tool not found|method not found|not (?:found|registered|available)|does not exist/i.test(text)) {
+      throw new Error("Unavailable: Kite MCP does not expose create_alert on this server build.");
+    }
+    throw error;
+  }
+
+  if (result && typeof result === "object" && (result as JsonObject).submitted === false) {
+    throw new Error("Kite returned an alert preview instead of a submission. Confirmation did not reach create_alert.");
+  }
+
+  const kiteResponse = result && typeof result === "object" ? (result as JsonObject).kite_response : undefined;
+  lastLiveAt = 0;
+  return kiteResponse ?? result;
+}
+
 async function getLoginUrl(force = false) {
   const result = await callKiteTool("login", force ? { force: true } : {});
   const text = string(result);
@@ -294,6 +420,37 @@ function mapGtts(rawGtts: JsonObject[]): LiveGtt[] {
   });
 }
 
+function mapAlertDirection(operator: string): LiveAlert["direction"] {
+  switch (operator) {
+    case ">=":
+    case ">":
+      return "above";
+    case "<=":
+    case "<":
+      return "below";
+    default:
+      return "other";
+  }
+}
+
+function mapAlerts(rawAlerts: JsonObject[]): LiveAlert[] {
+  return rawAlerts.map((raw) => {
+    const operator = string(raw.operator);
+    const name = string(raw.name);
+    return {
+      id: string(raw.uuid) || string(raw.id),
+      name,
+      symbol: string(raw.lhs_tradingsymbol),
+      exchange: string(raw.lhs_exchange) || "NSE",
+      direction: mapAlertDirection(operator),
+      operator,
+      trigger: number(raw.rhs_constant),
+      status: string(raw.status) || "unknown",
+      note: name,
+    };
+  });
+}
+
 function authStatusForFailure(message: string, authUrl?: string): KiteAuthStatus {
   if (/expired|token[^\n]*invalid|invalid[^\n]*token|06:00|daily access token/i.test(message)) return "expired";
   if (authUrl) return "unauthenticated";
@@ -334,6 +491,7 @@ function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
     positions: [],
     orders: [],
     gtts: [],
+    alerts: [],
     marketCapAllocation: [],
     sectorAllocation: [],
     subSectorAllocation: [],
@@ -428,11 +586,11 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       }
     }
 
-    const toolNames = ["holdings", "positions", "orders", "GTTs", "margins"] as const;
+    const toolNames = ["holdings", "positions", "orders", "GTTs", "margins", "alerts"] as const;
     const results = await Promise.allSettled([
-      callKiteTool("get_holdings"), callKiteTool("get_positions"), callKiteTool("get_orders"), callKiteTool("get_gtts"), callKiteTool("get_margins"),
+      callKiteTool("get_holdings"), callKiteTool("get_positions"), callKiteTool("get_orders"), callKiteTool("get_gtts"), callKiteTool("get_margins"), callKiteTool("get_alerts"),
     ]);
-    const [holdingsResult, positionsResult, ordersResult, gttsResult, marginsResult] = results;
+    const [holdingsResult, positionsResult, ordersResult, gttsResult, marginsResult, alertsResult] = results;
     if (holdingsResult.status === "rejected") throw holdingsResult.reason;
 
     const holdingsRaw = holdingsResult.value;
@@ -440,6 +598,7 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const ordersRaw = ordersResult.status === "fulfilled" ? ordersResult.value : [];
     const gttsRaw = gttsResult.status === "fulfilled" ? gttsResult.value : [];
     const marginsRaw = marginsResult.status === "fulfilled" ? marginsResult.value : {};
+    const alertsRaw = alertsResult.status === "fulfilled" ? alertsResult.value : [];
     const unavailable: string[] = results
       .map((result, index) => result.status === "rejected" ? toolNames[index] : null)
       .filter((name): name is typeof toolNames[number] => name !== null);
@@ -496,6 +655,7 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       positions: openPositions,
       orders: mapOrders(ordersRaw as JsonObject[]),
       gtts: mapGtts(gttsRaw as JsonObject[]),
+      alerts: mapAlerts(Array.isArray(alertsRaw) ? alertsRaw as JsonObject[] : []),
       marketCapAllocation: buildContiguousAllocations(donutHoldings, "marketCap", marketCapColors),
       sectorAllocation: buildContiguousAllocations(donutHoldings, "sector", sectorColors),
       subSectorAllocation: buildContiguousAllocations(donutHoldings, "subSector", subSectorColors),

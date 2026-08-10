@@ -65,6 +65,18 @@ export type LiveGtt = {
   kind?: "gtt" | "tsl";
 };
 
+export type LiveAlert = {
+  id: string;
+  name: string;
+  symbol: string;
+  exchange: string;
+  direction: "above" | "below" | "other";
+  operator: string;
+  trigger: number;
+  status: string;
+  note: string;
+};
+
 /**
  * Session/token state — independent of data freshness (`status`).
  * `partial` is retained only for compatibility with older cached payloads;
@@ -101,6 +113,7 @@ export type KiteSnapshot = {
   positions: LivePosition[];
   orders: LiveOrder[];
   gtts: LiveGtt[];
+  alerts?: LiveAlert[];
   marketCapAllocation: AllocationSlice[];
   sectorAllocation: AllocationSlice[];
   subSectorAllocation: AllocationSlice[];
@@ -124,6 +137,7 @@ export const emptySnapshot: KiteSnapshot = {
   positions: [],
   orders: [],
   gtts: [],
+  alerts: [],
   marketCapAllocation: [],
   sectorAllocation: [],
   subSectorAllocation: [],

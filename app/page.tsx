@@ -31,13 +31,13 @@ import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
-import { AXIS_HOLDING_TRADING_SYMBOLS, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
+import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 
 export default function Home() {
   const [workspace, setWorkspace] = useState<WorkspaceKey>("investment");
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
-  const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls">("holdings");
+  const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
   const [snapshot, setSnapshot] = useState<KiteSnapshot>(emptySnapshot);
   const [content, setContent] = useState<ContentDigestSnapshot>(fallbackContent);
   const [contentError, setContentError] = useState("");
@@ -113,29 +113,82 @@ export default function Home() {
       : axisRecommendations.map((item) => ({ ...item }));
     return mergeHoldingTradingCalls(base);
   }, [content]);
+  const mailWindow = useMemo(() => analysisWindowLabel(content), [content]);
+  const analystRows = useMemo(() => {
+    // Flat matrix: one logical Axis call per symbol (trading > technical > fundamental).
+    const axisUnique = dedupeAxisCallsBySymbol(mailAxisRecommendations);
+    return [
+      ...axisUnique.map((item) => ({
+        symbol: item.symbol,
+        house: `${item.source} / iCloud Axis Research`,
+        rating: item.call,
+        target: item.target,
+        date: item.date,
+        thesis: item.thesis,
+        mail: true,
+      })),
+      ...analystCalls
+        .filter((item) => !axisUnique.some((axis) => axis.symbol === item.symbol))
+        .map((item) => ({ ...item, mail: false })),
+    ];
+  }, [mailAxisRecommendations]);
+  const analystMatrixSymbols = useMemo(
+    () => [...new Set(analystRows.map((row) => row.symbol))],
+    [analystRows],
+  );
+  // Stable key so Kite price polls (new holdings array identity) do not cancel in-flight yfinance chunks.
+  const kiteQuoteSymbolsKey = useMemo(
+    () => snapshot.holdings
+      .filter((holding) => holding.price > 0)
+      .map((holding) => holding.symbol)
+      .sort()
+      .join(","),
+    [snapshot.holdings],
+  );
+  const missingYfinanceKey = useMemo(() => {
+    const kiteSymbols = new Set(kiteQuoteSymbolsKey ? kiteQuoteSymbolsKey.split(",") : []);
+    return analystMatrixSymbols
+      .filter((symbol) => !kiteSymbols.has(symbol))
+      .sort()
+      .join(",");
+  }, [analystMatrixSymbols, kiteQuoteSymbolsKey]);
 
   useEffect(() => {
-    const kiteSymbols = new Set(snapshot.holdings.filter((holding) => holding.price > 0).map((holding) => holding.symbol));
-    const missing = AXIS_HOLDING_TRADING_SYMBOLS.filter((symbol) => !kiteSymbols.has(symbol));
-    // Kite already covers CMP for these holdings — skip fetch. currentBySymbol prefers Kite over any stale yfinance.
-    if (!missing.length) return;
+    // CMP for every analyst-matrix symbol: Kite when held, else yfinance. Never invent prices.
+    if (!missingYfinanceKey) {
+      setYfinanceBySymbol(new Map());
+      return;
+    }
+    const missing = missingYfinanceKey.split(",");
     let cancelled = false;
+    const chunkSize = 12;
     (async () => {
       try {
-        const response = await fetch(`/api/quotes/yfinance?symbols=${missing.join(",")}`, { cache: "no-store" });
-        const data = await response.json() as { quotes?: Record<string, { price?: number | null }> };
-        if (cancelled || !response.ok) return;
+        const chunks: string[][] = [];
+        for (let offset = 0; offset < missing.length; offset += chunkSize) {
+          chunks.push(missing.slice(offset, offset + chunkSize));
+        }
+        // Parallel chunks finish faster and shrink the race window vs sequential 90s+ waits.
+        const settled = await Promise.all(chunks.map(async (chunk) => {
+          const response = await fetch(`/api/quotes/yfinance?symbols=${chunk.join(",")}`, { cache: "no-store" });
+          const data = await response.json() as { quotes?: Record<string, { price?: number | null }> };
+          if (!response.ok) return [] as Array<[string, number]>;
+          return Object.entries(data.quotes ?? {})
+            .filter((entry): entry is [string, { price: number }] => entry[1]?.price != null && entry[1].price > 0)
+            .map(([symbol, quote]) => [symbol, quote.price] as [string, number]);
+        }));
+        if (cancelled) return;
         const next = new Map<string, number>();
-        for (const [symbol, quote] of Object.entries(data.quotes ?? {})) {
-          if (quote?.price != null && quote.price > 0) next.set(symbol, quote.price);
+        for (const entries of settled) {
+          for (const [symbol, price] of entries) next.set(symbol, price);
         }
         setYfinanceBySymbol(next);
       } catch {
-        if (!cancelled) setYfinanceBySymbol(new Map());
+        // Retain prior quotes on transient failure; never invent prices.
       }
     })();
     return () => { cancelled = true; };
-  }, [snapshot.holdings]);
+  }, [missingYfinanceKey]);
   const mailAxisProfiles = useMemo<RiskProfile[]>(() => Array.from(new Map(mailAxisRecommendations.map((item) => [item.symbol, { symbol: item.symbol, name: item.name, color: item.color, scores: item.scores }])).values()), [mailAxisRecommendations]);
   const livePortfolioRiskProfiles = useMemo<RiskProfile[]>(() => {
     const known = new Map(portfolioRiskProfiles.map((profile) => [profile.symbol, profile]));
@@ -153,11 +206,6 @@ export default function Home() {
       ] as RiskProfile["scores"],
     });
   }, [snapshot.holdings]);
-  const mailWindow = useMemo(() => analysisWindowLabel(content), [content]);
-  const analystRows = useMemo(() => [
-    ...mailAxisRecommendations.map((item) => ({ symbol: item.symbol, house: `${item.source} / iCloud Axis Research`, rating: item.call, target: item.target, date: item.date, thesis: item.thesis, mail: true })),
-    ...analystCalls.filter((item) => !mailAxisRecommendations.some((axis) => axis.symbol === item.symbol)).map((item) => ({ ...item, mail: false })),
-  ], [mailAxisRecommendations]);
   const donutHoldings = useMemo(() => sortDonutHoldings(snapshot.holdings), [snapshot.holdings]);
   const exposureComposition = useMemo(() => {
     const profileBySymbol = new Map(portfolioRiskProfiles.map((profile) => [profile.symbol, profile]));
@@ -611,7 +659,7 @@ export default function Home() {
 
       </section>
 
-      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice. Kite orders require an explicit reviewed order ticket and typed confirmation.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
+      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice. Kite orders, GTTs/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
     </main>
   );
 }

@@ -8,6 +8,8 @@ export const AXIS_HOLDING_TRADING_SYMBOLS = ["ETERNAL", "ICICIBANK", "JSWENERGY"
 
 export type AxisHoldingTradingSymbol = (typeof AXIS_HOLDING_TRADING_SYMBOLS)[number];
 
+export type AxisCallBucket = "fundamental" | "technical" | "trading";
+
 /** Latest verified rows from Axis_MorningNote-2026-08-06.pdf Investment Picks table. */
 export const axisHoldingTradingCalls: MailRecommendation[] = [
   {
@@ -84,16 +86,151 @@ export const axisHoldingTradingCalls: MailRecommendation[] = [
   },
 ];
 
-/** Merge holding Trading Calls into Axis recommendations (trading bucket wins per symbol). */
+export function axisCallBucket(item: Pick<MailRecommendation, "bucket" | "call" | "horizon">): AxisCallBucket {
+  if (item.bucket === "technical" || item.bucket === "trading" || item.bucket === "fundamental") {
+    return item.bucket;
+  }
+  const call = String(item.call ?? "").toUpperCase();
+  const horizon = String(item.horizon ?? "").toLowerCase();
+  if (call.includes("TECHNICAL") || horizon.includes("technical")) return "technical";
+  if (call.includes("TRADING") || horizon.includes("punch")) return "trading";
+  return "fundamental";
+}
+
+function normalizeCallFamily(call: string): "technical" | "trading" | "plain" {
+  const upper = String(call ?? "").toUpperCase();
+  if (upper.includes("TECHNICAL")) return "technical";
+  if (upper.includes("TRADING")) return "trading";
+  return "plain";
+}
+
+function dateRank(item: Pick<MailRecommendation, "dateKey" | "date">): number {
+  if (item.dateKey) return Number(String(item.dateKey).replaceAll("-", "")) || 0;
+  return 0;
+}
+
+function axisCallRichness(item: MailRecommendation): number {
+  const originBoost = item.origin === "pdf" ? 1 : 0;
+  return (item.cmp ? 4 : 0) + (item.target ? 4 : 0) + originBoost + dateRank(item) / 1e8;
+}
+
+function bucketPriority(bucket: AxisCallBucket): number {
+  switch (bucket) {
+    case "trading":
+      return 3;
+    case "technical":
+      return 2;
+    case "fundamental":
+      return 1;
+    default: {
+      const _exhaustive: never = bucket;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Prefer newer, richer, and more specific (trading > technical > fundamental) Axis rows. */
+export function preferAxisCall(next: MailRecommendation, prev: MailRecommendation): boolean {
+  const nextBucket = axisCallBucket(next);
+  const prevBucket = axisCallBucket(prev);
+  if (bucketPriority(nextBucket) !== bucketPriority(prevBucket)) {
+    return bucketPriority(nextBucket) > bucketPriority(prevBucket);
+  }
+  const nextDate = dateRank(next);
+  const prevDate = dateRank(prev);
+  if (nextDate !== prevDate) return nextDate > prevDate;
+  return axisCallRichness(next) >= axisCallRichness(prev);
+}
+
+function logicalCallKey(item: MailRecommendation): string {
+  const bucket = axisCallBucket(item);
+  const call = String(item.call ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+  const target = item.target == null ? "" : String(item.target);
+  const published = item.dateKey ?? item.date ?? "";
+  return `${item.symbol}|${call}|${target}|${published}|${bucket}`;
+}
+
+function nearDuplicateKey(item: MailRecommendation): string {
+  const target = item.target == null ? "" : String(item.target);
+  const published = item.dateKey ?? item.date ?? "";
+  return `${item.symbol}|${target}|${published}`;
+}
+
+/**
+ * Collapse exact/near-duplicate Axis rows.
+ * Key: symbol + call + target + published date (+ bucket).
+ * Near-dup: same symbol/target/date where only BUY vs TRADING BUY differ → keep trading.
+ */
+export function collapseNearDuplicateAxisCalls(recommendations: MailRecommendation[]): MailRecommendation[] {
+  const exact = new Map<string, MailRecommendation>();
+  for (const item of recommendations) {
+    if (!item?.symbol || !item?.call) continue;
+    const next = { ...item, bucket: axisCallBucket(item) };
+    const key = logicalCallKey(next);
+    const prev = exact.get(key);
+    if (!prev || preferAxisCall(next, prev)) exact.set(key, next);
+  }
+
+  const near = new Map<string, MailRecommendation>();
+  for (const item of exact.values()) {
+    const key = nearDuplicateKey(item);
+    const prev = near.get(key);
+    if (!prev) {
+      near.set(key, item);
+      continue;
+    }
+    const prevFamily = normalizeCallFamily(prev.call);
+    const nextFamily = normalizeCallFamily(item.call);
+    const buyLikePair =
+      (prevFamily === "plain" && nextFamily === "trading")
+      || (prevFamily === "trading" && nextFamily === "plain");
+    if (buyLikePair) {
+      near.set(key, nextFamily === "trading" ? item : prev);
+      continue;
+    }
+    if (preferAxisCall(item, prev)) near.set(key, item);
+  }
+
+  return [...near.values()].sort(
+    (left, right) => String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? ""))
+      || left.symbol.localeCompare(right.symbol)
+      || bucketPriority(axisCallBucket(right)) - bucketPriority(axisCallBucket(left)),
+  );
+}
+
+/** One preferred Axis row per symbol (trading > technical > fundamental, then newer/richer). */
+export function dedupeAxisCallsBySymbol(recommendations: MailRecommendation[]): MailRecommendation[] {
+  const bySymbol = new Map<string, MailRecommendation>();
+  for (const item of collapseNearDuplicateAxisCalls(recommendations)) {
+    const prev = bySymbol.get(item.symbol);
+    if (!prev || preferAxisCall(item, prev)) bySymbol.set(item.symbol, item);
+  }
+  return [...bySymbol.values()].sort(
+    (left, right) => String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? ""))
+      || left.symbol.localeCompare(right.symbol),
+  );
+}
+
+/** Merge holding Trading Calls into Axis recommendations without duplicating live trading rows. */
 export function mergeHoldingTradingCalls(recommendations: MailRecommendation[]): MailRecommendation[] {
   const byKey = new Map<string, MailRecommendation>();
   for (const item of recommendations) {
-    const bucket = item.bucket
-      ?? (item.call.includes("TECHNICAL") ? "technical" : item.call.includes("TRADING") || /punch/i.test(item.horizon) ? "trading" : "fundamental");
-    byKey.set(`${item.symbol}|${bucket}`, { ...item, bucket });
+    if (!item?.symbol || !item?.call) continue;
+    const bucket = axisCallBucket(item);
+    const next = { ...item, bucket };
+    const key = `${item.symbol}|${bucket}`;
+    const prev = byKey.get(key);
+    if (!prev || preferAxisCall(next, prev)) byKey.set(key, next);
   }
+
   for (const holdingCall of axisHoldingTradingCalls) {
-    byKey.set(`${holdingCall.symbol}|trading`, holdingCall);
+    const key = `${holdingCall.symbol}|trading`;
+    const prev = byKey.get(key);
+    // Fill missing trading-bucket holdings; never overwrite a newer/richer live trading call.
+    if (!prev || preferAxisCall(holdingCall, prev)) {
+      byKey.set(key, holdingCall);
+    }
   }
-  return [...byKey.values()].sort((left, right) => String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? "")) || left.symbol.localeCompare(right.symbol));
+
+  return collapseNearDuplicateAxisCalls([...byKey.values()]);
 }
