@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import shutil
 import zipfile
 import xml.etree.ElementTree as ET
@@ -13,6 +14,39 @@ from typing import Optional
 
 
 MEMBER = "apple_health_export/export.xml"
+DEFAULT_METADATA_TIMEOUT_SECONDS = 60
+
+
+class ArchiveMetadataTimeout(OSError):
+    pass
+
+
+def open_archive_metadata(archive_path: Path, timeout_seconds: int) -> tuple[zipfile.ZipFile, zipfile.ZipInfo]:
+    archive: Optional[zipfile.ZipFile] = None
+    previous_handler = None
+
+    def handle_timeout(_signum, _frame) -> None:
+        raise ArchiveMetadataTimeout(
+            f"Timed out after {timeout_seconds}s while reading the newest iCloud Health ZIP metadata."
+        )
+
+    alarm_supported = timeout_seconds > 0 and hasattr(signal, "SIGALRM")
+    if alarm_supported:
+        previous_handler = signal.signal(signal.SIGALRM, handle_timeout)
+        signal.alarm(timeout_seconds)
+    try:
+        archive = zipfile.ZipFile(archive_path)
+        if archive.namelist().count(MEMBER) != 1:
+            raise zipfile.BadZipFile(f"{MEMBER} must appear exactly once.")
+        return archive, archive.getinfo(MEMBER)
+    except Exception:
+        if archive is not None:
+            archive.close()
+        raise
+    finally:
+        if alarm_supported:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous_handler)
 
 
 def fingerprint(path: Optional[Path]) -> dict:
@@ -69,11 +103,13 @@ def validate_xml(path: Path) -> None:
         raise zipfile.BadZipFile(f"{MEMBER} does not contain an ExportDate.")
 
 
-def prepare_archive(archive_path: Path, export_xml: Path) -> str:
-    with zipfile.ZipFile(archive_path) as archive:
-        if archive.namelist().count(MEMBER) != 1:
-            raise zipfile.BadZipFile(f"{MEMBER} must appear exactly once.")
-        info = archive.getinfo(MEMBER)
+def prepare_archive(
+    archive_path: Path,
+    export_xml: Path,
+    metadata_timeout_seconds: int = DEFAULT_METADATA_TIMEOUT_SECONDS,
+) -> str:
+    archive, info = open_archive_metadata(archive_path, metadata_timeout_seconds)
+    try:
         needs_extract = (
             not export_xml.exists()
             or export_xml.stat().st_size != info.file_size
@@ -94,6 +130,8 @@ def prepare_archive(archive_path: Path, export_xml: Path) -> str:
             os.replace(temporary, export_xml)
         finally:
             temporary.unlink(missing_ok=True)
+    finally:
+        archive.close()
     return "extracted"
 
 
@@ -102,6 +140,12 @@ def main() -> int:
     parser.add_argument("--health-dir", required=True, type=Path)
     parser.add_argument("--export-xml", required=True, type=Path)
     parser.add_argument("--state", required=True, type=Path)
+    parser.add_argument(
+        "--metadata-timeout-seconds",
+        type=int,
+        default=DEFAULT_METADATA_TIMEOUT_SECONDS,
+        help="Maximum time to wait for iCloud to expose ZIP metadata before retaining export.xml.",
+    )
     args = parser.parse_args()
 
     archives = sorted(args.health_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -117,7 +161,7 @@ def main() -> int:
         result = state("verified_export", None, None, args.export_xml, "No ZIP was found; using the existing validated export.xml.")
     else:
         try:
-            action = prepare_archive(latest, args.export_xml)
+            action = prepare_archive(latest, args.export_xml, args.metadata_timeout_seconds)
             result = state(
                 "verified_latest",
                 latest,

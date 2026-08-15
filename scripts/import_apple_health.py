@@ -34,6 +34,17 @@ SUM_TYPES = {
     "DietarySodium", "DietaryPotassium", "DietaryCholesterol", "DietaryWater", "DietaryCaffeine",
 }
 
+# Apple Health exports a record for every contributing source. Summing those
+# rows directly double-counts cumulative device metrics when an Apple Watch and
+# iPhone both observe the same activity. HealthKit resolves that overlap by
+# source priority; the XML export does not include the user's source-order
+# metadata, so reproduce the normal device precedence deterministically at
+# one-minute resolution while retaining lower-priority source-only gaps.
+SOURCE_RECONCILED_SUM_TYPES = {
+    "ActiveEnergyBurned", "BasalEnergyBurned", "AppleExerciseTime", "AppleStandTime",
+    "StepCount", "DistanceWalkingRunning", "FlightsClimbed",
+}
+
 METRICS = [
     ("Activity", "Active energy", "ActiveEnergyBurned", "sum", "kcal", "green"),
     ("Activity", "Exercise minutes", "AppleExerciseTime", "sum", "min", "green"),
@@ -149,8 +160,73 @@ def import_xml(xml_path: Path, db: sqlite3.Connection, force: bool = False) -> t
     return export_date, relevant, True
 
 
+def source_priority(source: str) -> tuple[int, str]:
+    """Approximate Apple Health's device priority when XML omits source order."""
+    normalized = source.replace("\u00a0", " ").strip().casefold()
+    if normalized in {"health", "apple health"}:
+        return 0, normalized
+    if "apple watch" in normalized or "watch" in normalized or "timepiece" in normalized:
+        return 1, normalized
+    if "iphone" in normalized or "ipad" in normalized or "ipod" in normalized:
+        return 2, normalized
+    return 3, normalized
+
+
+def source_reconciled_sum(db: sqlite3.Connection, metric_type: str, day: str) -> Optional[float]:
+    """Merge overlapping cumulative records using source priority per minute.
+
+    Each record is distributed across the minute buckets it covers. Values from
+    the highest-priority source present in a bucket are retained; lower-priority
+    values in that same bucket are excluded as overlapping observations. This
+    preserves iPhone-only gaps instead of discarding an entire lower-priority
+    daily stream.
+    """
+    rows = db.execute(
+        "SELECT source, start_at, end_at, value FROM records "
+        "WHERE type=? AND day=? AND value IS NOT NULL",
+        (metric_type, day),
+    ).fetchall()
+    if not rows:
+        return None
+    if len({row[0] for row in rows}) == 1:
+        return float(sum(row[3] for row in rows))
+
+    buckets: Dict[datetime, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for source, start_raw, end_raw, raw_value in rows:
+        start = parse_dt(start_raw)
+        end = parse_dt(end_raw)
+        value = float(raw_value)
+        duration = (end - start).total_seconds()
+        if duration <= 0:
+            buckets[start.replace(second=0, microsecond=0)][source] += value
+            continue
+        minute = start.replace(second=0, microsecond=0)
+        while minute < end:
+            minute_end = minute + timedelta(minutes=1)
+            overlap = max(0.0, (min(end, minute_end) - max(start, minute)).total_seconds())
+            if overlap:
+                buckets[minute][source] += value * overlap / duration
+            minute = minute_end
+
+    total = 0.0
+    for source_values in buckets.values():
+        selected_source = min(source_values, key=source_priority)
+        total += source_values[selected_source]
+    return total
+
+
+def has_multiple_sources(db: sqlite3.Connection, metric_type: str, day: str) -> bool:
+    rows = db.execute(
+        "SELECT DISTINCT source FROM records WHERE type=? AND day=? LIMIT 2",
+        (metric_type, day),
+    ).fetchall()
+    return len(rows) > 1
+
+
 def aggregate(db: sqlite3.Connection, metric_type: str, day: str, mode: str) -> Optional[Union[float, Tuple[float, float]]]:
     if mode == "sum":
+        if metric_type in SOURCE_RECONCILED_SUM_TYPES:
+            return source_reconciled_sum(db, metric_type, day)
         row = db.execute("SELECT SUM(value) FROM records WHERE type=? AND day=?", (metric_type, day)).fetchone()
     elif mode == "range":
         row = db.execute("SELECT MIN(value), MAX(value) FROM records WHERE type=? AND day=?", (metric_type, day)).fetchone()
@@ -488,7 +564,12 @@ def build_snapshot(
         history = {}
         if weekly_history: history["weekly"] = weekly_history
         if monthly_history: history["monthly"] = monthly_history
-        metric_source = "iPhone Mirroring" if metric_override is not None else "Apple Health export"
+        if metric_override is not None:
+            metric_source = "iPhone Mirroring"
+        elif metric_type in SOURCE_RECONCILED_SUM_TYPES and has_multiple_sources(db, metric_type, completed.isoformat()):
+            metric_source = "Apple Health XML · source-reconciled"
+        else:
+            metric_source = "Apple Health export"
         categories[category].append({
             "label": label,
             "value": fmt(current, unit),
@@ -565,8 +646,19 @@ def build_snapshot(
         partial_export_day
         and db.execute("SELECT 1 FROM records WHERE day=? LIMIT 1", (partial_export_day,)).fetchone()
     )
-    present_days = {row[0] for row in db.execute("SELECT DISTINCT day FROM records WHERE day BETWEEN ? AND ?", ((completed - timedelta(days=29)).isoformat(), completed.isoformat()))}
-    missing = [(completed - timedelta(days=offset)).isoformat() for offset in range(7) if (completed - timedelta(days=offset)).isoformat() not in present_days]
+    operational_end = target.target_date
+    present_days = {
+        row[0]
+        for row in db.execute(
+            "SELECT DISTINCT day FROM records WHERE day BETWEEN ? AND ?",
+            ((operational_end - timedelta(days=29)).isoformat(), completed.isoformat()),
+        )
+    }
+    missing = [
+        (operational_end - timedelta(days=offset)).isoformat()
+        for offset in range(7)
+        if (operational_end - timedelta(days=offset)).isoformat() not in present_days
+    ]
     category_coverage: Dict[str, dict] = {}
     for name in ("Activity", "Sleep", "Heart", "Respiratory", "Mobility", "Nutrition"):
         metric_types = sorted(CATEGORY_TYPES[name])
@@ -629,26 +721,26 @@ def build_snapshot(
         *([{"source": "iPhone Mirroring", "status": "Verified", "detail": override_meta.get("detail", f"Final operational-day values verified for {completed.isoformat()}"), "tone": "green"}] if override_meta else [{
             "source": "iPhone Mirroring",
             "status": "Unavailable",
-            "detail": f"No iPhone Mirroring overrides for operational target {completed.isoformat()}; export values stand alone.",
+            "detail": f"No iPhone Mirroring overrides for operational target {target.target_date.isoformat()}; export values stand alone.",
             "tone": "amber",
         }]),
         *([{"source": " Health Daily Note", "status": "Read", "detail": override_meta.get("noteDetail", f"Exact note contains a {completed.isoformat()} shortcut snapshot; direct Health values take precedence"), "tone": "amber"}] if override_meta else []),
         {
             "source": "Livity",
             "status": "Unavailable" if not override_meta.get("livity") else "Verified",
-            "detail": override_meta.get("livityDetail", f"Livity was not mirrored for {completed.isoformat()}; do not invent Livity values."),
+            "detail": override_meta.get("livityDetail", f"Livity was not mirrored for {target.target_date.isoformat()}; do not invent Livity values."),
             "tone": "amber" if not override_meta.get("livity") else "green",
         },
         {
             "source": "Lifesum",
             "status": "Unavailable" if not override_meta.get("lifesum") else "Verified",
-            "detail": override_meta.get("lifesumDetail", f"Lifesum was not mirrored for {completed.isoformat()}."),
+            "detail": override_meta.get("lifesumDetail", f"Lifesum was not mirrored for {target.target_date.isoformat()}."),
             "tone": "amber" if not override_meta.get("lifesum") else "green",
         },
         {
             "source": "Guava",
             "status": "Unavailable" if not override_meta.get("guava") else "Verified",
-            "detail": override_meta.get("guavaDetail", f"Guava was not mirrored for {completed.isoformat()}."),
+            "detail": override_meta.get("guavaDetail", f"Guava was not mirrored for {target.target_date.isoformat()}."),
             "tone": "amber" if not override_meta.get("guava") else "green",
         },
     ]

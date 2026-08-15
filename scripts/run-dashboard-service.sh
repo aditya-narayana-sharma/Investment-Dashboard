@@ -93,8 +93,15 @@ else
   printf '%s\n' '{"status":"failed","failures":1,"finishedAt":"","message":"Flask gateway did not become ready for the startup refresh audit."}' >"$ROOT_DIR/artifacts/private/startup-audit.json"
 fi
 
+UPSTREAM_FAILURES=0
 while kill -0 "$FLASK_PID" 2>/dev/null; do
-  if ! curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+  if ! curl -sf --max-time 8 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+    UPSTREAM_FAILURES=$((UPSTREAM_FAILURES + 1))
+    if (( UPSTREAM_FAILURES < 3 )); then
+      printf 'Upstream probe missed during load (%s/3); deferring restart.\n' "$UPSTREAM_FAILURES" >>"$LOG_DIR/service.log"
+      sleep 5
+      continue
+    fi
     printf 'Upstream down; restarting Vinext.\n' >>"$LOG_DIR/service.log"
     if [[ -n "$VINEXT_PID" ]]; then
       kill "$VINEXT_PID" 2>/dev/null || true
@@ -110,9 +117,13 @@ while kill -0 "$FLASK_PID" 2>/dev/null; do
       kill -0 "$VINEXT_PID" 2>/dev/null || break
       sleep 1
     done
+    UPSTREAM_FAILURES=0
   elif [[ -n "$VINEXT_PID" ]] && ! kill -0 "$VINEXT_PID" 2>/dev/null; then
     # Orphaned healthy listener (started outside this supervisor): keep serving.
     VINEXT_PID=""
+    UPSTREAM_FAILURES=0
+  else
+    UPSTREAM_FAILURES=0
   fi
   "$ROOT_DIR/scripts/ensure-kite-server.sh" >>"$LOG_DIR/kite.log" 2>&1 || true
   "$ROOT_DIR/scripts/ensure-content-digest-server.sh" >>"$LOG_DIR/content-digest.log" 2>&1 || true

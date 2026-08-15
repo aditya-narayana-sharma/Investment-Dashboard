@@ -9,6 +9,7 @@ import type { ContentDigestSnapshot } from "../content-types";
 import type { DashboardRefreshResult } from "../dashboard-types";
 import type { AllocationSlice, KiteSnapshot, LiveHolding } from "../live-types";
 import { dedupeAxisCallsBySymbol } from "../axis-holding-trading-calls";
+import { axisImpliedUpsidePct, completeAxisPicks } from "../axis-pick-metrics";
 import { sortDonutHoldings } from "../portfolio-donut";
 import { sectorCompanies } from "../sector-company-data";
 import { macroDials, sectorImpactRows, squeezeWidths, type ImpactSignal } from "../sector-analytics-data";
@@ -45,6 +46,13 @@ const signalMark: Record<ImpactSignal, { mark: string; label: string; tone: stri
 };
 
 type PrintableSlice = { name: string; weight: number; color: string };
+
+function chunkItems<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return [[]];
+  const chunks: T[][] = [];
+  for (let offset = 0; offset < items.length; offset += size) chunks.push(items.slice(offset, offset + size));
+  return chunks;
+}
 
 async function choosePdfSaveHandle(filename: string) {
   const savePicker = (window as Window & {
@@ -197,8 +205,8 @@ export default function Report() {
     if (downloadAfterRefresh) setPreparedDownload(null);
     try {
       const [completeResponse, ...sectorResponses] = await Promise.all([
-        fetch(`/api/dashboard/refresh?report=${Date.now()}`, { cache: "no-store" }),
-        ...Object.keys(sectorCompanies).map((sectorId) => fetch(`/api/sectors/snapshot?sector=${encodeURIComponent(sectorId)}&report=${Date.now()}`, { cache: "no-store" })),
+        fetch(`/api/dashboard/refresh?report=${Date.now()}`, { cache: "no-store", signal: AbortSignal.timeout(90_000) }),
+        ...Object.keys(sectorCompanies).map((sectorId) => fetch(`/api/sectors/snapshot?sector=${encodeURIComponent(sectorId)}&report=${Date.now()}`, { cache: "no-store", signal: AbortSignal.timeout(90_000) })),
       ]);
       const complete = await completeResponse.json() as DashboardRefreshResult;
       const latest = complete.kite;
@@ -394,14 +402,16 @@ export default function Report() {
   const latestReported = earningsCalendar.filter((event) => event.reported).at(-1);
   const latestPortfolioResult = earningsCalendar.filter((event) => event.reported && currentSymbols.has(event.symbol)).at(-1);
   const kiteBySymbol = new Map(holdings.filter((holding) => holding.price > 0).map((holding) => [holding.symbol, holding.price] as const));
-  const mailCalls = dedupeAxisCallsBySymbol(
-    content.investment.axisRecommendations.filter((call) => call.target != null && call.target > 0),
-  ).map((call) => ({ symbol: call.symbol, house: `${call.source} / iCloud Axis Research`, rating: call.call, target: call.target!, implied: 0, date: call.date, thesis: call.thesis }));
-  const liveAnalystCalls = [...mailCalls, ...analystCalls.filter((call) => !mailCalls.some((axis) => axis.symbol === call.symbol))].map((call) => {
+  const completeAxisCalls = completeAxisPicks(content.investment.axisRecommendations, kiteBySymbol, yfinanceBySymbol);
+  const mailCalls = dedupeAxisCallsBySymbol(completeAxisCalls)
+    .map((call) => ({ symbol: call.symbol, house: `${call.source} / iCloud Axis Research`, rating: call.call, target: call.target, cmp: call.cmp, date: call.date, thesis: call.thesis }));
+  const liveAnalystCalls = [...mailCalls, ...analystCalls.filter((call) => !mailCalls.some((axis) => axis.symbol === call.symbol))].flatMap((call) => {
     const kite = kiteBySymbol.get(call.symbol);
     const yf = yfinanceBySymbol.get(call.symbol);
-    const cmp = kite != null && kite > 0 ? kite : yf != null && yf > 0 ? yf : null;
-    return { ...call, cmp, implied: cmp ? (call.target / cmp - 1) * 100 : call.implied };
+    const sourceCmp = "cmp" in call && typeof call.cmp === "number" ? call.cmp : null;
+    const cmp = kite != null && kite > 0 ? kite : yf != null && yf > 0 ? yf : sourceCmp;
+    const implied = axisImpliedUpsidePct(call.target, cmp);
+    return cmp != null && implied != null ? [{ ...call, cmp, implied }] : [];
   });
   const byOil = holdings.slice().sort((left, right) => right.oil - left.oil);
   const byFlow = holdings.slice().sort((left, right) => right.flow - left.flow);
@@ -415,6 +425,18 @@ export default function Report() {
     medium: holdings.filter((holding) => holding.risk.toLowerCase().includes("medium") && !holding.risk.toLowerCase().includes("low")).map((holding) => holding.name),
     higher: holdings.filter((holding) => holding.risk.toLowerCase().includes("high")).map((holding) => holding.name),
   };
+  const analystCallChunks = chunkItems(liveAnalystCalls, 12);
+  const podcastEntries = content.podcasts.length
+    ? content.podcasts.map((item) => [item.source, item.summary] as const)
+    : podcastNotes;
+  const podcastChunks = podcastEntries.length <= 4
+    ? [podcastEntries]
+    : [podcastEntries.slice(0, 4), ...chunkItems(podcastEntries.slice(4), 8)];
+  const analystStartPage = 5;
+  const earningsPage = analystStartPage + analystCallChunks.length;
+  const digestStartPage = earningsPage + 1;
+  const sectorPage = digestStartPage + podcastChunks.length;
+  const actionPage = sectorPage + 1;
 
   return <main className={styles.report}>
     <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span className={styles.liveStamp}><CheckCircle2 size={15}/> Live Kite · {asOf}</span><button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><Download size={15}/>{refreshing ? "Exporting report" : "Export Report"}</button></nav>
@@ -438,7 +460,7 @@ export default function Report() {
         <div className={`${styles.chartBox} ${styles.nestedChartBox}`}><h3>Nested live portfolio allocation</h3><PrintNestedDonut holdings={holdings} marketCap={snapshot.marketCapAllocation} sectors={snapshot.sectorAllocation} subSectors={snapshot.subSectorAllocation} value={portfolio.value} pnl={portfolio.pnl} pnlPct={portfolio.pnlPct}/><p className={styles.classificationNote}>Verified industry · sub-sector from company disclosures · {snapshot.classification.industrySource} · {snapshot.classification.marketCapSource} · as of {snapshot.classification.asOf}</p></div>
         <div className={styles.chartBox}><h3>Concentration diagnostic</h3>{holdings.map(h=><div className={styles.barRow} key={h.symbol}><span>{h.symbol}</span><div><i style={{width:`${h.weight*2.2}%`,background:h.color}}/></div><b>{h.weight.toFixed(1)}%</b></div>)}<Callout tone="amber" title="Risk flag">ICICI Bank and Eternal together represent {portfolio.topTwo.toFixed(1)}% of current value. Diversification should be achieved primarily through new capital.</Callout></div>
       </div>
-      <table><thead><tr><th>Holding</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>P&amp;L</th><th>Weight</th><th>Risk</th></tr></thead><tbody>{holdings.map(h=><tr key={h.symbol}><td><b>{h.name}</b><small>Industry: {h.sector} · Sub-sector: {h.subSector} · AMFI: {h.marketCap}</small></td><td>{h.qty}</td><td>{inr.format(h.avg)}</td><td>{inr.format(h.price)}</td><td>{inr.format(h.value)}</td><td className={h.pnl>=0?styles.pos:styles.neg}>{h.pnl>=0?"+":""}{inr.format(h.pnl)}<small>{h.pnlPct.toFixed(2)}%</small></td><td>{h.weight.toFixed(1)}%</td><td><Risk value={h.risk}/></td></tr>)}</tbody></table>
+      <table className={styles.compactTable}><thead><tr><th>Holding</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>P&amp;L</th><th>Weight</th><th>Risk</th></tr></thead><tbody>{holdings.map(h=><tr key={h.symbol}><td><b>{h.name}</b><small>Industry: {h.sector} · Sub-sector: {h.subSector} · AMFI: {h.marketCap}</small></td><td>{h.qty}</td><td>{inr.format(h.avg)}</td><td>{inr.format(h.price)}</td><td>{inr.format(h.value)}</td><td className={h.pnl>=0?styles.pos:styles.neg}>{h.pnl>=0?"+":""}{inr.format(h.pnl)}<small>{h.pnlPct.toFixed(2)}%</small></td><td>{h.weight.toFixed(1)}%</td><td><Risk value={h.risk}/></td></tr>)}</tbody></table>
     </section>
 
     <section className={styles.page}><PageHeader section="Quarter outlook" page={3} asOf={asOf}/>
@@ -461,15 +483,13 @@ export default function Report() {
       <Callout title="FII/DII context">On 10 July, provisional flows were positive: FII +₹2,603.72 crore and DII +₹2,019.68 crore. NSE Market Pulse shows domestic mutual-fund ownership at a record 11.4%, which cushions volatility but does not eliminate oil-INR drawdown risk.</Callout>
     </section>
 
-    <section className={styles.page}><PageHeader section="Analyst positioning" page={5} asOf={asOf}/>
-      <h1 className={styles.title}>4. Analyst recommendations</h1><p className={styles.deck}>Targets are expectations anchors. They are not live fair values and can change after results, macro shocks or model revisions.</p>
-      <table className={styles.roomy}><thead><tr><th>Stock</th><th>House / source</th><th>Rating</th><th>CMP</th><th>Target</th><th>Implied</th><th>Evidence and caveat</th></tr></thead><tbody>{liveAnalystCalls.map(a=><tr key={a.symbol}><td><b>{a.symbol}</b></td><td>{a.house}<small>{a.date} 2026</small></td><td><span className={`${styles.pill} ${styles.blue}`}>{a.rating}</span></td><td>{a.cmp != null ? inr.format(a.cmp) : "—"}</td><td>{inr.format(a.target)}</td><td className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</td><td>{a.thesis}</td></tr>)}</tbody></table>
-      <div className={styles.targetBars}>{liveAnalystCalls.map(a=><div key={a.symbol}><span>{a.symbol}</span><div><i className={a.implied<0?styles.down:undefined} style={{width:`${Math.max(3,Math.min(100,Math.abs(a.implied)*2.6))}%`}}/></div><b className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</b></div>)}</div>
-      <div className={styles.twoCol}><Callout title="Price basis">CMP prefers Kite last price when the symbol is held; otherwise a yfinance delayed NSE quote. Implied upside uses that CMP. Em dash only when both quotes are unavailable.</Callout><Callout tone="amber" title="Weakest current target signal">{weakestCall ? `${weakestCall.symbol}: ${weakestCall.implied>=0?"+":""}${weakestCall.implied.toFixed(1)}% implied versus CMP.` : "No analyst target is currently mapped."} Treat targets as expectations anchors, not trade instructions.</Callout></div>
-      <Callout tone="blue" title="NSE source role">NSE is the primary source for corporate filings, board meetings, financial results and market/flow data. It does not publish buy/sell recommendations.</Callout>
-    </section>
+    {analystCallChunks.map((calls, chunkIndex) => <section className={styles.page} key={`analyst-${chunkIndex}`}><PageHeader section="Analyst positioning" page={analystStartPage + chunkIndex} asOf={asOf}/>
+      <h1 className={styles.title}>{chunkIndex === 0 ? "4. Analyst recommendations" : "4. Analyst recommendations · continued"}</h1><p className={styles.deck}>Targets are expectations anchors. They are not live fair values and can change after results, macro shocks or model revisions. Showing {calls.length} of {liveAnalystCalls.length} complete CMP-and-target calls on this page.</p>
+      <table className={styles.roomy}><thead><tr><th>Stock</th><th>House / source</th><th>Rating</th><th>CMP</th><th>Target</th><th>Implied</th><th>Evidence and caveat</th></tr></thead><tbody>{calls.map(a=><tr key={`${a.symbol}-${a.rating}-${a.date}`}><td><b>{a.symbol}</b></td><td>{a.house}<small>{a.date} 2026</small></td><td><span className={`${styles.pill} ${styles.blue}`}>{a.rating}</span></td><td>{a.cmp != null ? inr.format(a.cmp) : "—"}</td><td>{inr.format(a.target)}</td><td className={a.implied>=0?styles.pos:styles.neg}>{a.implied>=0?"+":""}{a.implied.toFixed(1)}%</td><td>{a.thesis}</td></tr>)}</tbody></table>
+      {chunkIndex === analystCallChunks.length - 1 && <><div className={styles.twoCol}><Callout title="Price basis">CMP prefers Kite last price when the symbol is held; otherwise a yfinance delayed NSE quote. Implied upside uses that CMP. Em dash only when both quotes are unavailable.</Callout><Callout tone="amber" title="Weakest current target signal">{weakestCall ? `${weakestCall.symbol}: ${weakestCall.implied>=0?"+":""}${weakestCall.implied.toFixed(1)}% implied versus CMP.` : "No analyst target is currently mapped."} Treat targets as expectations anchors, not trade instructions.</Callout></div><Callout tone="blue" title="NSE source role">NSE is the primary source for corporate filings, board meetings, financial results and market/flow data. It does not publish buy/sell recommendations.</Callout></>}
+    </section>)}
 
-    <section className={styles.page}><PageHeader section="Catalysts and activity" page={6} asOf={asOf}/>
+    <section className={styles.page}><PageHeader section="Catalysts and activity" page={earningsPage} asOf={asOf}/>
       <h1 className={styles.title}>5. Earnings, orders and GTTs</h1><p className={styles.deck}>Catalyst calendar from Apple Calendar; order state from authenticated Kite MCP.</p>
       <div className={styles.calendarHero}><span>{latestPortfolioResult?.day ?? latestReported?.day ?? "—"}</span><div><small>JULY · LATEST VERIFIED PORTFOLIO RESULT</small><h2>{latestPortfolioResult?.name ?? latestReported?.name ?? "No verified result"} {latestPortfolioResult?.period ?? latestReported?.period ?? ""}</h2><p>{latestPortfolioResult?.summary ?? latestReported?.summary ?? "Pending calendar rows remain blank until a verified result is published."}</p></div></div>
       <Callout tone="green" title="Latest earnings evidence">{latestReported ? `${latestReported.name} reported ${latestReported.period} on ${latestReported.date}. ${latestReported.summary ?? "The verified KPI row is included in the dashboard earnings workbench."}` : "No verified reported event is available in the current calendar snapshot."}</Callout>
@@ -477,14 +497,17 @@ export default function Report() {
       <Callout tone="amber" title="Liquidity constraint">Latest available equity margin is {inr.format(portfolio.equityMargin)}. Any action framework must respect current broker cash and avoid treating analyst upside as deployable capacity.</Callout>
     </section>
 
-    <section className={styles.page}><PageHeader section="Briefings and podcasts" page={7} asOf={asOf}/>
-      <h1 className={styles.title}>6. Local research digest</h1><p className={styles.deck}>The exact iCloud Axis Research and Newsletters mailboxes were refreshed through {mailDate} at {content.asOf}.</p>
-      <div className={styles.mailGrid}>{content.axisResearch.slice(0,2).map((item,index)=><Callout key={`${item.time}-${item.title}`} tone={index===0?"green":"blue"} title={item.title}>{item.summary}</Callout>)}{content.newsletters.slice(0,1).map((item)=><Callout key={`${item.time}-${item.title}`} tone="amber" title={item.title}>{item.summary}</Callout>)}</div>
-      <h2 className={styles.subTitle}>Podcast library through {mailDate}</h2><div className={styles.podcastList}>{(content.podcasts.length ? content.podcasts.map((item) => [item.source, item.summary] as const) : podcastNotes).map(([name,note],i)=><div key={`${name}-${i}`}><span>{String(i+1).padStart(2,"0")}</span><div><b>{name}</b><p>{note}</p></div></div>)}</div>
-      <Callout tone="blue" title="Transcript limitation">Podcast summaries use locally available episode descriptions or transcripts. Permission failures remain explicit and are never replaced with fabricated summaries.</Callout>
-    </section>
+    {podcastChunks.map((entries, chunkIndex) => {
+      const priorCount = podcastChunks.slice(0, chunkIndex).reduce((sum, chunk) => sum + chunk.length, 0);
+      return <section className={styles.page} key={`podcasts-${chunkIndex}`}><PageHeader section="Briefings and podcasts" page={digestStartPage + chunkIndex} asOf={asOf}/>
+        <h1 className={styles.title}>{chunkIndex === 0 ? "6. Local research digest" : "6. Podcast library · continued"}</h1><p className={styles.deck}>{chunkIndex === 0 ? `The exact iCloud Axis Research and Newsletters mailboxes were refreshed through ${mailDate} at ${content.asOf}.` : `${podcastEntries.length} eligible local podcast descriptions or transcripts through ${mailDate}.`}</p>
+        {chunkIndex === 0 && <div className={styles.mailGrid}>{content.axisResearch.slice(0,2).map((item,index)=><Callout key={`${item.time}-${item.title}`} tone={index===0?"green":"blue"} title={item.title}>{item.summary}</Callout>)}{content.newsletters.slice(0,1).map((item)=><Callout key={`${item.time}-${item.title}`} tone="amber" title={item.title}>{item.summary}</Callout>)}</div>}
+        <h2 className={styles.subTitle}>Podcast library through {mailDate}</h2><div className={styles.podcastList}>{entries.map(([name,note],entryIndex)=><div key={`${name}-${priorCount + entryIndex}`}><span>{String(priorCount + entryIndex + 1).padStart(2,"0")}</span><div><b>{name}</b><p>{note}</p></div></div>)}</div>
+        {chunkIndex === podcastChunks.length - 1 && <Callout tone="blue" title="Transcript limitation">Podcast summaries use locally available episode descriptions or transcripts. Permission failures remain explicit and are never replaced with fabricated summaries.</Callout>}
+      </section>;
+    })}
 
-    <section className={styles.page}><PageHeader section="Sectoral Analytics" page={8} asOf={asOf}/>
+    <section className={styles.page}><PageHeader section="Sectoral Analytics" page={sectorPage} asOf={asOf}/>
       <h1 className={styles.title}>7. Sector impact and market dials</h1><p className={styles.deck}>A compact cross-sector decision matrix. Signals are directional research lenses, not return forecasts; the dashboard contains the linked interactive views.</p>
       <div className={styles.sectorSignalKey}>{Object.values(signalMark).map((signal) => <span key={signal.label} className={styles[signal.tone]}><b>{signal.mark}</b>{signal.label}</span>)}</div>
       <table className={styles.sectorMatrix}><thead><tr><th>Sector / stance</th><th>Sub-sectors</th><th>Crude</th><th>INR</th><th>Rates</th><th>Monsoon</th><th>AI capex</th><th>Earnings</th><th>Current read</th></tr></thead><tbody>{sectorImpactRows.map((row) => <tr key={row.id} style={{"--row-color": row.color} as React.CSSProperties}><td><b>{row.name}</b><small>{row.stance}</small></td><td>{row.subsectors.slice(0,4).join(" · ")}</td>{([row.crude,row.inr,row.rates,row.monsoon,row.aiCapex,row.earnings] as ImpactSignal[]).map((signal,index) => <td key={`${row.id}-${index}`} className={styles[signalMark[signal].tone]} title={signalMark[signal].label}>{signalMark[signal].mark}</td>)}<td>{row.read}</td></tr>)}</tbody></table>
@@ -494,7 +517,7 @@ export default function Report() {
       </div>
     </section>
 
-    <section className={styles.page}><PageHeader section="Action framework and sources" page={9} asOf={asOf}/>
+    <section className={styles.page}><PageHeader section="Action framework and sources" page={actionPage} asOf={asOf}/>
       <h1 className={styles.title}>8. Portfolio action framework</h1><p className={styles.deck}>Decision triggers designed to improve concentration, oil resilience and catalyst discipline without issuing trade instructions.</p>
       <table className={styles.roomy}><thead><tr><th>Priority</th><th>Current condition</th><th>Trigger</th><th>Framework response</th></tr></thead><tbody>
         <tr><td><b>1 · Concentration</b></td><td>Top two = {portfolio.topTwo.toFixed(1)}%</td><td>Any new capital</td><td>Direct additions toward differentiated exposure before increasing the largest positions.</td></tr><tr><td><b>2 · Oil</b></td><td>Highest current sensitivity: {mostOilSensitive?.name ?? "n/a"}</td><td>&gt;$90 for two weeks</td><td>Re-underwrite the highest-oil current holding&apos;s margin and valuation assumptions.</td></tr><tr><td><b>3 · Stress</b></td><td>Hormuz unresolved</td><td>Brent &gt;$100 plus INR weakness</td><td>Prioritise liquidity and pause high-beta additions.</td></tr><tr><td><b>4 · Earnings</b></td><td>{latestPortfolioResult?.name ?? "Portfolio holdings"}</td><td>{latestPortfolioResult ? `${latestPortfolioResult.date} result` : "Next verified filing"}</td><td>Focus on reported operating KPIs, guidance and cash conversion before changing conviction.</td></tr><tr><td><b>5 · Flow</b></td><td>Latest Mail and market context</td><td>Persistent FII selling without DII absorption</td><td>Reduce confidence in valuation-driven upside scenarios.</td></tr>

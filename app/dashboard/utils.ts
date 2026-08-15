@@ -84,6 +84,7 @@ export const fallbackContent: ContentDigestSnapshot = {
     latestAxisAt: "Unavailable",
     latestNewsletterAt: "Unavailable",
     axisRecommendations: [],
+    axisTargetAchievements: [],
     macroEvidence: ["oilWar", "flows", "rates", "breadth", "earnings"].map((key) => ({ key: key as MacroEventKey, count: 0, latestTitle: "Mail unavailable", latestAt: "—", items: [] })),
   },
   sources: {

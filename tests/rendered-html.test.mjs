@@ -37,6 +37,19 @@ test("portfolio concentration return colors keep neutral boundary values", () =>
   assert.equal(portfolioReturnTone(-0.5001), "loss");
 });
 
+test("portfolio concentration tiles preserve complete primary labels", async () => {
+  const [workspace, globalCss] = await Promise.all([
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspace, /function worstAspect\(/);
+  assert.match(workspace, /const density = .*"micro".*"compact".*"roomy"/);
+  assert.match(workspace, /<b title=\{holding\.symbol\}>\{holding\.symbol\}<\/b>/);
+  assert.match(globalCss, /\.portfolio-map-tile\s*\{[^}]*container-type:size/s);
+  assert.doesNotMatch(globalCss, /\.portfolio-map-primary b\s*\{[^}]*text-overflow:ellipsis/s);
+  assert.match(globalCss, /\.portfolio-map-tile\.micro \.portfolio-map-primary b/);
+});
+
 test("Kite ticker orders require an exact reviewed confirmation before place_order", async () => {
   const [workspace, ticket, route, server, page] = await Promise.all([
     readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
@@ -46,11 +59,14 @@ test("Kite ticker orders require an exact reviewed confirmation before place_ord
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(workspace, />BUY<\/button>.*>SELL<\/button>/);
+  assert.match(workspace, />Create NSE order<\/button>/);
   assert.match(workspace, /disabled=\{!isLive\}/);
   assert.match(ticket, /reviewed && confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
-  assert.match(ticket, /`Place \$\{selection\.side\} order`/);
+  assert.match(ticket, /`Place \$\{side\} order`/);
   assert.match(route, /expectedConfirmation = `\$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("place_order"/);
+  assert.match(server, /requireKiteCashInstrument\(symbol, "NSE"\)/);
+  assert.match(ticket, /useKiteInstrumentLookup\(normalizedSymbol, "NSE"\)/);
   assert.match(page, /orders, GTTs\/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation/);
 });
 
@@ -71,6 +87,8 @@ test("Portfolio activity GTT and TSL creates require reviewed confirmation befor
   assert.match(route, /expectedConfirmation = `\$\{label\} \$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("create_gtt"/);
   assert.match(server, /confirm: true/);
+  assert.match(ticket, /Reference last price/);
+  assert.match(server, /last_price: order\.lastPrice/);
 });
 
 test("Portfolio activity price alerts require reviewed confirmation before create_alert", async () => {
@@ -98,7 +116,7 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
 test("nested portfolio allocation markup remains protected", async () => {
   const investmentWorkspace = await readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8");
   const start = investmentWorkspace.indexOf('<section className="panel chart-panel nested-chart-panel">');
-  const end = investmentWorkspace.indexOf('<div className="portfolio-analysis-stack">', start);
+  const end = investmentWorkspace.indexOf('<section className="portfolio-management"', start);
   assert.ok(start >= 0 && end > start, "protected donut JSX boundaries must exist");
   const donutMarkup = investmentWorkspace.slice(start, end).replaceAll("\r\n", "\n");
   assert.equal(createHash("sha256").update(donutMarkup).digest("hex"), "68d6cfd01caad0bde086d7e973cc1ef820e5475f067954d5ec936bf567a7827b");
@@ -146,6 +164,9 @@ test("Market Intelligence digests collapse newsletters by sender and Axis by top
   assert.match(intelligenceWorkspace, /axisTopicFromTitle|topicGroup/);
   assert.match(intelligenceWorkspace, /Open in Mail/);
   assert.match(intelligenceWorkspace, /Open PDF/);
+  assert.match(intelligenceWorkspace, /axisResearch=\{layout === "axis"\}/);
+  assert.match(intelligenceWorkspace, /axis-open-pdf/);
+  assert.match(intelligenceWorkspace, /axisResearch && <DigestSourceLinks[\s\S]*?<WaveformStrip/);
   assert.match(intelligenceWorkspace, /Open in Podcasts/);
   assert.match(intelligenceWorkspace, /DigestSourceLinks/);
   assert.match(intelligenceWorkspace, /return "Description"/);
@@ -161,11 +182,14 @@ test("Market Intelligence digests collapse newsletters by sender and Axis by top
   assert.match(contentServer, /mailMessageUrl\(/);
   assert.match(contentServer, /matchAxisResearchPdf\(/);
   assert.match(contentServer, /axisTopicGroup\(/);
+  assert.match(contentServer, /\(\[\?&\]\[A-Za-z\]\[A-Za-z0-9_-\]\*\)=\\r\?\\n/);
   assert.match(contentServer, /preferApplePodcastsEpisodeUrl\(/);
   assert.match(contentServer, /deduplicatePodcastEpisodes\(/);
   assert.match(pdfRoute, /application\/pdf/);
   assert.match(pdfRoute, /AXIS_PDF_ARCHIVE_PATH|Downloads\/Axis Research/);
   assert.match(globalCss, /\.digest-source-link\s*\{/);
+  assert.match(globalCss, /\.digest-source-link\.axis-open-pdf\s*\{/);
+  assert.match(globalCss, /min-height:42px/);
   assert.match(globalCss, /\.podcast-insight-card\.outcome-positive/);
   assert.match(globalCss, /\.podcast-insight-card\.sentiment-negative/);
 });
@@ -506,8 +530,15 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /aria-pressed=\{selected\}/);
   assert.match(page, /onMouseEnter=\{\(\) => setEngagedHoldingSymbol\(holding\.symbol\)\}/);
   assert.match(page, /className=\{activeHoldingSymbol === holding\.symbol \? "holding-column-active"/);
-  assert.match(globalCss, /\.portfolio-analysis-grid\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*align-items:stretch/s);
-  assert.match(globalCss, /\.portfolio-analysis-stack\s*\{[^}]*grid-template-rows:auto minmax\(0,1fr\)/s);
+  assert.match(globalCss, /\.portfolio-analysis-grid\s*\{[^}]*grid-template-columns:minmax\(0,7fr\) minmax\(0,3fr\)[^}]*grid-template-areas:"allocation management" "activity concentration"[^}]*align-items:stretch/s);
+  assert.match(globalCss, /\.portfolio-analysis-grid>\.portfolio-management\s*\{[^}]*grid-area:management[^}]*grid-template-rows:auto minmax\(0,1fr\) auto/s);
+  assert.match(globalCss, /\.portfolio-analysis-grid>\.portfolio-activity-panel\s*\{\s*grid-area:activity/);
+  assert.match(globalCss, /\.portfolio-analysis-grid>\.portfolio-map-panel\s*\{\s*grid-area:concentration/);
+  const allocationIndex = page.indexOf('className="panel chart-panel nested-chart-panel"');
+  const managementIndex = page.indexOf('className="portfolio-management"', allocationIndex);
+  const activityIndex = page.indexOf('className="panel holdings-panel portfolio-activity-panel spectrum-sheet"', managementIndex);
+  const mapIndex = page.indexOf('className="panel portfolio-map-panel gravity-well"', activityIndex);
+  assert.ok(allocationIndex >= 0 && allocationIndex < managementIndex && managementIndex < activityIndex && activityIndex < mapIndex, "I-2 follows allocation, management, activity and concentration-map source order");
   assert.match(globalCss, /\.portfolio-activity-mobile\s*\{\s*display:none/);
   assert.match(globalCss, /@media \(max-width:620px\)[\s\S]*\.portfolio-activity-table\s*\{\s*display:none;\s*\}[\s\S]*\.portfolio-activity-mobile\s*\{\s*display:grid/);
   assert.doesNotMatch(reportPage, /Portfolio concentration map/);
@@ -627,7 +658,17 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /\["Earnings","Work\/Jobs","Personal","Other"\]/);
   assert.match(page, /function EarningsMonthCalendar/);
   assert.match(page, /function dayKpiSlots/);
-  assert.match(page, /showPerRowLabel/);
+  assert.match(page, /unique\.join\(" \/ "\)/);
+  assert.doesNotMatch(page, /kpi-row-label/);
+  assert.match(page, /function kpiOutcome/);
+  assert.match(page, /tone === "green"[\s\S]*?className: "positive"/);
+  assert.match(page, /tone === "red"[\s\S]*?className: "negative"/);
+  assert.match(page, /className: "neutral"/);
+  assert.match(page, /\$\{outcome\.label\} outcome:/);
+  assert.match(page, /earnings-outcome-legend/);
+  assert.match(page, />\+VE</);
+  assert.match(page, />NEUTRAL</);
+  assert.match(page, />−VE</);
   assert.match(page, /event\.kpis\[column\.index\]/);
   assert.match(page, /earnings-month-grid/);
   assert.match(page, /KPI analysis/);
@@ -644,7 +685,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(contentServer, /content-only summary bullets/i);
   assert.match(globalCss, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(globalCss, /earnings-month-grid/);
-  assert.match(globalCss, /kpi-row-label/);
+  assert.doesNotMatch(globalCss, /kpi-row-label/);
+  assert.match(globalCss, /td\.kpi-outcome-positive \.kpi-outcome-change/);
+  assert.match(globalCss, /td\.kpi-outcome-neutral \.kpi-outcome-change/);
+  assert.match(globalCss, /td\.kpi-outcome-negative \.kpi-outcome-change/);
   assert.match(globalCss, /\.intelligence-feed-stack\s*\{[^}]*display:grid;/s);
   assert.match(globalCss, /\.intelligence-feed-stack\.topic-feed[\s\S]*?column-count:\s*auto\s*!important/s);
   assert.match(page, /intelligence-feed-stack agenda-ribbon triptych-command/);
@@ -741,9 +785,21 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Progress to target/);
   assert.match(page, /CMP ÷ Axis target \(capped 100%\)|Kite CMP ÷ Axis target|yfinance CMP ÷ Axis target/);
   assert.match(page, /axis-pick-cmp/);
+  assert.match(page, /axis-pick-backdrop|aria-modal="true"/);
+  assert.match(page, /Group by|analyst-group-by|AnalystGroupMode|groupAnalystRows/);
+  assert.match(page, /value="target-achieved">Target achieved/);
+  assert.match(page, /collapsedAnalystGroups|toggleAnalystGroup/);
+  assert.match(page, /aria-expanded=\{!isCollapsed\}/);
+  assert.match(page, /Plain BUY variants resolve to one BUY category/);
+  assert.match(page, /axisTargetAchievements/);
+  assert.match(globalCss, /\.analyst-group-block\.collapsed \.analyst-group-title svg/);
+  assert.doesNotMatch(page, /WINDOW MAIL/);
   assert.match(page, /mergeHoldingTradingCalls|dedupeAxisCallsBySymbol|axisHoldingTradingCalls|AXIS_HOLDING_TRADING_SYMBOLS/);
   assert.match(page, /ETERNAL|ICICIBANK|JSWENERGY|BHARTIARTL/);
   assert.match(globalCss, /\.axis-pick-list button \{[^}]*flex-direction:column/);
+  assert.match(globalCss, /\.axis-visual-grid \{[^}]*grid-template-columns:1fr/);
+  assert.match(globalCss, /\.axis-pick-backdrop/);
+  assert.match(globalCss, /\.analyst-matrix-controls/);
   assert.match(globalCss, /\.axis-target-line/);
   assert.match(globalCss, /\.axis-target-progress/);
   assert.match(globalCss, /\.axis-pick-cmp/);
@@ -806,6 +862,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(packageJson, /"jspdf"/);
   assert.doesNotMatch(globalCss, /@import "tailwindcss"/);
   assert.match(reportPage, /document\.head\.cloneNode\(true\)/);
+  assert.match(reportPage, /AbortSignal\.timeout\(90_000\)/);
   assert.match(reportPage, /querySelectorAll\("script"\)/);
   assert.match(reportPage, /JSON\.stringify\(\{ pages: pageDocuments \}\)/);
   assert.match(reportPage, /reportPages\.map\(\(page\) => page\.outerHTML\)\.join\(""\)/);
@@ -826,6 +883,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(reportDownloadRoute, /savedToDownloads: false/);
   assert.match(reportDownloadRoute, /http:\/\/127\.0\.0\.1:3002\/render/);
   assert.match(reportDownloadServer, /--headless=new/);
+  assert.match(reportDownloadServer, /\/Applications\/Browsers\/Google Chrome\.app\/Contents\/MacOS\/Google Chrome/);
   assert.match(reportDownloadServer, /--print-to-pdf=/);
   assert.match(reportDownloadServer, /-sDEVICE=pdfwrite/);
   assert.match(reportDownloadServer, /join\(workingDirectory, filename\)/);
@@ -998,6 +1056,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Latest refresh failed; retaining the last validated values/);
   assert.match(liveServer, /callKiteTool\("get_holdings"\)/);
   assert.match(liveServer, /callKiteTool\("get_positions"\)/);
+  assert.match(liveServer, /netPositionsFromKitePayload\(positionsRaw\)/);
   assert.match(liveServer, /callKiteTool\("get_orders"\)/);
   assert.match(liveServer, /callKiteTool\("get_gtts"\)/);
   assert.match(liveServer, /settledQty \+ t1Qty \+ mtfQty/);
@@ -1257,6 +1316,9 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /\.digest-panel\.briefing-rail \.evidence-chip:not\(\.focused\)[\s\S]*?opacity:\s*1/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.orbital-planet \.nested-chart-panel[\s\S]*var\(--bg-panel\) !important/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.risk-panel\.threat-flower[\s\S]*var\(--bg-panel\) !important/);
+  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-selector button \{[^}]*min-width:\s*78px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*620px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.axis-risk-stack/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-workbench\.scenario-weather \.macro-event-tabs button\.active/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.lifecycle-panel\.evolution-river \.chart-wrap/);
 });

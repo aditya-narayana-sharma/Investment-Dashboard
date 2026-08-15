@@ -14,6 +14,8 @@ export const companySymbols = [
   ["Tech Mahindra", "TECHM"], ["L&T Technology Services", "LTTS"], ["LTIMindtree", "LTIM"],
   ["Avenue Supermarts", "DMART"], ["R Systems International", "RSYSTEMS"], ["R Systems", "RSYSTEMS"],
   ["Ujjivan Small Finance Bank", "UJJIVANSFB"],
+  ["CreditAccess Grameen", "CREDITACC"], ["Credit Access Grameen", "CREDITACC"],
+  ["Manappuram Finance", "MANAPPURAM"],
   ["Axis Bank", "AXISBANK"], ["Global Health", "MEDANTA"], ["Bandhan Bank", "BANDHANBNK"],
   ["Max Healthcare", "MAXHEALTHCARE"], ["Bajaj Auto", "BAJAJ-AUTO"], ["Bharat Petroleum", "BPCL"], ["UltraTech Cement", "ULTRACEMCO"],
   ["Steel Strips Wheels", "SSWL"], ["Wipro", "WIPRO"], ["Star Cement", "STARCEMENT"],
@@ -24,6 +26,20 @@ export const companySymbols = [
   ["Indian Hotels Company", "INDHOTEL"], ["Indian Hotels", "INDHOTEL"],
   ["J K Cement", "JKCEMENT"], ["JK Cement", "JKCEMENT"],
   ["Can Fin Homes", "CANFINHOME"],
+  ["Cholamandalam", "CHOLAFIN"], ["Oberoi Realty", "OBEROIRLTY"], ["Trent", "TRENT"],
+  ["Minda Corporation", "MINDACORP"], ["Shriram Pistons & Rings", "SHRIPISTON"], ["Bharat Forge", "BHARATFORG"],
+  ["V-Mart Retail", "VMART"], ["Varun Beverages", "VBL"], ["Elecon Engineering", "ELECON"],
+  ["City Union Bank", "CUB"], ["CCL Products", "CCL"], ["Krishna Institute Of Medical Sciencs", "KIMS"],
+  ["Krishna Institute Of Medical Sciences", "KIMS"], ["Biocon", "BIOCON"], ["PSP Project", "PSPPROJECT"],
+  ["Prince Pipes and Fittings", "PRINCEPIPE"], ["Mold-Tek Packaging", "MOLDTKPAC"], ["Mold Tek Packaging", "MOLDTKPAC"],
+  ["G R Infraprojects", "GRINFRA"], ["Tata Steel", "TATASTEEL"], ["Equitas Small Finance Bank", "EQUITASBNK"],
+  ["Bajel Projects", "BAJEL"], ["KSH International", "KSHINTL"], ["Orient Electric", "ORIENTELEC"],
+  ["Greenply Industries", "GREENPLY"], ["Ashok Leyland", "ASHOKLEY"], ["Skipper", "SKIPPER"],
+  ["Automotive Axles", "AUTOAXLES"], ["Federal Bank", "FEDERALBNK"], ["Welspun Corp", "WELCORP"],
+  ["Astral", "ASTRAL"], ["State Bank of India", "SBIN"], ["Nippon Life India Asset Management", "NAM-INDIA"],
+  ["NTPC", "NTPC"], ["Jindal Steel", "JINDALSTEL"], ["Hindalco Industries", "HINDALCO"],
+  ["Moil", "MOIL"], ["Sagility", "SAGILITY"], ["Navin Fluorine International", "NAVINFLUOR"],
+  ["Sanathan Textiles", "SANATHAN"], ["Interglobe Aviation", "INDIGO"],
 ];
 
 const recommendationColors = ["#4c8fff", "#42c878", "#b38cff", "#ff7f6e", "#21b5c5", "#e3b844"];
@@ -302,6 +318,48 @@ export function extractAxisRecommendations(messages, { analysisWindowStart, anal
   }
 
   return recommendations.slice(0, limit);
+}
+
+export function extractAxisTargetAchievements(messages, { limit = 200 } = {}) {
+  const achievements = [];
+  const seen = new Set();
+  for (const message of messages ?? []) {
+    const text = cleanText(`${message.title}. ${message.summary}. ${(message.bullets ?? []).join(" ")}`);
+    if (!/target achieved|book(?:ed)? profits?|closed \+?\d+(?:\.\d+)?%/i.test(text)) continue;
+    const titleCompany = cleanText(message.title)
+      .replace(/^(?:axis punch\s*-\s*)?(?:target achieved|book profits?)\s*:\s*/i, "")
+      .replace(/\s+(?:-|–)\s+(?:axis punch|pick of the week|new year pick call|diwali mahurat pick|axis alpha).*$/i, "")
+      .trim();
+    const matchedCompanies = companySymbols.filter(([company]) => text.toLowerCase().includes(company.toLowerCase()));
+    const candidates = titleCompany
+      ? [[titleCompany, recommendationSymbol(titleCompany)]]
+      : matchedCompanies;
+    for (const [company, symbol] of candidates) {
+      const key = `${symbol}|${message.receivedAt ?? message.time ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const companyIndex = text.toLowerCase().indexOf(String(company).toLowerCase());
+      const scoped = companyIndex >= 0 ? text.slice(companyIndex, nextCompanyIndex(text, companyIndex, company)).slice(0, 360) : text.slice(0, 360);
+      const priceMatch = text.match(/(?:hit(?:\s+its)?|target(?:\s+price)?(?:\s+of)?|book(?:ed)?(?:\s+profits?)?(?:\s+at)?|current market price(?:\s+of)?|TP)\s*(?:Rs\.?|₹|INR)?\s*([\d,]+(?:\.\d+)?)/i);
+      const target = priceMatch ? Number(priceMatch[1].replaceAll(",", "")) : null;
+      const gainMatch = text.match(/(?:\+|gain(?:s|ed)?(?:\s+of)?)\s*(\d+(?:\.\d+)?)%/i);
+      achievements.push({
+        symbol,
+        name: company,
+        call: "TARGET ACHIEVED",
+        target,
+        achievedPrice: target,
+        gainPct: gainMatch ? Number(gainMatch[1]) : null,
+        source: message.source || "Axis Mail",
+        date: message.time || "Axis Mail",
+        dateKey: message.receivedAt ? axisMessageDateKey(message) : null,
+        thesis: scoped,
+        evidenceFile: message.pdfFile ?? null,
+        origin: "mail",
+      });
+    }
+  }
+  return achievements.slice(0, limit);
 }
 
 /**

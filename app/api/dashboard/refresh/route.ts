@@ -40,6 +40,7 @@ function mapKiteFreshness(status: string | undefined): FreshnessState {
 }
 
 export async function GET(request: Request) {
+  const reportMode = new URL(request.url).searchParams.has("report");
   const storedSession = cookie(request, "kite_dashboard_session");
   if (storedSession) restoreKiteSession(decodeURIComponent(storedSession), false);
   const refreshedAt = new Date().toISOString();
@@ -49,8 +50,8 @@ export async function GET(request: Request) {
   const [kiteResult, contentResult, healthResult, benchmarkResult] = await Promise.allSettled([
     getKiteSnapshot(),
     jsonFetch<ContentDigestSnapshot>(contentUrl),
-    loadHealthForDashboardRefresh(),
-    getSectorBenchmarkSnapshot(),
+    reportMode ? Promise.resolve(undefined) : loadHealthForDashboardRefresh(),
+    reportMode ? Promise.resolve(undefined) : getSectorBenchmarkSnapshot(),
   ]);
   const earningsThrough = latestCompletedIstDateKey();
   const earnings = buildEarningsSnapshot(earningsCalendar, earningsThrough);
@@ -79,31 +80,35 @@ export async function GET(request: Request) {
     ));
   }
   const health = healthResult.status === "fulfilled" ? healthResult.value : undefined;
-  const healthFresh: FreshnessState = health?.status === "live" ? "verified"
-    : health?.status === "cached" ? "cached"
-      : health?.status === "partial" ? "partial"
-        : health?.status === "stale" ? "stale"
-          : "unavailable";
-  sources.push(freshness(
-    "Apple Health export",
-    healthFresh,
-    health?.capturedAt ?? refreshedAt,
-    `${health?.targetLabel ?? "operational target"} · ${health?.requiredThrough ?? health?.targetDate ?? health?.dataDate ?? "unknown"}`,
-    true,
-    health?.message ?? String(healthResult.status === "rejected" ? healthResult.reason : "Health unavailable"),
-  ));
+  if (!reportMode) {
+    const healthFresh: FreshnessState = health?.status === "live" ? "verified"
+      : health?.status === "cached" ? "cached"
+        : health?.status === "partial" ? "partial"
+          : health?.status === "stale" ? "stale"
+            : "unavailable";
+    sources.push(freshness(
+      "Apple Health export",
+      healthFresh,
+      health?.capturedAt ?? refreshedAt,
+      `${health?.targetLabel ?? "operational target"} · ${health?.requiredThrough ?? health?.targetDate ?? health?.dataDate ?? "unknown"}`,
+      true,
+      health?.message ?? String(healthResult.status === "rejected" ? healthResult.reason : "Health unavailable"),
+    ));
+  }
   sources.push(freshness("Earnings", earnings.status === "verified" ? "verified" : earnings.status === "stale" ? "stale" : "unavailable", earnings.asOf, `through ${earningsThrough}`, true, earnings.message));
   const benchmarks = benchmarkResult.status === "fulfilled" ? benchmarkResult.value : undefined;
-  sources.push(freshness(
-    "NSE benchmarks",
-    benchmarks?.status === "live" ? "live" : benchmarks?.status === "partial" ? "partial" : benchmarks?.status === "cached" ? "cached" : "unavailable",
-    benchmarks?.asOf ?? refreshedAt,
-    benchmarks?.status === "live"
-      ? "official or exact-index EOD · daily history"
-      : "supported EOD · daily history",
-    false,
-    benchmarks?.message ?? String(benchmarkResult.status === "rejected" ? benchmarkResult.reason : "Benchmarks unavailable"),
-  ));
+  if (!reportMode) {
+    sources.push(freshness(
+      "NSE benchmarks",
+      benchmarks?.status === "live" ? "live" : benchmarks?.status === "partial" ? "partial" : benchmarks?.status === "cached" ? "cached" : "unavailable",
+      benchmarks?.asOf ?? refreshedAt,
+      benchmarks?.status === "live"
+        ? "official or exact-index EOD · daily history"
+        : "supported EOD · daily history",
+      false,
+      benchmarks?.message ?? String(benchmarkResult.status === "rejected" ? benchmarkResult.reason : "Benchmarks unavailable"),
+    ));
+  }
   const requiredFailed = sources.some((source) => source.required && ["cached", "unavailable", "permission_required", "stale", "partial"].includes(source.state));
   const result: DashboardRefreshResult = {
     status: requiredFailed ? "partial" : "current",

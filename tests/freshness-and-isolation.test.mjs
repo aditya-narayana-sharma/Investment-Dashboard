@@ -107,14 +107,14 @@ test("live earnings calendar uses contractual verification rather than unconditi
   }
 });
 
-test("tracked earnings are source-verified through the completed 2026-08-05 IST day", () => {
-  const snapshot = buildEarningsSnapshot(earningsCalendar, "2026-08-05");
+test("tracked earnings are source-verified through the completed 2026-08-13 IST day", () => {
+  const snapshot = buildEarningsSnapshot(earningsCalendar, "2026-08-13");
   const irfc = snapshot.events.find((event) => event.symbol === "IRFC");
   const augustPending = snapshot.events.filter((event) => !event.reported && (event.dateKey ?? "").startsWith("2026-08"));
   assert.equal(snapshot.status, "verified");
-  assert.equal(snapshot.analysisDate, "2026-08-05");
-  assert.equal(snapshot.events.filter((event) => event.reported).length, 26);
-  assert.equal(augustPending.length, 7);
+  assert.equal(snapshot.analysisDate, "2026-08-13");
+  assert.equal(snapshot.events.filter((event) => event.reported).length, 33);
+  assert.equal(augustPending.length, 0);
   assert.ok(augustPending.every((event) => event.kpis.every((kpi) => !kpi.value.trim())));
   assert.equal(irfc?.reported, true);
   assert.match(irfc?.source ?? "", /^https:\/\/irfc\.co\.in\/investors\/financial-information/);
@@ -240,4 +240,10 @@ test("health POST auth and kite partial status contracts are present", async () 
   assert.match(refreshScript, /force=1/);
   assert.match(refreshScript, /startup-audit\.json/);
   assert.match(refreshScript, /unavailable=/);
+});
+
+test("Health snapshot loads before the bundled dashboard refresh completes", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const healthEarly = loadHealth\(\);/);
+  assert.match(page, /Promise\.allSettled\(\[kiteEarly, healthEarly,/);
 });
