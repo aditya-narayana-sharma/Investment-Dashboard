@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STRATJI Live Dashboard — System Analysis</title>
+<style>
+  :root{
+    --bg:#0a0e14; --hero:#0d2340; --panel:#121a26; --panel2:#0f1620;
+    --border:#233043; --ink:#f4f1ea; --muted:#9aa7b6; --faint:#6b7787;
+    --blue:#4f8cff; --blue-dim:#1c3a63; --green:#34c759; --amber:#e0a92a; --red:#ef5350;
+    --serif:Georgia,'Times New Roman',serif;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 26px 90px}
+  a{color:var(--blue);text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:0}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+
+  /* Hero */
+  .hero{background:linear-gradient(160deg,#0d2340 0%,#0a1b31 60%,#081522 100%);padding:54px 26px 46px;border-bottom:1px solid var(--border);position:relative;overflow:hidden}
+  .hero .inner{max-width:1080px;margin:0 auto;position:relative;z-index:2}
+  .hero .disc{position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#12345e,#0d2340);opacity:.55;z-index:1}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:#7fa8e6;text-transform:uppercase;margin:0 0 10px}
+  .hero h1{font-size:46px;line-height:1.04;margin:0 0 12px}
+  .hero .sub{color:#c6d2e2;font-size:17px;max-width:660px;margin:0}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:1080px;margin:22px auto 0;padding:0 26px}
+  .kpi{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:15px 16px}
+  .kpi .n{font-size:26px;font-weight:700;font-family:var(--serif)}
+  .kpi .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+
+  section{margin-top:44px}
+  .lead{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin:0 0 6px}
+  section > h2{font-size:27px;margin:0 0 8px}
+  .deck{color:var(--muted);margin:0 0 20px;max-width:780px}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px 24px}
+  .panel + .panel{margin-top:16px}
+  p{margin:0 0 12px}
+
+  /* Architecture layers */
+  .layers{display:flex;flex-direction:column;gap:10px}
+  .layer{display:grid;grid-template-columns:150px 1fr;gap:16px;background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:10px;padding:14px 16px}
+  .layer .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);padding-top:2px}
+  .layer .body{color:#d7deea;font-size:14.5px}
+  .layer .body b{color:var(--ink)}
+
+  /* Workspace cards */
+  .ws{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;background:var(--panel)}
+  .ws-head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)}
+  .ws-badge{font-family:var(--mono);font-weight:700;font-size:13px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:#0a0e14}
+  .ws-title{font-family:var(--serif);font-size:19px}
+  .ws-url{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .ws-i .ws-badge{background:var(--blue)} .ws-s .ws-badge{background:var(--green)}
+  .ws-m .ws-badge{background:var(--amber)} .ws-h .ws-badge{background:#c77dff}
+  .tabrow{display:grid;grid-template-columns:96px 1fr;border-top:1px solid var(--border)}
+  .tabrow:first-child{border-top:none}
+  .tabrow .code{padding:13px 16px;font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--panel2);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:2px}
+  .tabrow .code b{color:var(--ink)} .tabrow .code span{color:var(--faint);font-size:10.5px}
+  .tabrow .desc{padding:13px 18px;font-size:14px;color:#d0d8e4}
+  .tabrow .desc b{color:var(--ink)}
+
+  /* Source chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .chip{border:1px solid var(--border);background:var(--panel2);border-radius:999px;padding:6px 13px;font-size:12.5px;color:#d7deea}
+  .chip b{color:var(--ink)}
+
+  /* Changes */
+  .change{border:1px solid var(--border);border-radius:10px;padding:15px 18px;background:var(--panel2);margin-bottom:12px}
+  .change h3{margin:0 0 6px;font-size:16px}
+  .change .files{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:8px;word-break:break-word}
+  .tone-blue{border-left:3px solid var(--blue)} .tone-green{border-left:3px solid var(--green)}
+  .tone-amber{border-left:3px solid var(--amber)} .tone-violet{border-left:3px solid #c77dff}
+  .tone-red{border-left:3px solid var(--red)}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border)}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  td.mono{font-family:var(--mono);color:#cdd6e2}
+  .pos{color:var(--green)} .neg{color:var(--red)} .warn{color:var(--amber)}
+
+  .callout{border:1px solid var(--border);border-left:3px solid var(--amber);background:rgba(224,169,42,.06);border-radius:8px;padding:14px 18px;margin-top:8px}
+  .callout.blue{border-left-color:var(--blue);background:rgba(79,140,255,.06)}
+  .callout .t{font-family:var(--serif);font-weight:600;margin-bottom:4px}
+  .callout p{margin:0;color:#d7deea;font-size:13.5px}
+
+  .foot{margin-top:50px;padding-top:18px;border-top:1px solid var(--border);color:var(--faint);font-size:12px;font-family:var(--mono)}
+  ul.tight{margin:4px 0 0;padding-left:20px} ul.tight li{margin:3px 0;color:#d0d8e4;font-size:14px}
+  @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.hero h1{font-size:34px}.layer{grid-template-columns:1fr}.tabrow{grid-template-columns:70px 1fr}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="disc"></div>
+  <div class="inner">
+    <p class="eyebrow">System Analysis · Investment Dashboard repo · branch Visual-Overhaul</p>
+    <h1>STRATJI Live Dashboard</h1>
+    <p class="sub">A private, live-data portfolio-intelligence platform: four workspaces, fourteen sections, a server-only Kite trading spine, and an Apple-ecosystem research pipeline — served locally as a Mac + iPhone app.</p>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="n">4</div><div class="l">Workspaces · I / S / M / H</div></div>
+  <div class="kpi"><div class="n">14</div><div class="l">Sections (4·3·4·3)</div></div>
+  <div class="kpi"><div class="n">16</div><div class="l">Live API routes</div></div>
+  <div class="kpi"><div class="n">35</div><div class="l">Files in flight (+2,047/−525)</div></div>
+</div>
+
+<div class="wrap">
+
+<section>
+  <p class="lead">Orientation</p>
+  <h2>What STRATJI is</h2>
+  <p class="deck">"STRATJI" is your name for this platform; in the code it ships as the <b>Investment Dashboard</b> repo and self-brands as the <b>"Portfolio Intelligence"</b> Mac/iPhone app. (The literal string "STRATJI" does not appear anywhere in the repo — it's the working title, not a code identifier.)</p>
+  <div class="panel">
+    <p>It is a <b>local-first, single-user</b> research and portfolio cockpit. A private Flask/Waitress gateway serves the Next.js dashboard at <code>http://localhost:5050/</code>, and Tailscale Serve exposes it privately to your iPhone — never to the LAN or public internet. The Mac stays the application server: Kite credentials, Apple Mail, Podcasts, Health data and MCP calls all remain server-side. It fuses <b>live Zerodha Kite</b> broker state with <b>Axis Research</b>, newsletter and podcast digests, an <b>earnings calendar</b>, macro scenarios, and <b>Apple Health</b> — with a hard rule against ever presenting stale or fabricated data as live.</p>
+    <p style="margin-bottom:0">The same dashboard also renders the <b>Portfolio Investment Brief</b> you shared: it is produced by the <code>app/report</code> route and exported through <code>app/api/report-pdf</code>. So "generate future briefs like the one I provided" and "analyze this dashboard" are the same system — the brief is this platform's print artifact.</p>
+  </div>
+</section>
+
+<section>
+  <p class="lead">Under the hood</p>
+  <h2>Architecture &amp; stack</h2>
+  <p class="deck">A React front end, a private Python serving shell, and a server-only data spine that reaches broker APIs and the Apple ecosystem — wrapped in native apps for the phone.</p>
+  <div class="layers">
+    <div class="layer"><div class="tag">Front end</div><div class="body"><b>Next.js 16</b> on <b>vinext</b> (Cloudflare's Vite/RSC runtime) · <b>React 19</b> · <b>Recharts</b> for donuts/radar/dials · <b>lucide-react</b> icons · <b>Tailwind 4</b> · TypeScript. Dark "editorial" theme — black bands, Georgia serif headings, blue accents, green/amber/red semantics.</div></div>
+    <div class="layer"><div class="tag">Serving shell</div><div class="body"><b>Flask + Waitress</b> gateway (<code>flask_gateway.py</code>) bound to localhost:5050, run as a macOS background job; <b>Tailscale Serve</b> for private mobile access. Isolated <code>.venv-flask</code>. Optional Cloudflare D1/R2 bindings via <code>.openai/hosting.json</code>; Drizzle ORM present (schema currently empty).</div></div>
+    <div class="layer"><div class="tag">Data spine</div><div class="body">Server-only <b>Kite MCP session</b> (the adjacent Go <code>kite-mcp-server</code>, auto-started) reads holdings, positions, orders, GTTs, margins. <code>/api/kite/snapshot</code> refreshes on load and every 5 minutes. Holdings are the critical read; secondary endpoints are failure-tolerant so one blank feed can't wipe the portfolio.</div></div>
+    <div class="layer"><div class="tag">Research feeds</div><div class="body">Apple ecosystem via Computer-Use / osascript: <b>Mail</b> (iCloud → Newsletters &amp; Axis Research only), <b>Podcasts</b>, <b>Calendar</b>, <b>Reminders</b> (Job 🔍 / Earnings), <b>Notes</b> (Health Daily), <b>Apple Health</b> (HealthKit export ZIP). Plus sector snapshots &amp; benchmarks, <b>yfinance</b> quote fallback, and a <b>Firecrawl</b> web layer.</div></div>
+    <div class="layer"><div class="tag">Native apps</div><div class="body">SwiftUI <b>iOS/macOS wrapper</b> (<code>apple-app/</code>) around one persistent WKWebView: onboarding, source/connection freshness, operational-day HealthKit upload (single-use pairing token), offline recovery, PDF sharing. Safari PWA is the fallback install path.</div></div>
+    <div class="layer"><div class="tag">Integrity</div><div class="body">A mandatory <b>startup refresh audit</b> (<code>scripts/refresh-dashboard-data.sh</code>) validates payload semantics — Kite/sectors <code>status=live</code>, earnings <code>verified</code>, Health <code>live</code> to an 8 PM IST operational date. Failures surface as Stale / Cached / Unavailable in a compact freshness strip, never as fake live values.</div></div>
+  </div>
+</section>
+
+<section>
+  <p class="lead">The core</p>
+  <h2>Four workspaces · fourteen sections</h2>
+  <p class="deck">Every workspace shares one canonical <b>DailyKanbanBoard</b> action board (To&nbsp;Do&nbsp;Today · Monitor · Completed&nbsp;Today) as its first tab. Section state is URL-addressable (<code>?view=…&amp;section=…</code>), so Back/Forward, reload and deep links all work.</p>
+
+  <div class="ws ws-i">
+    <div class="ws-head"><div class="ws-badge">I</div><div class="ws-title">Investment</div><div class="ws-url">?view=investment</div></div>
+    <div class="tabrow"><div class="code"><b>I-1</b><span>i1</span></div><div class="desc"><b>Action Board</b> — the canonical three-lane daily board; every other workspace board mirrors it exactly.</div></div>
+    <div class="tabrow"><div class="code"><b>I-2</b><span>i2</span></div><div class="desc"><b>Portfolio</b> — live Kite snapshot: nested allocation donut, 2×2 portfolio-management cards, portfolio activity (holdings / orders / GTTs), and a squarified concentration treemap, in a 70/30 layout.</div></div>
+    <div class="tabrow"><div class="code"><b>I-3</b><span>i3</span></div><div class="desc"><b>Risk</b> — two-column risk workbench: composition + per-holding radar and six-axis delta vs portfolio average, plus a macro-evidence rail (Oil/war · Flows · INR/rates · Breadth/VIX · Earnings) scoped to supportive/base/stress scenarios.</div></div>
+    <div class="tabrow"><div class="code"><b>I-4</b><span>i4</span></div><div class="desc"><b>Axis picks</b> — analyst-call matrix grouped by call type / industry / performance / posted-month / target-achieved; BUY variants normalized, Trading &amp; Technical BUY kept distinct; closures reconciled from Axis Mail + PDF archive.</div></div>
+  </div>
+
+  <div class="ws ws-s">
+    <div class="ws-head"><div class="ws-badge">S</div><div class="ws-title">Sectoral Analytics</div><div class="ws-url">?view=sectors</div></div>
+    <div class="tabrow"><div class="code"><b>S-1</b><span>s1</span></div><div class="desc"><b>Action Board</b> — sector-scoped daily board.</div></div>
+    <div class="tabrow"><div class="code"><b>S-2</b><span>s2</span></div><div class="desc"><b>Industry Analytics</b> — interactive industry tiles, breadth, leader/laggard, rankings and company composition. Its industry selector is the <b>only</b> control that dims/filters — and only within S-2.</div></div>
+    <div class="tabrow"><div class="code"><b>S-3</b><span>s3</span></div><div class="desc"><b>Benchmarks &amp; Decision Lab</b> — benchmark return bars, Investability, PESTEL, Porter and macro-trigger tools, driven by its own local sector selector (never S-2's).</div></div>
+  </div>
+
+  <div class="ws ws-m">
+    <div class="ws-head"><div class="ws-badge">M</div><div class="ws-title">Market Intelligence</div><div class="ws-url">?view=intelligence</div></div>
+    <div class="tabrow"><div class="code"><b>M-1</b><span>m1</span></div><div class="desc"><b>Action Board</b> — intelligence daily board.</div></div>
+    <div class="tabrow"><div class="code"><b>M-2</b><span>m2</span></div><div class="desc"><b>Live Intelligence</b> — Newsletters, Axis Research and Podcasts digests. Each Axis mail shows at most one "Open PDF" report action; promo/tracking links are excluded.</div></div>
+    <div class="tabrow"><div class="code"><b>M-3</b><span>m3</span></div><div class="desc"><b>Earnings Calendar</b> — the <b>sole</b> earnings location. KPI tables with semantic +VE/neutral/−VE outcome colors; values populated only from independently verified IR/NSE results.</div></div>
+    <div class="tabrow"><div class="code"><b>M-4</b><span>m4</span></div><div class="desc"><b>Calendar + Reminders</b> — a monthly Apple Calendar grid of non-earnings events (source-coded chips) plus Reminders grouped into Completed / Scheduled Important / Work · Job 🔍.</div></div>
+  </div>
+
+  <div class="ws ws-h">
+    <div class="ws-head"><div class="ws-badge">H</div><div class="ws-title">Health &amp; Wellness</div><div class="ws-url">?view=health</div></div>
+    <div class="tabrow"><div class="code"><b>H-1</b><span>h1</span></div><div class="desc"><b>Action Board</b> — health daily board.</div></div>
+    <div class="tabrow"><div class="code"><b>H-2</b><span>h2</span></div><div class="desc"><b>Daily Optimism</b> — source status, operational target, category coverage, archive integrity and evidence-backed guidance.</div></div>
+    <div class="tabrow"><div class="code"><b>H-3</b><span>h3</span></div><div class="desc"><b>Vital Metrics</b> — KPIs grouped into favourable / context-dependent / unfavourable columns (Activity, Sleep, Heart, Respiratory, Mobility, Nutrition), each keeping its Health-category color. A non-scrolling console; Incognito gates every value, source and drill-down.</div></div>
+  </div>
+
+  <div class="callout blue"><div class="t">Isolation contract (test-enforced)</div><p>Market Intelligence and S-3 are always complete and unfiltered; M-3 exclusively owns earnings; M-4 excludes the earnings calendar. Sector dimming lives only in S-2. <code>tests/rendered-html.test.mjs</code> asserts zero stray dimmed/disabled descendants outside S-2.</p></div>
+</section>
+
+<section>
+  <p class="lead">Inputs</p>
+  <h2>Live sources &amp; freshness rules</h2>
+  <p class="deck">The dashboard treats itself as "current" only after every source independently passes the startup audit; anything else is labelled and named.</p>
+  <div class="panel">
+    <div class="chips">
+      <span class="chip"><b>Kite</b> — holdings · positions · orders · GTTs · margins · P&amp;L</span>
+      <span class="chip"><b>Apple Mail</b> — iCloud Newsletters + Axis Research</span>
+      <span class="chip"><b>Apple Podcasts</b> — transcripts / descriptions</span>
+      <span class="chip"><b>Apple Calendar</b> — earnings + all events</span>
+      <span class="chip"><b>Apple Reminders</b> — Job 🔍 · Earnings</span>
+      <span class="chip"><b>Apple Notes</b> — Health Daily</span>
+      <span class="chip"><b>Apple Health</b> — HealthKit export</span>
+      <span class="chip"><b>Sectors</b> — snapshots + benchmarks</span>
+      <span class="chip"><b>yfinance</b> — quote fallback</span>
+      <span class="chip"><b>Firecrawl / web</b></span>
+    </div>
+    <div class="callout" style="margin-top:16px"><div class="t">Two rules that shape everything</div><p><b>No fabrication:</b> failed live values are never silently replaced with static ones — they show Stale/Cached/Unavailable with the failing source named. <b>Health 8 PM policy:</b> <code>healthTargetDate(nowIST)</code> rolls to day D at 20:00, holds through 01:59, and uses D-1 from 02:00–19:59, so comparisons are always anchored to a defined operational date.</p></div>
+  </div>
+</section>
+
+<section>
+  <p class="lead">Recent history</p>
+  <h2>Latest changes to the repo</h2>
+  <p class="deck">The active branch is <code>Visual-Overhaul</code>. Recent commits carried a visual system rework and Phase-3 content automation; a large body of work then sits <b>uncommitted</b> in the working tree.</p>
+
+  <div class="panel" style="margin-bottom:16px">
+    <table>
+      <thead><tr><th>Commit</th><th>Date</th><th>Summary</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">0813bdf</td><td class="mono">Aug 11</td><td>Visual Refinements</td></tr>
+        <tr><td class="mono">7ee6bf1</td><td class="mono">Aug 09</td><td>Ship I-3/M-4 visual density, labelled podcast fallbacks, exact NSE EOD benchmarks</td></tr>
+        <tr><td class="mono">0855923</td><td class="mono">Aug 07</td><td>Visual Overhaul</td></tr>
+        <tr><td class="mono">1d65e39</td><td class="mono">Aug 06</td><td>Expand Phase-3 content automation; reshape workspace nav, Health &amp; source freshness</td></tr>
+      </tbody>
+    </table>
+    <p style="margin:12px 0 0;color:var(--muted);font-size:13px">That Aug-06 reshape is what collapsed Sectoral and Health from four preview tiles down to today's <b>S-1…S-3</b> and <b>H-1…H-3</b>.</p>
+  </div>
+
+  <p class="deck" style="margin-bottom:14px">Uncommitted work — <b>35 files, +2,047 / −525</b> — clusters into five themes:</p>
+
+  <div class="change tone-blue">
+    <h3>1 · Live Kite order/GTT/alert ticketing</h3>
+    <p>A new instrument-lookup layer feeds order entry: symbol search with tick/lot size and a public price probe, plus net/day position de-duplication. This is the dashboard moving from read-only broker state toward placing orders, GTTs and alerts.</p>
+    <div class="files">new: app/api/kite/instruments/ · app/dashboard/useKiteInstrumentLookup.ts · app/kite-positions.ts &nbsp;|&nbsp; mod: KiteOrderTicket/KiteGttTicket/KiteAlertTicket.tsx · kite-live-server.ts (+82)</div>
+  </div>
+  <div class="change tone-green">
+    <h3>2 · I-4 "Axis picks" analyst matrix overhaul</h3>
+    <p>A dedicated grouping model (calls / industries / performance / posted-month / target-achieved) and a single canonical upside formula — <code>(target/CMP − 1)×100</code> — with an explicit CMP source (kite / yfinance / axis). Most of the +354-line churn in <code>InvestmentWorkspace.tsx</code> lives here.</p>
+    <div class="files">new: app/analyst-matrix-groups.ts · app/axis-pick-metrics.ts &nbsp;|&nbsp; mod: app/dashboard/InvestmentWorkspace.tsx</div>
+  </div>
+  <div class="change tone-amber">
+    <h3>3 · I-3 scenario-scoped macro evidence</h3>
+    <p>A regex rule-base maps each mail item to a macro event (oilWar, …) and a supportive/base/stress band, so changing the decision range surfaces genuinely different evidence instead of recycling the same cards.</p>
+    <div class="files">new: app/macro-scenario-evidence.ts &nbsp;|&nbsp; mod: tests/macro-evidence-summaries.test.mjs</div>
+  </div>
+  <div class="change tone-violet">
+    <h3>4 · Content-automation &amp; Health-import scripts</h3>
+    <p>Expanded Axis digest/recommendation extraction (incl. a Python PDF extractor) and content-digest server, plus Apple Health export preparation/import improvements.</p>
+    <div class="files">mod: scripts/axis-digest-links · axis-pdf-recommendations · axis-recommendations · content-digest-server · extract-axis-pdf-recommendations.py · import_apple_health.py · prepare_apple_health_export.py</div>
+  </div>
+  <div class="change tone-red">
+    <h3>5 · Report/brief + visual system + tests</h3>
+    <p>Refinements to the PDF brief (<code>app/report</code>), a large CSS pass (<code>globals.css</code> +245, <code>visual-overhaul.css</code>), and broad test updates across axis, earnings-KPI, freshness/isolation, risk and health-import suites. <code>design-qa.md</code> grew +347 lines of QA evidence.</p>
+    <div class="files">mod: app/report/page.tsx (+75) · report.module.css · app/globals.css · app/visual-overhaul.css · tests/* · design-qa.md</div>
+  </div>
+
+  <div class="callout"><div class="t">Status note</div><p>All of theme 1–5 is <b>staged in the working tree, not yet committed</b>. Net direction: the platform is growing from a live-read cockpit into one that can also <b>act</b> (Kite tickets) and <b>reason over scoped evidence</b> (analyst metrics + scenario matching), on top of the completed visual overhaul.</p></div>
+</section>
+
+<div class="foot">
+  Generated from a read-only pass over the Investment Dashboard repo (branch Visual-Overhaul) on the connected Mac · 15 Aug 2026.<br>
+  Sources: README.md · AGENTS.md · design-qa.md · package.json · git log/status · app/dashboard/*Workspace.tsx · app/report/page.tsx · app/api/*. Educational summary of your own codebase.
+</div>
+
+</div>
+</body>
+</html>
