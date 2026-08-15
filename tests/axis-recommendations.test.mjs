@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isAxisResearchMail } from "../scripts/axis-mail-filter.mjs";
 import { extractAxisRecommendations, scopeThesisToCompany } from "../scripts/axis-recommendations.mjs";
+import { extractAxisTargetAchievements, recommendationSymbol } from "../scripts/axis-recommendations.mjs";
+
+test("CreditAccess Grameen resolves to its NSE ticker", () => {
+  assert.equal(recommendationSymbol("CreditAccess Grameen"), "CREDITACC");
+  assert.equal(recommendationSymbol("Credit Access Grameen"), "CREDITACC");
+  assert.equal(recommendationSymbol("Manappuram Finance"), "MANAPPURAM");
+});
 
 test("Axis Research digest excludes OTP, security, webinar and marketing mail", () => {
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "Q1FY27 Result Updates" }), true);
@@ -61,6 +68,54 @@ test("scopeThesisToCompany keeps only the selected company fragment", () => {
   const scoped = scopeThesisToCompany(mashup, "Bandhan Bank", { call: "BUY", target: 235 });
   assert.match(scoped, /Bandhan Bank/i);
   assert.doesNotMatch(scoped, /Indian Hotels|Bajaj Auto/i);
+});
+
+test("Target Achieved Mail becomes closed-call evidence, not an active BUY", () => {
+  const messages = [{
+    source: "Axis Direct",
+    time: "6 Aug, 12:39 PM",
+    receivedAt: "2026-08-06T12:39:00+05:30",
+    title: "Target Achieved: Cholamandalam - Axis Punch",
+    summary: "The standing Cholamandalam Punch hit its target of Rs 1,945 and closed.",
+  }];
+  assert.equal(extractAxisRecommendations(messages).length, 0);
+  const achieved = extractAxisTargetAchievements(messages);
+  assert.equal(achieved.length, 1);
+  assert.equal(achieved[0].symbol, "CHOLAFIN");
+  assert.equal(achieved[0].call, "TARGET ACHIEVED");
+  assert.equal(achieved[0].target, 1945);
+  assert.equal(achieved[0].origin, "mail");
+});
+
+test("Target Achieved titles preserve hyphenated company names and NSE aliases", () => {
+  const achieved = extractAxisTargetAchievements([
+    {
+      source: "Axis Direct",
+      time: "18 Jun, 10:48 am",
+      receivedAt: "2026-06-18T10:48:00+05:30",
+      title: "Target Achieved: V-Mart Retail Ltd - Pick of the Week",
+      summary: "V-Mart Retail Ltd reached the target price of Rs 790/share.",
+    },
+    {
+      source: "Axis Direct",
+      time: "14 May, 9:41 am",
+      receivedAt: "2026-05-14T09:41:00+05:30",
+      title: "Target Achieved: Mold-Tek Packaging Ltd - New Year Pick Call",
+      summary: "Mold Tek Packaging Ltd reached the target price of Rs 670/share.",
+    },
+    {
+      source: "Axis Direct",
+      time: "7 Apr, 11:05 am",
+      receivedAt: "2026-04-07T11:05:00+05:30",
+      title: "Axis Punch - Target Achieved: Welspun Corp. Limited",
+      summary: "Welspun Corp Limited reached the target price of Rs 875/share.",
+    },
+  ]);
+  assert.deepEqual(achieved.map((item) => [item.symbol, item.target]), [
+    ["VMART", 790],
+    ["MOLDTKPAC", 670],
+    ["WELCORP", 875],
+  ]);
 });
 
 test("mergeAxisRecommendations prefers richer PDF calls and keeps category buckets", async () => {

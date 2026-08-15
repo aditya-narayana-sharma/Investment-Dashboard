@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { recommendationRiskScores, recommendationSymbol, scopeThesisToCompany } from "./axis-recommendations.mjs";
+import { companySymbols, recommendationRiskScores, recommendationSymbol, scopeThesisToCompany } from "./axis-recommendations.mjs";
 
 const DEFAULT_SNAPSHOT = fileURLToPath(new URL("../artifacts/private/axis-pdf-recommendations.json", import.meta.url));
 
@@ -155,6 +155,7 @@ export function loadAxisPdfRecommendationSnapshot(path = process.env.AXIS_PDF_RE
       pagesRead: 0,
       invalidFiles: [],
       recommendations: [],
+      targetAchievements: [],
       counts: { total: 0, fundamental: 0, technical: 0, trading: 0, withCmpAndTarget: 0, missingProgressInputs: 0 },
       missing: true,
       path,
@@ -166,9 +167,44 @@ export function loadAxisPdfRecommendationSnapshot(path = process.env.AXIS_PDF_RE
   return {
     ...raw,
     recommendations,
+    targetAchievements: raw.targetAchievements ?? [],
     missing: false,
     path,
   };
+}
+
+export function mergeAxisTargetAchievements({ pdfAchievements = [], mailAchievements = [], limit = 200 } = {}) {
+  const merged = new Map();
+  for (const item of [...pdfAchievements, ...mailAchievements]) {
+    if (!item?.symbol || !/target achieved|book(?:ed)? profits?|closed \+?\d/i.test(`${item.call ?? ""} ${item.thesis ?? ""} ${item.source ?? ""}`)) continue;
+    const evidence = `${item.name ?? ""} ${item.thesis ?? ""}`.toLowerCase();
+    const knownCompany = companySymbols.find(([name]) => evidence.includes(name.toLowerCase()));
+    const canonicalName = knownCompany?.[0] ?? String(item.name ?? "").trim();
+    const canonicalSymbol = knownCompany?.[1] ?? (canonicalName ? recommendationSymbol(canonicalName) : item.symbol);
+    const next = {
+      ...item,
+      name: canonicalName,
+      symbol: canonicalSymbol,
+      call: "TARGET ACHIEVED",
+      evidenceFile: item.evidenceFile ?? item.sourceFile ?? null,
+      origin: item.origin ?? (item.evidenceFile || item.sourceFile ? "pdf" : "mail"),
+    };
+    const key = `${next.symbol}|${next.dateKey ?? next.date ?? ""}`;
+    const prev = merged.get(key);
+    if (!prev) {
+      merged.set(key, next);
+    } else if (next.origin === "mail" && prev.origin !== "mail") {
+      merged.set(key, {
+        ...prev,
+        ...next,
+        evidenceFile: next.evidenceFile ?? prev.evidenceFile ?? null,
+        origin: "mail",
+      });
+    }
+  }
+  return [...merged.values()]
+    .sort((left, right) => String(right.dateKey ?? right.date ?? "").localeCompare(String(left.dateKey ?? left.date ?? "")) || left.symbol.localeCompare(right.symbol))
+    .slice(0, limit);
 }
 
 /**
@@ -181,6 +217,9 @@ export function mergeAxisRecommendations({ pdfRecommendations = [], mailRecommen
 
   const consider = (item, origin) => {
     if (!item?.symbol || !item?.call) return;
+    // A recommendation without an explicit positive Axis target is research
+    // context, not a displayable Axis pick.
+    if (!(Number(item.target) > 0)) return;
     if (/hit stop loss|book profits|call closure|closed the call|target achieved/i.test(`${item.thesis ?? ""} ${item.horizon ?? ""} ${item.source ?? ""}`)) {
       return;
     }

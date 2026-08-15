@@ -8,8 +8,10 @@ import {
   indexAxisPdfArchive,
   mailMessageUrl,
   matchAxisResearchPdf,
+  normalizeMailSourceForLinks,
   preferApplePodcastsEpisodeUrl,
   resolveAxisPdfWithinArchive,
+  selectAxisResearchReportLinks,
 } from "../scripts/axis-digest-links.mjs";
 
 test("axisTopicGroup collapses Axis subjects into stable digest topics", () => {
@@ -27,11 +29,34 @@ test("mailMessageUrl builds message:// links from Message-ID values only", () =>
   assert.equal(mailMessageUrl("<abc@example.com>"), `message://${encodeURIComponent("<abc@example.com>")}`);
 });
 
+test("mail link normalization preserves wrapped Axis tracker assignments", () => {
+  const tracker = "https://elink.axisdirect.in/vtrack?clientid=117064&ul=\nBVkDDgZTUR1PAFILUFUHUlt2V1lZXgocUl4OGR9OUw==&ml=BlAEDgFS";
+  const normalized = normalizeMailSourceForLinks(`<a href="${tracker}">Read Report</a>`);
+
+  assert.match(normalized, /[?&]ul=BVkDD/);
+  assert.doesNotMatch(normalized, /[?&]ulBVkDD/);
+  assert.equal(normalizeMailSourceForLinks("quoted=\r\nprintable"), "quotedprintable");
+});
+
+test("Axis mail report links keep source-backed PDFs and reject footer noise", () => {
+  assert.deepEqual(selectAxisResearchReportLinks([
+    { url: "https://research.axisdirect.in/reports/daily-note.pdf", label: "Download PDF" },
+    { url: "https://click.example.com/redirect?id=123", label: "Read full report" },
+    { url: "https://elink.axisdirect.in/vtrack?id=generic", label: "Click Here" },
+    { url: "https://axisdirect.in/unsubscribe?id=123", label: "Unsubscribe" },
+    { url: "javascript:alert(1)", label: "Open report" },
+  ]), [
+    { url: "https://research.axisdirect.in/reports/daily-note.pdf", label: "Download PDF" },
+    { url: "https://click.example.com/redirect?id=123", label: "Read full report" },
+  ]);
+});
+
 test("preferApplePodcastsEpisodeUrl prefers store IDs then https fallbacks", () => {
   assert.equal(
     preferApplePodcastsEpisodeUrl({ storeCollectionId: 123, storeTrackId: 456, episodeUrl: "https://omny.fm/x" }),
     "https://podcasts.apple.com/podcast/id123?i=456",
   );
+
   assert.equal(
     preferApplePodcastsEpisodeUrl({ episodeUrl: "https://omny.fm/shows/example/ep" }),
     "https://omny.fm/shows/example/ep",
@@ -82,6 +107,16 @@ test("matchAxisResearchPdf only returns files present in the archive", () => {
       archiveIndex: index,
     }),
     null,
+  );
+
+  assert.equal(
+    matchAxisResearchPdf({
+      subject: "Daily Technical Outlook",
+      receivedAt: "2026-08-07T02:00:00.000Z",
+      archiveIndex: index,
+    }),
+    null,
+    "daily reports must not fall back to a PDF from another date",
   );
 
   assert.equal(resolveAxisPdfWithinArchive(root, "Axis_MorningNote-2026-08-06.pdf"), join(root, "Axis_MorningNote-2026-08-06.pdf"));

@@ -83,11 +83,10 @@ function formatShortDate(dateKey: string) {
 }
 
 /**
- * Day tables share four column slots. When every company on the day uses the
- * same labels (same-sector banks, etc.), reuse those headers. When sectors mix —
- * e.g. Power capacity KPIs beside Consumer NOV — keep positional slots and show
- * each row's own label in the cell so filled values never render as n/p solely
- * because the first company's labels differ.
+ * Day tables share four column slots. Headers always name the metrics actually
+ * present in that slot. Mixed-company days join the distinct verified labels
+ * instead of falling back to opaque “KPI 1”, “KPI 2”, etc.; each row's values
+ * remain aligned beneath those complete column definitions.
  */
 function dayKpiSlots(events: EarningsEvent[]) {
   const slotCount = 4;
@@ -96,11 +95,9 @@ function dayKpiSlots(events: EarningsEvent[]) {
       .map((event) => event.kpis[index]?.label?.trim())
       .filter((label): label is string => Boolean(label));
     const unique = [...new Set(labels)];
-    const homogeneous = unique.length === 1;
     return {
       index,
-      header: homogeneous ? unique[0]! : `KPI ${index + 1}`,
-      showPerRowLabel: !homogeneous,
+      header: unique.length ? unique.join(" / ") : "Not published",
     };
   });
 }
@@ -109,6 +106,12 @@ function statusTone(event: EarningsEvent) {
   if (event.reported) return "reported";
   if (/today/i.test(event.state)) return "today";
   return "due";
+}
+
+function kpiOutcome(tone?: EarningsEvent["kpis"][number]["tone"]) {
+  if (tone === "green") return { className: "positive", label: "Positive" } as const;
+  if (tone === "red") return { className: "negative", label: "Negative" } as const;
+  return { className: "neutral", label: "Neutral" } as const;
 }
 
 export function EarningsMonthCalendar({
@@ -273,7 +276,14 @@ export function EarningsMonthCalendar({
       {showDayTable && <div className="earnings-day-kpi">
         <div className="earnings-day-kpi-head">
           <h5>{formatDayHeading(activeDay)} — KPI analysis</h5>
-          <span>{dayEvents.length} company {dayEvents.length === 1 ? "entry" : "entries"}</span>
+          <div className="earnings-day-kpi-meta">
+            <span>{dayEvents.length} company {dayEvents.length === 1 ? "entry" : "entries"}</span>
+            <div className="earnings-outcome-legend" aria-label="KPI outcome colors">
+              <em className="positive">+VE</em>
+              <em className="neutral">NEUTRAL</em>
+              <em className="negative">−VE</em>
+            </div>
+          </div>
         </div>
         {!dayEvents.length ? (
           <div className="earnings-day-empty">No earnings events on this date.</div>
@@ -284,7 +294,7 @@ export function EarningsMonthCalendar({
                 <tr>
                   <th>Date</th>
                   <th>Company</th>
-                  {columns.map((column) => <th key={`col-${column.index}`}>{column.header}</th>)}
+                  {columns.map((column) => <th key={`col-${column.index}`} title={column.header}>{column.header}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -324,17 +334,24 @@ export function EarningsMonthCalendar({
                       </td>
                       {columns.map((column) => {
                         const kpi = event.kpis[column.index];
+                        const outcome = kpiOutcome(kpi?.tone);
                         return (
-                          <td key={`${key}-${column.index}`} className={!kpi?.value ? "sealed" : undefined}>
+                          <td
+                            key={`${key}-${column.index}`}
+                            className={!kpi?.value ? "sealed" : `kpi-outcome kpi-outcome-${outcome.className}`}
+                          >
                             {kpi?.value ? (
                               <>
-                                {column.showPerRowLabel && kpi.label ? <em className="kpi-row-label">{kpi.label}</em> : null}
                                 <b>{kpi.value}</b>
-                                <small className={kpi.tone ?? ""}>{kpi.change || "\u00A0"}</small>
+                                <small
+                                  className="kpi-outcome-change"
+                                  aria-label={`${outcome.label} outcome: ${kpi.change || "No comparison published"}`}
+                                >
+                                  {kpi.change || "\u00A0"}
+                                </small>
                               </>
                             ) : (
                               <>
-                                {column.showPerRowLabel && kpi?.label ? <em className="kpi-row-label">{kpi.label}</em> : null}
                                 <b className="blank">n/p</b>
                                 <small>{event.reported ? "—" : "due"}</small>
                               </>

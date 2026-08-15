@@ -35,6 +35,10 @@ export type DigestItem = {
   pdfFile?: string | null;
   /** Dashboard route that serves the matched local Axis PDF inline. */
   pdfUrl?: string | null;
+  /** Every source-backed PDF/report link found in the exact Axis mail. */
+  pdfLinks?: Array<{ url: string; label: string }>;
+  /** Whether the link came from the exact mail anchor or the validated local archive. */
+  pdfSource?: "mail_link" | "archive" | null;
   /** Podcast URL from the local Podcasts database, when available. */
   episodeUrl?: string;
   /** AI-generated takeaways; `contentSource` identifies transcript versus description evidence. */
@@ -75,6 +79,21 @@ export type MailRecommendation = {
   dateKey?: string | null;
   bucket?: "fundamental" | "technical" | "trading";
   origin?: "pdf" | "mail";
+};
+
+export type AxisTargetAchievement = {
+  symbol: string;
+  name: string;
+  call: "TARGET ACHIEVED";
+  target: number | null;
+  achievedPrice: number | null;
+  gainPct: number | null;
+  source: string;
+  date: string;
+  dateKey?: string | null;
+  thesis: string;
+  evidenceFile?: string | null;
+  origin: "pdf" | "mail";
 };
 
 export type AxisPdfArchiveAudit = {
@@ -123,6 +142,8 @@ export type InvestmentMailIntelligence = {
   axisLastFetchedAt?: string;
   latestNewsletterAt: string;
   axisRecommendations: MailRecommendation[];
+  /** Closed Axis calls backed by explicit Target Achieved Mail/PDF evidence. */
+  axisTargetAchievements?: AxisTargetAchievement[];
   /** Live PDF-archive audit for Axis Recommended Stocks (overrides static portfolio-data audit when present). */
   axisPdfArchive?: AxisPdfArchiveAudit;
   macroEvidence: MacroMailEvidence[];

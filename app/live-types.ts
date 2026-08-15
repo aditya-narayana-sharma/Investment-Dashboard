@@ -39,6 +39,7 @@ export type LiveOrder = {
   type: string;
   price: number;
   status: string;
+  statusMessage?: string;
 };
 
 export type LivePosition = {

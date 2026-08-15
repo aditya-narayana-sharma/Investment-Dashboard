@@ -11,14 +11,16 @@ import {
   mailMessageUrl,
   matchAxisResearchPdf,
   preferApplePodcastsEpisodeUrl,
+  selectAxisResearchReportLinks,
 } from "./axis-digest-links.mjs";
 import { isAxisResearchMail } from "./axis-mail-filter.mjs";
 import {
   axisPdfAuditFromSnapshot,
   loadAxisPdfRecommendationSnapshot,
   mergeAxisRecommendations,
+  mergeAxisTargetAchievements,
 } from "./axis-pdf-recommendations.mjs";
-import { extractAxisRecommendationsForTradingAsOf } from "./axis-recommendations.mjs";
+import { extractAxisRecommendationsForTradingAsOf, extractAxisTargetAchievements } from "./axis-recommendations.mjs";
 import {
   classifyAxisTags,
   classifyNewsletterSentiment,
@@ -96,6 +98,34 @@ function mailAttachmentNames(message) {
   } catch (error) {
     return [];
   }
+}
+function mailReportLinks(message) {
+  let source = "";
+  try { source = String(message.source() || ""); } catch (error) { source = ""; }
+  if (!source) return [];
+  source = source
+    // Axis 8-bit HTML can wrap immediately after a query assignment. Preserve
+    // that assignment before removing genuine quoted-printable soft breaks.
+    .replace(/([?&][A-Za-z][A-Za-z0-9_-]*)=\r?\n(?=[A-Za-z0-9+/])/g, "$1=")
+    .replace(/=\r?\n/g, "")
+    .replace(/=3D/gi, "=")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x3D;/gi, "=");
+  const links = [];
+  const anchor = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchor.exec(source)) !== null && links.length < 120) {
+    const url = String(match[1] || "").trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const label = String(match[2] || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+    links.push({ url, label });
+  }
+  return links;
 }
 `;
 
@@ -220,10 +250,33 @@ const messages = recent.map((message) => {
     received: properties.dateReceived.toISOString(),
     messageId: mailMessageId(message),
     attachmentNames: mailAttachmentNames(message),
+    reportLinks: mailReportLinks(message),
     content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
   };
 }).sort((left, right) => new Date(right.received) - new Date(left.received)).slice(0, ${AXIS_DIGEST_LIMIT});
-JSON.stringify({ totalCount, messages });
+// Target-achievement notices are closure evidence, not active calls. Read them
+// from the complete exact mailbox so historical closures are not limited by
+// the rolling active-research window.
+const targetCandidates = mailbox.messages.whose({ subject: { _contains: "Target Achieved" } })();
+const targetMessages = targetCandidates.map((message) => {
+  try {
+    const subject = String(message.subject() || "Untitled message");
+    if (!/target[ -]?achieved/i.test(subject)) return null;
+    const properties = message.properties();
+    return {
+      subject,
+      sender: String(properties.sender || "Unknown sender"),
+      received: properties.dateReceived.toISOString(),
+      messageId: mailMessageId(message),
+      attachmentNames: mailAttachmentNames(message),
+      reportLinks: mailReportLinks(message),
+      content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
+    };
+  } catch (error) {
+    return null;
+  }
+}).filter(Boolean).sort((left, right) => new Date(right.received) - new Date(left.received));
+JSON.stringify({ totalCount, messages, targetMessages });
 `;
 
 /** Read every active and completed reminder before dashboard exclusion/classification. */
@@ -461,22 +514,23 @@ const BARE_NAME_LINE =
 
 /** Mail boilerplate + podcast CTA / promo / credit-roll — never used as content bullets. */
 const DIGEST_PROMO_OR_CTA =
-  /unsubscribe|disclaimer|market risks|contact us|view online|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email|explore)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|missed last week|get our latest thinking on|helpdesk co-ordinates|helpdesk coordinates|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |use code:|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
+  /unsubscribe|disclaimer|market risks|contact us|view (?:online|in browser)|sign up|advertise|forward to your friends|read report|tap the link|click here|privacy policy|terms of (?:use|service)|manage preferences|open in (?:browser|app)|tldr together with|reality bites|^(?:follow|subscribe|check out|learn more|see|catch|support|listen|join|rate|share|send us|put your email|explore)\b|follow (?:us|me|@)|follow\b.{0,80}\bon\b.{0,40}(?:twitter|x\b|instagram|tiktok|substack|facebook|linkedin|youtube)|subscribe (?:to|on|now|here|for)|(?:^|\b)subscribe\b.{0,40}(?:youtube|spotify|apple podcasts|patreon|substack|newsletter|channel)|patreon|sponsor(?:ed|ship)?\b|learn more\b|check out\b|see (?:more|show notes|omnystudio|acast|the (?:full|latest)|our)|catch (?:the )?latest|support .{0,60}(?:by|on|via|with)\b|leave a (?:rating|review)|rate (?:and|&) review|share (?:this|with friends)|join (?:our|the) (?:newsletter|mailing|patreon|discord|community)|mailing list|youtube channel|podcastchoices|ad choices|without ads|ad[- ]free|hosted on acast|our (?:editor|producer|intern|executive producer) is|theme music (?:is )?by|additional help from|read a transcript|transcript of this episode|for access to future|send us your (?:questions|comments)|visit (?:podcastchoices|omnystudio|acast|ft\.com|bloomberg\.com)|@\w{2,30}\b.{0,40}\b(?:twitter|x\b|instagram|tiktok|substack)|listen (?:and subscribe|on apple|on spotify)|available on (?:apple podcasts|spotify|youtube)|put your email|make you smart every day|informational purposes only|none of the (?:stocks|brands|products).{0,40}recommendations?|mentioned in this (?:podcast|episode)|we also send out|daily newsletter|^\d{1,2}:\d{2}\b|your morning briefing|top stories,? with context|all the news you need|business and finance news from|share this email|brought to you by|presented by|read in browser|welcome back[,.]|dear (?:reader|investor|client)\b|registered office|sebi registration|cin\s*:|gstin\s*:|zero entry barriers|international portfolio is waiting|diversify across top (?:us|global) stocks|as low as\s*\$\s*1\b|stop limiting your wealth|axis direct brings you|stories we(?:'|\u2019)?ll be tracking|take a look at some of the stories|missed last week|get our latest thinking on|helpdesk co-ordinates|helpdesk coordinates|hellyeah|\bbruh\b|\blmao\b|\bwtf\b|quick gut check|in partnership with|want a free |(?:use|promo|coupon) code\b|free (?:ticket|trial|pass)\b|for a limited time|rozana sip|buy you a stake|favourite global company|favorite global company|start investing today|retail broking|not a cup of coffee|not a magazine|unleash your investment|exclusive picks by axis|curated stock picks by axis|don’t miss out on these curated|don't miss out on these curated|you received this email because you subscribed|alert list\b|carefully before investing|only for consumption by the client|should not be redistributed|sebi research analyst|research analyst reg|in[hzap]\d{6,}|related documents carefully|compliance officer|for private circulation|not an offer to (?:buy|sell)|investment in securities market|past performance is not|mutual fund investments are subject|pop registration|portfolio manager reg|amfi\b|arn[-\s]?\d{4,}|mutual fund distributor|hope this email finds you|valued (?:investor|client)|handpicked stocks|unlock wealth|remarkable potential|assuring you the best|kindly refer to the attached|please find the attached|please review the attached|excited to (?:present|bring) you|thank you for taking the time to read|thriving in your investment journey|encourag(?:e|ing) you to examine these opportunities|best of our services at all times|let(?:'|\u2019)?s (?:shift our attention|delve into)|now let(?:'|\u2019)?s\b|what(?:'|\u2019)s the real return on slack|forrester total economic impact|made their money back in just six months|\$50m in efficiency gains|312% collective roi|whatsapp (?:us|me)\b|\bdm (?:us|me)\b|message us on|reach (?:us|out to us)\b|write to us\b|call our (?:helpline|support|team)|toll[- ]free\b|customer care\b|helpline number|scan the qr code|download (?:the|our) app\b|install (?:the|our) app\b|get the app\b|book (?:a|your) (?:demo|call|slot|seat)|schedule a (?:call|demo)|request a callback|\btelegram\b|\bdiscord\b|snapchat/i;
 
 const DIGEST_RESOURCE_PROMO =
   /^(?:books? and resources?|new to the show|get smarter\b|try our tool\b|enjoy exclusive perks\b|inquire about\b)|\b(?:favorite|favourite) apps?\b|\bintrinsic value newsletter\b|\bworld trade center\b|\bsubscribers actively choose\b|\bevery subscriber\b.{0,80}\bopted\b|\bno wasted reach\b/i;
 
 const PROMOTIONAL_MESSAGE =
-  /\*{3,}\s*spam\s*\*{3,}|today(?:'|\u2019)s paper|daily newspaper is now ready|read complete epaper|micro investing|invest ₹?1,?000|start investing today|webinar|masterclass|workshop|wealth expo|wealth gathering|limited[- ]time offer|exclusive offer|special offer|register now|book your seat|buy now|shop now|unlock (?:your )?(?:wealth|investment)|gift city.{0,80}(?:summit|conference)|where the conversations shaping|axis mutual fund.{0,80}(?:invest|sip)|want to invest ₹/i;
+  /\*{3,}\s*spam\s*\*{3,}|today(?:'|\u2019)s paper|daily newspaper is now ready|read complete epaper|micro investing|invest ₹?1,?000|invest today|start investing today|webinar|masterclass|workshop|wealth expo|wealth gathering|limited[- ]time offer|exclusive offer|special offer|register now|book your seat|buy now|shop now|unlock (?:your )?(?:wealth|investment)|gift city.{0,80}(?:summit|conference)|where the conversations shaping|axis mutual fund.{0,80}(?:invest|sip|fund)|meet axis direct learn|explore [^.!?]{0,60}\bfund\b|iphone upgrade you didn(?:'|\u2019)t know you needed|find the right partnership for your brand|want to invest ₹/i;
 
 function isPromotionalMessage(message, item) {
   const title = cleanText(message?.subject ?? item?.title);
+  const source = cleanText(message?.sender ?? item?.source);
   const body = cleanText([
     message?.content,
     item?.summary,
     ...(Array.isArray(item?.bullets) ? item.bullets : []),
   ].filter(Boolean).join(" "));
-  if (PROMOTIONAL_MESSAGE.test(`${title} ${body}`)) return true;
+  if (PROMOTIONAL_MESSAGE.test(`${source} ${title} ${body}`)) return true;
   if (!item?.bullets?.length && /read|paper|edition|digest|alert|notification/i.test(title)) return true;
   return false;
 }
@@ -735,12 +789,22 @@ function mailItem(message, axis = false, includeDate = false, archiveIndex = nul
       attachmentNames: Array.isArray(message.attachmentNames) ? message.attachmentNames : [],
       archiveIndex: archiveIndex ?? indexAxisPdfArchive(AXIS_PDF_ARCHIVE_PATH),
     });
-    if (pdf?.file) {
+    const mailPdfLinks = selectAxisResearchReportLinks(message.reportLinks);
+    if (mailPdfLinks.length) {
+      item.pdfFile = null;
+      item.pdfUrl = mailPdfLinks[0].url;
+      item.pdfLinks = mailPdfLinks;
+      item.pdfSource = "mail_link";
+    } else if (pdf?.file) {
       item.pdfFile = pdf.file;
       item.pdfUrl = `/api/axis-research/pdf?file=${encodeURIComponent(pdf.file)}`;
+      item.pdfLinks = [{ url: item.pdfUrl, label: pdf.file }];
+      item.pdfSource = "archive";
     } else {
       item.pdfFile = null;
       item.pdfUrl = null;
+      item.pdfLinks = [];
+      item.pdfSource = null;
     }
   } else {
     item.sentiment = classifyNewsletterSentiment(`${title} ${summary} ${bullets.join(" ")}`);
@@ -816,11 +880,23 @@ async function readNewsletters() {
 async function readAxisResearch() {
   const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", axisMailScript], { timeout: 45000, maxBuffer: 12 * 1024 * 1024 });
   const parsed = JSON.parse(stdout);
-  const uniqueMessages = parsed.messages.filter(isAxisResearchMail).filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index);
+  const uniqueMessages = parsed.messages
+    .filter(isAxisResearchMail)
+    .filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index)
+    .sort((left, right) => new Date(right.received) - new Date(left.received));
+  const targetMessages = (parsed.targetMessages ?? [])
+    .filter(isAxisResearchMail)
+    .filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index)
+    .sort((left, right) => new Date(right.received) - new Date(left.received));
   const archiveIndex = indexAxisPdfArchive(AXIS_PDF_ARCHIVE_PATH);
   return {
     total: parsed.totalCount,
-    items: uniqueMessages.map((message) => mailItem(message, true, true, archiveIndex)),
+    items: uniqueMessages
+      .map((message) => mailItem(message, true, true, archiveIndex))
+      .filter((item, index) => !isPromotionalMessage(uniqueMessages[index], item)),
+    targetItems: targetMessages
+      .map((message) => mailItem(message, true, true, archiveIndex))
+      .filter((item, index) => !isPromotionalMessage(targetMessages[index], item)),
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -1152,7 +1228,11 @@ async function refreshAxisPdfRecommendations({ force = false } = {}) {
 }
 
 /** Axis Recommended Stocks: PDF archive primary, mail-window fills gaps. */
-async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt, { forcePdfExtract = false } = {}) {
+async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetchedAt, {
+  forcePdfExtract = false,
+  axisTargetItems = [],
+  retainedAchievements = [],
+} = {}) {
   const axisScoped = extractAxisRecommendationsForTradingAsOf(axisItems, {
     calendarDate: ANALYSIS_DATE,
     lookbackDays: AXIS_LOOKBACK_DAYS,
@@ -1170,6 +1250,11 @@ async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetch
     ...recommendation,
     tags: recommendation.tags ?? classifyAxisTags(`${recommendation.name} ${recommendation.call} ${recommendation.thesis}`),
   }));
+  const targetAchievements = mergeAxisTargetAchievements({
+    pdfAchievements: [...(pdfSnapshot.targetAchievements ?? []), ...retainedAchievements],
+    mailAchievements: extractAxisTargetAchievements(axisTargetItems),
+    limit: 200,
+  });
   const audit = axisPdfAuditFromSnapshot(pdfSnapshot);
   return {
     policy: "PDF-archive primary: Axis Recommended Stocks are extracted from the local Axis Research PDF archive (text layer), merged with the NSE trading-day Axis Research mail window. Progress-to-target uses Kite holding CMP when available, else Axis PDF/mail CMP. PDFs without a reliable call are skipped.",
@@ -1185,6 +1270,7 @@ async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetch
     axisLastFetchedAt,
     latestNewsletterAt: newsletters[0]?.time ?? "No newsletter available",
     axisRecommendations: merged,
+    axisTargetAchievements: targetAchievements,
     axisPdfArchive: {
       ...audit,
       counts: pdfSnapshot.counts ?? null,
@@ -1209,7 +1295,7 @@ async function refresh() {
     settle(readHealthNote),
   ]);
   const newsletterValue = newsletters.status === "fulfilled" ? newsletters.value : { total: 0, items: [] };
-  const axisValue = axisResearch.status === "fulfilled" ? axisResearch.value : { total: 0, items: [] };
+  const axisValue = axisResearch.status === "fulfilled" ? axisResearch.value : { total: 0, items: [], targetItems: [] };
   const podcastValue = podcasts.status === "fulfilled" ? podcasts.value : [];
   const reminderValue = reminders.status === "fulfilled" ? reminders.value : [];
   const appleCalendarValue = calendar.status === "fulfilled" ? calendar.value : [];
@@ -1253,7 +1339,9 @@ async function refresh() {
     calendar: calendarValue,
     healthNote: healthNoteValue,
     marketCalendar: marketCalendarValue,
-    investment: await buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt),
+    investment: await buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt, {
+      axisTargetItems: axisValue.targetItems,
+    }),
     sources: {
       newsletters: { status: newsletters.status === "fulfilled" ? "live" : "error", count: newsletterValue.total, displayedCount: newsletterValue.items.length, observedAt: new Date().toISOString(), message: newsletters.status === "rejected" ? String(newsletters.reason) : undefined },
       axisResearch: { status: axisResearch.status === "fulfilled" ? "live" : "error", count: axisValue.total, displayedCount: axisValue.items.length, observedAt: axisValue.fetchedAt ?? new Date().toISOString(), message: axisResearch.status === "rejected" ? String(axisResearch.reason) : undefined },
@@ -1289,8 +1377,22 @@ function cachedSnapshot(snapshot, message) {
   return { ...snapshot, status: "partial", sources };
 }
 
+function hydrateAxisTargetAchievements(snapshot) {
+  if (!snapshot?.investment) return snapshot;
+  const pdfSnapshot = loadAxisPdfRecommendationSnapshot();
+  const axisTargetAchievements = mergeAxisTargetAchievements({
+    pdfAchievements: [...(pdfSnapshot.targetAchievements ?? []), ...(snapshot.investment.axisTargetAchievements ?? [])],
+    mailAchievements: extractAxisTargetAchievements(snapshot.axisResearch ?? []),
+    limit: 200,
+  });
+  return {
+    ...snapshot,
+    investment: { ...snapshot.investment, axisTargetAchievements },
+  };
+}
+
 try {
-  const restored = JSON.parse(readFileSync(CONTENT_SNAPSHOT_PATH, "utf8"));
+  const restored = hydrateAxisTargetAchievements(JSON.parse(readFileSync(CONTENT_SNAPSHOT_PATH, "utf8")));
   // Disk restore is retention only — never treat as a fresh live Apple read.
   lastSnapshot = cachedSnapshot(restored, "Restored from local cache at process start; awaiting a forced Apple-source refresh.");
 } catch {
@@ -1334,6 +1436,7 @@ function initializingSnapshot() {
       axisLastFetchedAt: undefined,
       latestNewsletterAt: "Refresh in progress",
       axisRecommendations: [],
+      axisTargetAchievements: [],
       macroEvidence: [],
     },
     sources: {
@@ -1397,10 +1500,14 @@ async function refreshAndCache() {
       message: `${retained.sources.marketCalendar?.message ?? "Latest market-calendar refresh failed."} Retaining the last validated market calendar.`,
     };
   }
+  const retainedAchievementEvidence = retained.sources.axisResearch?.status === "live"
+    ? retained.investment.axisTargetAchievements ?? []
+    : previous?.investment?.axisTargetAchievements ?? retained.investment.axisTargetAchievements ?? [];
   retained.investment = await buildInvestmentIntelligence(
     retained.newsletters,
     retained.axisResearch,
     retained.sources.axisResearch?.observedAt,
+    { retainedAchievements: retainedAchievementEvidence },
   );
   const requiredKeys = ["newsletters", "axisResearch", "reminders", "calendar", "healthNote"];
   retained.status = requiredKeys.every((key) => retained.sources[key]?.status === "live") ? "live" : "partial";

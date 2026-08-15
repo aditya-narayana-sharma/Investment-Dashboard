@@ -1,5 +1,6 @@
 import { classificationSources, securityClassifications, securitySymbolAliases } from "./portfolio-data";
 import { buildContiguousAllocations, sortDonutHoldings } from "./portfolio-donut";
+import { netPositionsFromKitePayload } from "./kite-positions";
 import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
 import type { KiteAuthStatus, KiteSnapshot, LiveAlert, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
 
@@ -33,6 +34,16 @@ export type KiteAlertRequest = {
   direction: "above" | "below";
   triggerPrice: number;
   note?: string;
+};
+export type KiteCashInstrument = {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  series: string;
+  tickSize: number;
+  lotSize: number;
+  active: boolean;
 };
 type McpState = {
   sessionId?: string;
@@ -170,6 +181,57 @@ export async function callKiteTool(name: string, args: JsonObject = {}): Promise
   return scheduled;
 }
 
+function instrumentRows(payload: unknown): JsonObject[] {
+  if (Array.isArray(payload)) return payload.filter((item): item is JsonObject => Boolean(item && typeof item === "object"));
+  if (!payload || typeof payload !== "object") return [];
+  const object = payload as JsonObject;
+  for (const key of ["data", "items", "results", "instruments"]) {
+    if (Array.isArray(object[key])) return (object[key] as unknown[]).filter((item): item is JsonObject => Boolean(item && typeof item === "object"));
+  }
+  return [];
+}
+
+/** Search the broker's daily cash-market instrument catalogue, not the holdings list. */
+export async function searchKiteCashInstruments(query: string, exchange = "NSE", limit = 20): Promise<KiteCashInstrument[]> {
+  const normalizedQuery = query.trim().toUpperCase();
+  const normalizedExchange = exchange.trim().toUpperCase();
+  if (!/^[A-Z0-9&.\- ]{1,48}$/.test(normalizedQuery)) return [];
+  if (!/^(NSE|BSE)$/.test(normalizedExchange)) throw new Error("Instrument search supports NSE and BSE cash markets only.");
+
+  const payload = await callKiteTool("search_instruments", {
+    query: normalizedQuery.includes(":") ? normalizedQuery : `${normalizedExchange}:${normalizedQuery}`,
+    filter_on: "id",
+    from: 0,
+    limit: Math.max(1, Math.min(100, limit * 5)),
+  });
+  const rows = instrumentRows(payload);
+  return rows
+    .map((raw) => ({
+      id: string(raw.id).toUpperCase(),
+      symbol: string(raw.tradingsymbol).toUpperCase(),
+      name: string(raw.name) || string(raw.tradingsymbol),
+      exchange: string(raw.exchange).toUpperCase(),
+      series: string(raw.series).toUpperCase(),
+      tickSize: number(raw.tick_size),
+      lotSize: number(raw.lot_size) || 1,
+      active: raw.active !== false,
+    }))
+    .filter((item) => item.active && item.exchange === normalizedExchange && item.series === "EQ" && item.symbol)
+    .sort((left, right) => {
+      const leftExact = left.symbol === normalizedQuery || left.id === `${normalizedExchange}:${normalizedQuery}`;
+      const rightExact = right.symbol === normalizedQuery || right.id === `${normalizedExchange}:${normalizedQuery}`;
+      return Number(rightExact) - Number(leftExact) || left.symbol.localeCompare(right.symbol);
+    })
+    .slice(0, Math.max(1, Math.min(50, limit)));
+}
+
+async function requireKiteCashInstrument(symbol: string, exchange = "NSE") {
+  const matches = await searchKiteCashInstruments(symbol, exchange, 25);
+  const exact = matches.find((item) => item.symbol === symbol && item.exchange === exchange);
+  if (!exact) throw new Error(`${exchange}:${symbol} is not an active cash-market instrument in Kite's current catalogue.`);
+  return exact;
+}
+
 /**
  * Submit an explicitly confirmed order from the dashboard order ticket.
  * The API route validates the human-entered confirmation phrase before this
@@ -184,6 +246,8 @@ export async function placeKiteOrder(order: KiteOrderRequest) {
   if (!["MARKET", "LIMIT", "SL", "SL-M"].includes(order.orderType)) throw new Error("Invalid Kite order type.");
   if ((order.orderType === "LIMIT" || order.orderType === "SL") && (!order.price || order.price <= 0)) throw new Error("A positive limit price is required.");
   if ((order.orderType === "SL" || order.orderType === "SL-M") && (!order.triggerPrice || order.triggerPrice <= 0)) throw new Error("A positive trigger price is required.");
+
+  await requireKiteCashInstrument(symbol, "NSE");
 
   const result = await callKiteTool("place_order", {
     variety: "regular",
@@ -225,7 +289,9 @@ export async function placeKiteGtt(order: KiteGttRequest) {
   if (!(order.triggerPrice > 0)) throw new Error("A positive trigger price is required.");
   if (!(order.limitPrice > 0)) throw new Error("A positive limit price is required.");
   if (order.kind === "tsl" && order.side !== "SELL") throw new Error("Protective TSLs must be SELL GTTs.");
-  if (order.lastPrice !== undefined && !(order.lastPrice > 0)) throw new Error("Last price must be positive when provided.");
+  if (!(order.lastPrice && order.lastPrice > 0)) throw new Error("A positive reviewed reference last price is required for every GTT/TSL.");
+
+  await requireKiteCashInstrument(symbol, "NSE");
 
   const result = await callKiteTool("create_gtt", {
     tradingsymbol: symbol,
@@ -235,7 +301,7 @@ export async function placeKiteGtt(order: KiteGttRequest) {
     trigger_price: order.triggerPrice,
     quantity: order.quantity,
     limit_price: order.limitPrice,
-    ...(order.lastPrice && order.lastPrice > 0 ? { last_price: order.lastPrice } : {}),
+    last_price: order.lastPrice,
     confirm: true,
   });
 
@@ -279,6 +345,8 @@ export async function placeKiteAlert(alert: KiteAlertRequest) {
       throw new Error(`Invalid alert exchange: ${String(_exhaustive)}`);
     }
   }
+
+  if (alert.exchange === "NSE" || alert.exchange === "BSE") await requireKiteCashInstrument(symbol, alert.exchange);
 
   let result: unknown;
   try {
@@ -379,6 +447,7 @@ function mapOrders(rawOrders: JsonObject[]): LiveOrder[] {
   return rawOrders.slice().reverse().map((raw) => ({
     id: string(raw.order_id), symbol: string(raw.tradingsymbol), side: string(raw.transaction_type), qty: number(raw.quantity),
     type: `${string(raw.order_type)} · ${string(raw.product)}`, price: number(raw.average_price) || number(raw.price), status: string(raw.status),
+    statusMessage: string(raw.status_message) || string(raw.status_message_raw),
   }));
 }
 
@@ -607,16 +676,13 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
       : "";
     const marginsApiFault = unavailable.includes("margins")
       && /message build error|failed to execute get_margins|generalexception|rms limits|unknown_request|request not registered|error parsing response/i.test(marginsFailure);
-    const holdings = mapLiveHoldings(holdingsRaw as JsonObject[], positionsRaw as JsonObject[]);
+    const netPositionsRaw = netPositionsFromKitePayload(positionsRaw);
+    const holdings = mapLiveHoldings(holdingsRaw as JsonObject[], netPositionsRaw);
     const pendingClassifications = holdings
       .filter((holding) => holding.classificationStatus === "pending")
       .map((holding) => holding.symbol);
     if (pendingClassifications.length) unavailable.push("classifications");
-    const openPositions = mapOpenPositions(
-      Array.isArray((positionsRaw as JsonObject)?.net)
-        ? (positionsRaw as JsonObject).net as JsonObject[]
-        : Array.isArray(positionsRaw) ? positionsRaw as JsonObject[] : [],
-    );
+    const openPositions = mapOpenPositions(netPositionsRaw);
     const donutHoldings = sortDonutHoldings(holdings);
     const value = holdings.reduce((sum, holding) => sum + holding.value, 0);
     const invested = holdings.reduce((sum, holding) => sum + holding.avg * holding.qty, 0);

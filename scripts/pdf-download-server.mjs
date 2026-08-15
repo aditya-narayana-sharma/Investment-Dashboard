@@ -13,6 +13,7 @@ const MAX_REPORT_BYTES = 12 * 1024 * 1024;
 const chromeCandidates = [
   process.env.PDF_CHROME_PATH,
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Browsers/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
 ].filter(Boolean);
 const ghostscriptCandidates = [

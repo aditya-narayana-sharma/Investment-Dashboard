@@ -186,7 +186,9 @@ Health refresh validates the newest iCloud Apple Health ZIP before importing
 as a fallback source and the last validated extracted export remains in use, so
 a failed archive cannot overwrite a valid Health snapshot. The archive ExportDate
 is evaluated with the same 8 PM policy, and records after its eligible-through
-date are excluded from KPI cards and comparisons.
+date are excluded from KPI cards and comparisons. 
+
+Daily reconciliation values (steps, walking speed, workout minutes, active and resting calories, and nutrition) come from the **"Health" Apple Shortcut** and its **Health Stats** export, imported via `scripts/import_health_shortcut.py` into `artifacts/private/health-overrides.json`. The Apple Notes Health Daily and Health Daily v2 snapshots are deprecated and are no longer read. Run the Shortcut for historical data; if a date is missing, run it again for that date.
 
 The current baked research snapshot lives in `app/portfolio-data.ts`; live prices
 and broker state are never sourced from that file while Kite is healthy.

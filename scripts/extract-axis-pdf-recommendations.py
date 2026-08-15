@@ -105,6 +105,7 @@ COMPANY_SYMBOLS: list[tuple[str, str]] = [
     ("Bajaj Finance", "BAJFINANCE"),
     ("Shriram Finance", "SHRIRAMFIN"),
     ("CreditAccess Grameen", "CREDITACC"),
+    ("Credit Access Grameen", "CREDITACC"),
     ("Eicher Motors", "EICHERMOT"),
     ("Maruti Suzuki", "MARUTI"),
     ("Endurance Technologies", "ENDURANCE"),
@@ -167,6 +168,12 @@ TECH_TARGET_RE = re.compile(
 )
 CLOSED_RE = re.compile(
     r"target achieved|book profits|hit stop loss|call closure|closed the call",
+    re.I,
+)
+TARGET_ACHIEVED_RE = re.compile(r"target achieved|book(?:ed)? profits?|closed \+?\d+(?:\.\d+)?%", re.I)
+ACHIEVEMENT_NAME_RE = re.compile(
+    r"(?:\*+)?(?P<name>[A-Z][A-Za-z0-9 &.'-]{1,70}?)(?:\s*\([^)]*\))?\s*(?:\|\s*)?"
+    r"(?:target achieved|book(?:ed)?\s*\+?\d+(?:\.\d+)?%|book profits?)",
     re.I,
 )
 DATE_IN_NAME_RE = re.compile(r"(20\d{2})-(\d{2})-(\d{2})")
@@ -506,6 +513,58 @@ def extract_investment_picks_trading(path: Path, text: str) -> list[dict]:
     return findings
 
 
+def extract_target_achievements(path: Path, text: str) -> list[dict]:
+    """Extract explicit closed-call wins from every readable Axis PDF."""
+    compact = clean_text(text)
+    if not TARGET_ACHIEVED_RE.search(compact):
+        return []
+    findings: list[dict] = []
+    seen: set[str] = set()
+    for achievement_match in ACHIEVEMENT_NAME_RE.finditer(compact):
+        raw_name = clean_text(achievement_match.group("name"))
+        matched = next(
+            (
+                (company, symbol)
+                for company, symbol in sorted(COMPANY_SYMBOLS, key=lambda row: len(row[0]), reverse=True)
+                if company.lower() in raw_name.lower() or raw_name.lower() in company.lower()
+            ),
+            None,
+        )
+        if not matched:
+            continue
+        company, symbol = matched
+        if symbol in seen:
+            continue
+        window = compact[max(0, achievement_match.start() - 40) : min(len(compact), achievement_match.end() + 320)]
+        if not TARGET_ACHIEVED_RE.search(window):
+            continue
+        achieved = re.search(
+            r"(?:hit(?:\s+its)?|target(?:\s+price)?(?:\s+of)?|book(?:ed)?(?:\s+profits?)?(?:\s+at)?|TP)\s*(?:Rs\.?|₹|INR)?\s*([\d,]+(?:\.\d+)?)",
+            window,
+            re.I,
+        )
+        target = parse_number(achieved.group(1)) if achieved else None
+        gain = re.search(r"\+\s*(\d+(?:\.\d+)?)%", window)
+        findings.append(
+            {
+                "symbol": symbol,
+                "name": company,
+                "call": "TARGET ACHIEVED",
+                "target": target,
+                "achievedPrice": target,
+                "gainPct": parse_number(gain.group(1)) if gain else None,
+                "source": "Axis PDF",
+                "sourceFile": path.name,
+                "dateKey": date_from_path(path),
+                "date": format_display_date(date_from_path(path)),
+                "thesis": clean_text(window)[:360],
+                "origin": "pdf",
+            }
+        )
+        seen.add(symbol)
+    return findings
+
+
 def is_valid_pdf(path: Path) -> bool:
     try:
         with path.open("rb") as fh:
@@ -660,6 +719,7 @@ def main() -> int:
     pdfs = sorted({p.resolve() for p in archive.rglob("*.pdf") if p.is_file()})
     scanned = []
     all_calls: list[dict] = []
+    target_achievements: list[dict] = []
     invalid = []
     skip_reasons = Counter()
 
@@ -668,6 +728,14 @@ def main() -> int:
             skip_reasons["filtered_by_name"] += 1
             continue
         calls, meta = extract_from_pdf(path)
+        if meta.get("ok"):
+            try:
+                doc = fitz.open(path)
+                achievement_text = "\n".join(page.get_text("text") for page in doc)
+                doc.close()
+                target_achievements.extend(extract_target_achievements(path, achievement_text))
+            except Exception:  # noqa: BLE001
+                pass
         scanned.append(meta)
         if meta.get("skipReason") == "invalid_pdf_header":
             try:
@@ -682,6 +750,29 @@ def main() -> int:
     # Deduped board for I-4; history retained for audit/debug.
     recommendations = merge_latest(all_calls)
     history = all_dated_calls(all_calls, since="2026-07-01")
+    # The generated Investment Brief PDFs are source-backed reconciliations of
+    # Mail plus downloaded Axis reports. They are intentionally excluded from
+    # active-call extraction, but remain valid Target Achieved evidence.
+    brief_pdfs = sorted({p.resolve() for p in archive.rglob("Investment_Brief_*.pdf") if p.is_file()})
+    for path in brief_pdfs:
+        try:
+            doc = fitz.open(path)
+            brief_text = "\n".join(page.get_text("text") for page in doc)
+            doc.close()
+            target_achievements.extend(extract_target_achievements(path, brief_text))
+        except Exception:  # noqa: BLE001
+            pass
+
+    achievement_best: dict[str, dict] = {}
+    for item in target_achievements:
+        identity = f"{item['symbol']}|{item.get('dateKey') or ''}|{item.get('target') or ''}"
+        if identity not in achievement_best:
+            achievement_best[identity] = item
+    achievements = sorted(
+        achievement_best.values(),
+        key=lambda row: (row.get("dateKey") or "", row["symbol"]),
+        reverse=True,
+    )
     by_bucket = Counter(item.get("bucket", "fundamental") for item in recommendations)
     with_progress = sum(1 for item in recommendations if item.get("cmp") and item.get("target"))
     without_progress = len(recommendations) - with_progress
@@ -700,6 +791,7 @@ def main() -> int:
         "callsSinceJulyRaw": since_july_raw,
         "recommendationsHistory": history,
         "recommendations": recommendations,
+        "targetAchievements": achievements,
         "sinceDate": "2026-07-01",
         "counts": {
             "total": len(recommendations),
@@ -709,6 +801,7 @@ def main() -> int:
             "withCmpAndTarget": with_progress,
             "missingProgressInputs": without_progress,
             "historyRows": len(history),
+            "targetAchievements": len(achievements),
         },
         "filesWithCalls": sum(1 for item in scanned if item.get("calls")),
         "sampleSkipped": [

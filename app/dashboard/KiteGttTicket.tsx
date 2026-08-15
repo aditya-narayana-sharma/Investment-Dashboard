@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
 import { inr } from "./utils";
+import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
 type GttSide = "BUY" | "SELL";
 type Product = "CNC" | "MIS" | "NRML" | "MTF";
@@ -46,6 +47,8 @@ export function KiteGttTicket({
   const [product, setProduct] = useState<Product>("CNC");
   const [triggerPrice, setTriggerPrice] = useState(selection?.holding ? selection.holding.price.toFixed(2) : "");
   const [limitPrice, setLimitPrice] = useState(selection?.holding ? selection.holding.price.toFixed(2) : "");
+  const [lastPrice, setLastPrice] = useState(selection?.holding ? selection.holding.price.toFixed(2) : "");
+  const [lastPriceTouched, setLastPriceTouched] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -53,12 +56,16 @@ export function KiteGttTicket({
 
   const normalizedSymbol = symbol.trim().toUpperCase();
   const matchedHolding = holdings.find((holding) => holding.symbol.toUpperCase() === normalizedSymbol);
+  const lookup = useKiteInstrumentLookup(normalizedSymbol, "NSE");
   const expected = useMemo(
     () => (normalizedSymbol ? `${label} ${side} ${quantity} ${normalizedSymbol}` : ""),
     [label, side, quantity, normalizedSymbol],
   );
   const trigger = Number(triggerPrice);
   const limit = Number(limitPrice);
+  const automaticLast = matchedHolding?.price || lookup.publicPrice || 0;
+  const displayedLastPrice = lastPriceTouched ? lastPrice : (automaticLast > 0 ? automaticLast.toFixed(2) : lastPrice);
+  const referenceLast = Number(displayedLastPrice);
   const ready = Boolean(
     selection
     && reviewed
@@ -67,6 +74,8 @@ export function KiteGttTicket({
     && quantity >= 1
     && trigger > 0
     && limit > 0
+    && referenceLast > 0
+    && lookup.exact !== null
     && (kind !== "tsl" || side === "SELL"),
   );
 
@@ -76,11 +85,13 @@ export function KiteGttTicket({
     const upper = nextSymbol.trim().toUpperCase();
     setSymbol(upper);
     setConfirmation("");
+    setLastPriceTouched(false);
     const holding = holdings.find((item) => item.symbol.toUpperCase() === upper);
     if (!holding) return;
     setQuantity(Math.max(1, holding.qty || 1));
     setTriggerPrice(holding.price.toFixed(2));
     setLimitPrice(holding.price.toFixed(2));
+    setLastPrice(holding.price.toFixed(2));
   }
 
   async function submitGtt() {
@@ -99,7 +110,7 @@ export function KiteGttTicket({
           product,
           triggerPrice: trigger,
           limitPrice: limit,
-          lastPrice: matchedHolding?.price && matchedHolding.price > 0 ? matchedHolding.price : undefined,
+          lastPrice: referenceLast,
           confirmation,
         }),
       });
@@ -120,7 +131,7 @@ export function KiteGttTicket({
         <div>
           <span>Create {label} · NSE · single-leg</span>
           <h3 id="kite-gtt-title">{normalizedSymbol || `New ${label}`}</h3>
-          <p>{matchedHolding ? `${matchedHolding.name} · last ${inr.format(matchedHolding.price)}` : "Enter a NSE tradingsymbol. Last price is auto-fetched by Kite when omitted."}</p>
+          <p>{matchedHolding ? `${matchedHolding.name} · Kite holding last ${inr.format(matchedHolding.price)}` : lookup.exact ? `${lookup.exact.name}${lookup.publicPrice ? ` · public delayed ${inr.format(lookup.publicPrice)}` : ""}` : "Search the complete Kite NSE cash-equity catalogue."}</p>
         </div>
         <button type="button" onClick={onClose} disabled={submitting} aria-label={`Close ${label} ticket`}><X size={18}/></button>
       </header>
@@ -134,8 +145,9 @@ export function KiteGttTicket({
       </div>
       <div className="kite-order-fields">
         <label>Symbol
-          <input list="kite-gtt-holdings" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. INFY" autoComplete="off" spellCheck={false}/>
-          <datalist id="kite-gtt-holdings">{holdings.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.name}</option>)}</datalist>
+          <input list="kite-gtt-instruments" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. NTPC" autoComplete="off" spellCheck={false}/>
+          <datalist id="kite-gtt-instruments">{lookup.instruments.map((instrument) => <option key={instrument.id} value={instrument.symbol}>{instrument.name}</option>)}</datalist>
+          <small className={`kite-instrument-status ${lookup.status}`}>{lookup.status === "checking" ? "Checking Kite catalogue…" : lookup.exact ? `Verified ${lookup.exact.exchange}:${lookup.exact.symbol}` : normalizedSymbol && lookup.status === "invalid" ? "Not an active cash-market symbol" : "NSE holdings and all other NSE cash equities"}</small>
         </label>
         <label>Side
           {kind === "tsl"
@@ -149,11 +161,12 @@ export function KiteGttTicket({
         <label>Product<select value={product} onChange={(event) => setProduct(event.target.value as Product)}><option value="CNC">CNC · delivery</option><option value="MIS">MIS · intraday</option><option value="MTF">MTF · funded</option><option value="NRML">NRML</option></select></label>
         <label>Trigger price<input type="number" min="0.05" step="0.05" value={triggerPrice} onChange={(event) => { setTriggerPrice(event.target.value); setConfirmation(""); }} placeholder={matchedHolding?.price.toFixed(2)}/></label>
         <label>Limit price<input type="number" min="0.05" step="0.05" value={limitPrice} onChange={(event) => { setLimitPrice(event.target.value); setConfirmation(""); }} placeholder={matchedHolding?.price.toFixed(2)}/></label>
+        <label>Reference last price<input type="number" min="0.05" step="0.05" value={displayedLastPrice} onChange={(event) => { setLastPrice(event.target.value); setLastPriceTouched(true); setConfirmation(""); }} placeholder={lookup.publicPrice?.toFixed(2)}/><small className="kite-instrument-status">Required by Kite for GTT validation. Auto-filled from a holding or public delayed NSE close; review before submitting.</small></label>
       </div>
       <div className="kite-order-summary">
         <span>Trigger → limit</span>
         <b>{trigger > 0 ? inr.format(trigger) : "—"} → {limit > 0 ? inr.format(limit) : "—"}</b>
-        <small>Single-leg LIMIT GTT via Kite create_gtt. Estimated notional {limit > 0 ? inr.format(limit * quantity) : "—"}.</small>
+        <small>Single-leg LIMIT GTT via Kite create_gtt · reviewed reference last {referenceLast > 0 ? inr.format(referenceLast) : "required"}. Estimated notional {limit > 0 ? inr.format(limit * quantity) : "—"}.</small>
       </div>
       <label className="kite-order-review"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)}/><span>I reviewed this exact {label} and want Kite to create it.</span></label>
       <label className="kite-order-confirm">Type <b>{expected || `${label} SIDE QTY SYMBOL`}</b> to enable submission<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false}/></label>

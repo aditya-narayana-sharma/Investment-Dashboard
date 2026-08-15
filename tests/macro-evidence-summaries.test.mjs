@@ -7,13 +7,13 @@ const visualCss = await readFile(new URL("../app/visual-overhaul.css", import.me
 
 test("macro evidence summaries stay source-derived and follow the selected event", () => {
   assert.match(workspace, /function buildMacroEvidenceSummaries/);
-  assert.match(workspace, /const evidenceSummaries = buildMacroEvidenceSummaries\(summaryItems, eventKey\)/);
+  assert.match(workspace, /const evidenceSummaries = buildMacroEvidenceSummaries\(selectedEvidenceItems, eventKey, bandKey\)/);
+  assert.match(workspace, /const selectedEvidenceItems = scenarioEvidenceItems\(candidateItems, eventKey, bandKey\)/);
   assert.match(workspace, /eventKey === "flows"[\s\S]*fiiDiiFlowsSnapshot\.evidence[\s\S]*\.\.\.mailItems/);
   assert.match(workspace, /<AiEvidenceSummaries summaries=\{evidenceSummaries\}\/\>/);
   assert.match(workspace, /AI-generated evidence summaries/);
   assert.match(workspace, /Source-derived · outcome classified/);
-  assert.match(workspace, /macroEvidenceRelevance\[eventKey\]\.test\(part\)/);
-  assert.match(workspace, /international cat day\|autumnal ambassadors\|must-read tech news/);
+  assert.match(workspace, /scenarioEvidenceSentence\(item, eventKey, bandKey\)/);
 });
 
 test("macro evidence summaries use semantic bullets with accessible outcome labels", () => {

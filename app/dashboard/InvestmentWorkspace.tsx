@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
-import { Activity, CheckCircle2, Database, ExternalLink, FileText, Gauge, Globe2, Mail, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Activity, CheckCircle2, ChevronDown, Database, ExternalLink, FileText, Gauge, Globe2, Mail, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { analystCallTone, groupAnalystRows, type AnalystGroupMode } from "../analyst-matrix-groups";
 import { fiiDiiFlowsSnapshot, fiveDayDiiNetCr, fiveDayFiiNetCr, flowCompositionSlices, formatFlowCr, formatFlowDeltaCr } from "../fii-dii-flows";
 import { axisArchiveAudit, riskAxes, type RiskProfile } from "../portfolio-data";
+import { axisImpliedUpsidePct, resolveAxisCmp } from "../axis-pick-metrics";
 import type { ContentDigestSnapshot, MailRecommendation } from "../content-types";
 import type { KiteSnapshot, LiveHolding } from "../live-types";
 import { portfolioReturnTone } from "../portfolio-concentration.mjs";
+import { scenarioEvidenceItems, scenarioEvidenceSentence } from "../macro-scenario-evidence";
 import { buildRiskExplanation } from "../risk-explanations";
 import { thesisBullets, type ThesisBullet } from "../thesis-bullets";
 import type { MacroBandKey, MacroEventKey } from "./types";
@@ -45,34 +48,71 @@ function portfolioReturnColor(returnPct: number): string {
   return tone === "gain" ? "#137a43" : tone === "loss" ? "#a92f39" : "#9a6b12";
 }
 
-function layoutPortfolioMap(data: PortfolioMapDatum[], x = 0, y = 0, width = 100, height = 100): PortfolioMapRect[] {
+function layoutPortfolioMap(data: PortfolioMapDatum[]): PortfolioMapRect[] {
   if (!data.length) return [];
-  if (data.length === 1) return [{ ...data[0], x, y, width, height }];
 
+  // The rendered map is consistently wider than tall. Packing against that
+  // physical aspect ratio prevents the smallest holdings becoming unreadably
+  // narrow while preserving exact market-value area.
+  const frameWidth = 1.46;
+  const frameHeight = 1;
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  const target = total / 2;
-  let running = 0;
-  let splitAt = 1;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 1; index < data.length; index += 1) {
-    running += data[index - 1].value;
-    const distance = Math.abs(target - running);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      splitAt = index;
+  const remaining = data.map((item) => ({ item, area: total > 0 ? item.value / total * frameWidth * frameHeight : 0 }));
+  const rects: Array<PortfolioMapDatum & { x: number; y: number; width: number; height: number }> = [];
+
+  function worstAspect(row: typeof remaining, shortSide: number) {
+    if (!row.length || shortSide <= 0) return Number.POSITIVE_INFINITY;
+    const sum = row.reduce((value, entry) => value + entry.area, 0);
+    const largest = Math.max(...row.map((entry) => entry.area));
+    const smallest = Math.min(...row.map((entry) => entry.area));
+    if (sum <= 0 || smallest <= 0) return Number.POSITIVE_INFINITY;
+    const sideSquared = shortSide * shortSide;
+    return Math.max(sideSquared * largest / (sum * sum), (sum * sum) / (sideSquared * smallest));
+  }
+
+  function placeRow(row: typeof remaining, frame: { x: number; y: number; width: number; height: number }) {
+    const area = row.reduce((sum, entry) => sum + entry.area, 0);
+    if (frame.width >= frame.height) {
+      const columnWidth = frame.height > 0 ? area / frame.height : 0;
+      let offsetY = frame.y;
+      for (const entry of row) {
+        const tileHeight = columnWidth > 0 ? entry.area / columnWidth : 0;
+        rects.push({ ...entry.item, x: frame.x, y: offsetY, width: columnWidth, height: tileHeight });
+        offsetY += tileHeight;
+      }
+      return { x: frame.x + columnWidth, y: frame.y, width: Math.max(0, frame.width - columnWidth), height: frame.height };
+    }
+    const rowHeight = frame.width > 0 ? area / frame.width : 0;
+    let offsetX = frame.x;
+    for (const entry of row) {
+      const tileWidth = rowHeight > 0 ? entry.area / rowHeight : 0;
+      rects.push({ ...entry.item, x: offsetX, y: frame.y, width: tileWidth, height: rowHeight });
+      offsetX += tileWidth;
+    }
+    return { x: frame.x, y: frame.y + rowHeight, width: frame.width, height: Math.max(0, frame.height - rowHeight) };
+  }
+
+  let frame = { x: 0, y: 0, width: frameWidth, height: frameHeight };
+  let row: typeof remaining = [];
+  while (remaining.length) {
+    const candidate = remaining[0];
+    const shortSide = Math.min(frame.width, frame.height);
+    if (!row.length || worstAspect([...row, candidate], shortSide) <= worstAspect(row, shortSide)) {
+      row.push(remaining.shift()!);
+    } else {
+      frame = placeRow(row, frame);
+      row = [];
     }
   }
+  if (row.length) placeRow(row, frame);
 
-  const first = data.slice(0, splitAt);
-  const second = data.slice(splitAt);
-  const firstValue = first.reduce((sum, item) => sum + item.value, 0);
-  const ratio = total > 0 ? firstValue / total : first.length / data.length;
-  if (width >= height) {
-    const firstWidth = width * ratio;
-    return [...layoutPortfolioMap(first, x, y, firstWidth, height), ...layoutPortfolioMap(second, x + firstWidth, y, width - firstWidth, height)];
-  }
-  const firstHeight = height * ratio;
-  return [...layoutPortfolioMap(first, x, y, width, firstHeight), ...layoutPortfolioMap(second, x, y + firstHeight, width, height - firstHeight)];
+  return rects.map((rect) => ({
+    ...rect,
+    x: rect.x / frameWidth * 100,
+    y: rect.y / frameHeight * 100,
+    width: rect.width / frameWidth * 100,
+    height: rect.height / frameHeight * 100,
+  }));
 }
 
 function portfolioMapTooltip(holding: PortfolioMapDatum): string {
@@ -92,33 +132,16 @@ function macroEvidenceOutcome(item: Pick<ContentDigestSnapshot["investment"]["ma
   return inferred === "positive" ? "positive" : inferred === "negative" ? "negative" : "neutral";
 }
 
-const macroEvidenceRelevance: Record<MacroEventKey, RegExp> = {
-  oilWar: /\b(?:oil|crude|brent|fuel|freight|iran|war|missile|geopolit|hormuz)\b/i,
-  flows: /\b(?:fii|dii|foreign|institutional|cash|flow|buying|selling|exchange|net)\b/i,
-  rates: /\b(?:inr|rupee|rate|yield|forex|reserve|inflation|debt|bond|rbi|fed)\b/i,
-  breadth: /\b(?:breadth|vix|volatil|nifty|sensex|index|market|stocks?|closing.price|correction)\b/i,
-  earnings: /\b(?:earnings?|profit|revenue|margin|results?|dividend|guidance|reported|beat|cash.flow|kpi|target price|\btp\b)\b/i,
-};
-
-function compactEvidenceText(item: Pick<ContentDigestSnapshot["investment"]["macroEvidence"][number]["items"][number], "title" | "summary" | "bullets">, eventKey: MacroEventKey): string {
-  const source = [...(item.bullets ?? []), item.summary, item.title].filter(Boolean).join(". ");
-  const clean = source.replace(/\s+/g, " ").replace(/^[\s•·\-–—]+/, "").trim();
-  const boilerplate = /(?:difficult to read|view in browser|unsubscribe|subscribe|follow us|contact us|click here|website|manage preferences|privacy policy|international cat day|autumnal ambassadors|must-read tech news)/i;
-  const candidates = (clean.match(/[^.!?]+[.!?]?/g) ?? [clean]).map((part) => part.trim());
-  const sentence = candidates.find((part) => part.length > 28 && !boilerplate.test(part) && macroEvidenceRelevance[eventKey].test(part)) ?? "";
-  if (!sentence) return "";
-  return sentence.length > 180 ? `${sentence.slice(0, 177).trim()}…` : sentence;
-}
-
 function buildMacroEvidenceSummaries(
   items: ContentDigestSnapshot["investment"]["macroEvidence"][number]["items"],
   eventKey: MacroEventKey,
+  bandKey: MacroBandKey,
   limit = 5,
 ): MacroEvidenceSummary[] {
   const summaries: MacroEvidenceSummary[] = [];
   const seen = new Set<string>();
   for (const item of items) {
-    const text = compactEvidenceText(item, eventKey);
+    const text = scenarioEvidenceSentence(item, eventKey, bandKey);
     const key = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     if (!text || text.length < 18 || seen.has(key)) continue;
     seen.add(key);
@@ -138,6 +161,19 @@ function AiEvidenceSummaries({ summaries }: { summaries: MacroEvidenceSummary[] 
   </section>;
 }
 
+function riskScoreBand(score: number): "green" | "amber" | "red" {
+  if (score <= 2) return "green";
+  if (score <= 3) return "amber";
+  return "red";
+}
+
+function riskScoreColor(score: number): string {
+  const band = riskScoreBand(score);
+  if (band === "green") return "#42c878";
+  if (band === "amber") return "#e6a11a";
+  return "#ff6b72";
+}
+
 function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, explainSelected = false, evidenceContext, emptyLabel = "No current risk profiles" }: { profiles: RiskProfile[]; selected: string; onSelect: (symbol: string) => void; averageLabel: string; idPrefix: string; explainSelected?: boolean; evidenceContext?: RiskEvidenceContext; emptyLabel?: string }) {
   if (!profiles.length) return <div className="live-empty compact"><Mail size={22}/><b>{emptyLabel}</b><p>The refreshed source set did not produce a verified profile for the selected analysis window.</p></div>;
   const profile = profiles.find((item) => item.symbol === selected) ?? profiles[0];
@@ -147,36 +183,45 @@ function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, expla
     axis,
     score: profile.scores[index],
     average: Number((profiles.reduce((sum, item) => sum + item.scores[index], 0) / profiles.length).toFixed(1)),
+    tone: riskScoreBand(profile.scores[index]),
+    toneColor: riskScoreColor(profile.scores[index]),
   }));
+  const meanScore = Number((profile.scores.reduce((sum, score) => sum + score, 0) / profile.scores.length).toFixed(1));
+  const seriesColor = riskScoreColor(meanScore);
   const tabPanelId = `${idPrefix}-panel`;
-  const chartHeight = explainSelected ? 320 : 440;
+  const chartHeight = explainSelected ? 480 : 620;
+  const selectorLabel = (item: RiskProfile) => explainSelected ? (item.name || item.symbol) : item.symbol;
+  const renderAxisTick = (props: { x?: number; y?: number; payload?: { value?: string }; textAnchor?: string }) => {
+    const label = String(props.payload?.value ?? "");
+    const point = data.find((item) => item.axis === label);
+    const fill = point?.toneColor ?? "var(--chart-label)";
+    const x = Number(props.x ?? 0);
+    const y = Number(props.y ?? 0);
+    return <text x={x} y={y} dy={4} textAnchor={props.textAnchor ?? "middle"} fill={fill} fontSize={12} fontWeight={800}>{label}</text>;
+  };
+  const renderScoreDot = (props: { cx?: number; cy?: number; payload?: { score?: number; toneColor?: string } }) => {
+    const cx = Number(props.cx ?? 0);
+    const cy = Number(props.cy ?? 0);
+    const fill = props.payload?.toneColor ?? riskScoreColor(Number(props.payload?.score ?? 0));
+    return <circle cx={cx} cy={cy} r={5.5} fill={fill} stroke="#0a0a0a" strokeWidth={1.5} />;
+  };
 
-  const selector = <div className="risk-selector" role="tablist" aria-label="Select risk profile">{profiles.map((item) => <button type="button" role="tab" id={`${idPrefix}-tab-${item.symbol}`} aria-controls={tabPanelId} aria-selected={item.symbol === profile.symbol} key={item.symbol} onClick={() => onSelect(item.symbol)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item.symbol); } }} className={item.symbol === profile.symbol ? "active" : ""} aria-label={`${item.name} (${item.symbol})`}>{item.symbol}</button>)}</div>;
+  const selector = <div className={`risk-selector${explainSelected ? " risk-selector-names" : ""}`} role="tablist" aria-label="Select risk profile">{profiles.map((item) => <button type="button" role="tab" id={`${idPrefix}-tab-${item.symbol}`} aria-controls={tabPanelId} aria-selected={item.symbol === profile.symbol} key={item.symbol} onClick={() => onSelect(item.symbol)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item.symbol); } }} className={item.symbol === profile.symbol ? "active" : ""} aria-label={`${item.name} (${item.symbol})`} title={`${item.name} (${item.symbol})`}>{selectorLabel(item)}</button>)}</div>;
   const chartPanel = <div className="risk-radar-chart-col" role="tabpanel" id={tabPanelId} aria-labelledby={`${idPrefix}-tab-${profile.symbol}`}>
       <div className="risk-chart"><ResponsiveContainer width="100%" height={chartHeight}>
-        <RadarChart data={data} outerRadius={explainSelected ? "72%" : "78%"} margin={explainSelected ? { top: 18, right: 24, bottom: 18, left: 24 } : { top: 20, right: 42, bottom: 16, left: 42 }}>
+        <RadarChart data={data} outerRadius={explainSelected ? "78%" : "88%"} margin={explainSelected ? { top: 16, right: 36, bottom: 12, left: 36 } : { top: 4, right: 18, bottom: 4, left: 18 }}>
           <PolarGrid stroke="#3b444e" />
-          <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--chart-label)", fontSize: 11, fontWeight: 700 }} />
+          <PolarAngleAxis dataKey="axis" tick={renderAxisTick} />
           <PolarRadiusAxis angle={90} domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 10 }} />
-          <Radar name={averageLabel} dataKey="average" stroke="#8f98a2" fill="#8f98a2" fillOpacity={0.08} strokeDasharray="5 4" isAnimationActive={false} />
-          <Radar name={profile.name} dataKey="score" stroke={profile.color} fill={profile.color} fillOpacity={0.25} strokeWidth={2.5} isAnimationActive={false} />
+          <Radar name={averageLabel} dataKey="average" stroke="#8f98a2" fill="#8f98a2" fillOpacity={0.06} strokeDasharray="5 4" isAnimationActive={false} dot={false} />
+          <Radar name={profile.name} dataKey="score" stroke={seriesColor} fill={seriesColor} fillOpacity={0.22} strokeWidth={2.75} isAnimationActive={false} dot={renderScoreDot} />
           {!explainSelected && <Legend />}
           <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} / 5`, "Risk score"]} />
         </RadarChart>
       </ResponsiveContainer></div>
-      {explainSelected && <div className="risk-series-key" aria-label="Radar series"><span><i style={{background:profile.color}}/>{profile.name}</span><span><i className="average"/>{averageLabel}</span></div>}
+      {explainSelected && <div className="risk-series-key" aria-label="Radar series"><span><i style={{background:seriesColor}}/>{profile.name}</span><span><i className="average"/>{averageLabel}</span></div>}
       <div className="risk-scale"><span><i className="dot green"/>1-2 lower</span><span><i className="dot amber"/>3 moderate</span><span><i className="dot red"/>4-5 elevated</span><em>Qualitative monitoring score, not a probability of loss or investment recommendation.</em></div>
     </div>;
-  const comparisonPanel = explainSelected && <section className="risk-comparison" aria-labelledby={`${idPrefix}-comparison-title`}>
-      <header><h5 id={`${idPrefix}-comparison-title`}>Selected vs portfolio average</h5><span>Exact axis scores</span></header>
-      <table>
-        <thead><tr><th scope="col">Axis</th><th scope="col"><abbr title="Selected holding">Sel.</abbr></th><th scope="col"><abbr title="Portfolio average">Avg.</abbr></th><th scope="col"><abbr title="Risk score difference">Δ</abbr></th></tr></thead>
-        <tbody>{data.map((item) => {
-          const delta = Number((item.score - item.average).toFixed(1));
-          return <tr key={item.axis}><th scope="row">{item.axis}</th><td>{item.score.toFixed(1)}</td><td>{item.average.toFixed(1)}</td><td className={delta > 0 ? "negative" : delta < 0 ? "positive" : "neutral"}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}</td></tr>;
-        })}</tbody>
-      </table>
-    </section>;
   const explanationPanel = explanation && <aside className="risk-explanation" aria-live="polite" aria-labelledby={`${idPrefix}-explanation-title`}>
         <header><span>Selected holding</span><h4 id={`${idPrefix}-explanation-title`}>{explanation.profileLabel}</h4></header>
         <section><h5>Overview</h5><ul className="risk-overview-list">{explanation.overview.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul></section>
@@ -192,8 +237,8 @@ function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, expla
       </aside>;
 
   return explainSelected
-    ? <div className="risk-radar-layout risk-radar-workbench"><div className="risk-radar-visual-column">{selector}{chartPanel}{comparisonPanel}</div>{explanationPanel}</div>
-    : <div className="risk-radar-layout">{selector}{chartPanel}</div>;
+    ? <div className="risk-radar-layout risk-radar-workbench holdings-risk-stack">{selector}{chartPanel}{explanationPanel}</div>
+    : <div className="risk-radar-layout axis-risk-stack">{selector}{chartPanel}</div>;
 }
 
 function FlowsRegimePanel({ bandTone, range, evidence, sectors, trigger, summaries }: { bandTone: string; range: string; evidence: string; sectors: string; trigger: string; summaries: MacroEvidenceSummary[] }) {
@@ -279,15 +324,18 @@ function MacroScenarioBoard({ eventKey, bandKey, onEventChange, onBandChange, co
   const event = macroEvents[eventKey];
   const band = event.bands[bandKey];
   const mail = content.investment.macroEvidence.find((item) => item.key === eventKey);
-  const mailCount = mail?.count ?? 0;
   const mailItems = mail?.items ?? [];
-  const summaryItems = eventKey === "flows"
+  const candidateItems = eventKey === "flows"
     ? [
         ...fiiDiiFlowsSnapshot.evidence.map((item) => ({ source: item.source, time: item.asOf, title: item.title, summary: item.summary })),
         ...mailItems,
       ]
     : mailItems;
-  const evidenceSummaries = buildMacroEvidenceSummaries(summaryItems, eventKey);
+  const selectedEvidenceItems = scenarioEvidenceItems(candidateItems, eventKey, bandKey);
+  const selectedMailItems = scenarioEvidenceItems(mailItems, eventKey, bandKey);
+  const evidenceSummaries = buildMacroEvidenceSummaries(selectedEvidenceItems, eventKey, bandKey);
+  const evidenceCount = selectedEvidenceItems.length;
+  const evidenceRangeLabel = `${band.label} · ${band.range}`;
   return <section className="macro-workbench scenario-weather">
     <div className={`investment-mail-source ${content.status}`}><Mail size={16}/><span><b>Investment evidence refreshed from Mail for {analysisWindowLabel(content)}</b><small>iCloud → Axis Research ({content.sources.axisResearch.displayedCount ?? content.axisResearch.length} qualifying reports) + iCloud → Newsletters ({content.sources.newsletters.displayedCount ?? content.newsletters.length} items) · refreshed {content.asOf}</small></span></div>
     <div className="weather-altitude" aria-hidden="true"><span className={bandKey === "supportive" ? "active" : ""}>Supportive altitude</span><span className={bandKey === "base" ? "active" : ""}>Base altitude</span><span className={bandKey === "stress" ? "active" : ""}>Stress altitude</span></div>
@@ -303,19 +351,13 @@ function MacroScenarioBoard({ eventKey, bandKey, onEventChange, onBandChange, co
         <article className={`macro-regime-card ${band.tone}`}><div><span className={`dot ${band.tone}`}/><b>{event.label}</b></div><strong>{band.range}</strong><p>{event.evidence}</p><small>{event.sectors}</small><AiEvidenceSummaries summaries={evidenceSummaries}/><em>{event.trigger}</em></article>
       )}
       {eventKey === "flows" ? (
-        <FlowsEvidencePanel content={content} mailCount={mailCount} mailItems={mailItems}/>
+        <FlowsEvidencePanel content={content} mailCount={selectedMailItems.length} mailItems={selectedMailItems}/>
       ) : (
-        <article className="macro-selected-evidence"><header><Mail size={16}/><div><b>{event.label} evidence</b><small>{mailCount} matching Axis Research and Newsletter items</small></div></header>{mailItems.length ? <div>{mailItems.map((item) => <section key={`${item.receivedAt ?? item.time}-${item.title}`}><span>{item.source} · {item.time}</span><b>{item.title}</b><p>{item.summary}</p></section>)}</div> : <div className="macro-no-evidence"><b>No event-specific Mail evidence found</b><p>The selected decision ranges remain framework thresholds, not claims about the current market state.</p></div>}</article>
+        <article className="macro-selected-evidence"><header><Mail size={16}/><div><b>{event.label} evidence</b><small>{evidenceCount} items matching {evidenceRangeLabel}</small></div></header>{selectedEvidenceItems.length ? <div>{selectedEvidenceItems.map((item) => <section key={`${item.receivedAt ?? item.time}-${item.title}`}><span>{item.source} · {item.time}</span><b>{item.title}</b><p>{scenarioEvidenceSentence(item, eventKey, bandKey) || item.summary}</p></section>)}</div> : <div className="macro-no-evidence"><b>No source evidence matches {evidenceRangeLabel}</b><p>Broader {event.label.toLowerCase()} items are withheld because they do not support this selected range. Decision ranges remain framework thresholds, not claims about the current market state.</p></div>}</article>
       )}
     </div>
     <div className="macro-method"><ShieldAlert size={15}/><span><b>Decision sequence:</b> establish regime → test flow and rate confirmation → identify sector transmission → verify company KPIs → size the portfolio response.</span></div>
   </section>;
-}
-
-/** Implied upside % from Axis target vs CMP; null when either side is missing. */
-function axisImpliedUpsidePct(target: number | null | undefined, cmp: number | null | undefined): number | null {
-  if (target == null || cmp == null || cmp <= 0) return null;
-  return (target / cmp - 1) * 100;
 }
 
 /** Compact line under the company name: `TARGET - XX% (Axis PDF|Mail)` or price fallback. */
@@ -357,13 +399,15 @@ function axisProgressToTarget(
   kiteBySymbol: Map<string, number>,
   yfinanceBySymbol: Map<string, number> = new Map(),
 ): AxisProgress {
-  const kiteRaw = kiteBySymbol.get(item.symbol);
-  const kite = kiteRaw != null && kiteRaw > 0 ? kiteRaw : null;
-  const yfRaw = yfinanceBySymbol.get(item.symbol);
-  const yf = yfRaw != null && yfRaw > 0 ? yfRaw : null;
-  const mail = item.cmp != null && item.cmp > 0 ? item.cmp : null;
-  const cmp = kite ?? yf ?? mail;
-  const cmpSource: AxisProgress["cmpSource"] = kite != null ? "live" : yf != null ? "yfinance" : mail != null ? "mail" : null;
+  const resolved = resolveAxisCmp(item, kiteBySymbol, yfinanceBySymbol);
+  const cmp = resolved.cmp;
+  const cmpSource: AxisProgress["cmpSource"] = resolved.source === "kite"
+    ? "live"
+    : resolved.source === "yfinance"
+      ? "yfinance"
+      : resolved.source === "axis"
+        ? "mail"
+        : null;
   const target = item.target != null && item.target > 0 ? item.target : null;
 
   if (cmp == null || target == null) {
@@ -426,10 +470,19 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
   const categoryRecs = recommendations.filter((item) => (categories.find((category) => category.key === activeCategory) ?? categories[0]).match(item));
   const visibleRecs = categoryRecs.length ? categoryRecs : recommendations;
   const [selectedSymbol, setSelectedSymbol] = useState(visibleRecs[0]?.symbol ?? recommendations[0]?.symbol ?? "");
+  const [detailOpen, setDetailOpen] = useState(false);
   const selected = visibleRecs.find((item) => item.symbol === selectedSymbol)
     ?? recommendations.find((item) => item.symbol === selectedSymbol)
     ?? visibleRecs[0]
     ?? recommendations[0];
+  useEffect(() => {
+    if (!detailOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [detailOpen]);
   if (!selected) {
     return <section className="axis-workbench target-hud"><div className="live-empty"><Mail size={24}/><b>No Axis recommendation was parsed from the PDF archive or mail window</b><p>Scanned {audit.filesAttempted} archive files ({audit.validPdfs} valid PDFs). PDFs without a reliable BUY/HOLD/SELL + target text layer are skipped — they are not OCR’d into calls. No older static call is being presented as current.</p></div></section>;
   }
@@ -450,6 +503,10 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
   if (selected.evidenceFile) {
     evidenceBits.splice(1, 0, selected.evidenceFile);
   }
+  const openPick = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    setDetailOpen(true);
+  };
 
   return <section className="axis-workbench target-hud">
     <div className="axis-audit-strip">
@@ -464,6 +521,7 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
         setActiveCategory(item.key);
         const next = recommendations.find(item.match);
         if (next) setSelectedSymbol(next.symbol);
+        setDetailOpen(false);
       }}>
         <span>{item.label}</span><b>{count}</b><small>{count === 1 ? "active call" : "active calls"}</small>
       </button>;
@@ -473,7 +531,7 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
         const progress = axisProgressToTarget(item, kiteBySymbol, yfinanceBySymbol);
         const tone = axisBucket(item) === "technical" ? "blue" : axisBucket(item) === "trading" ? "amber" : "green";
         const itemSource = /pdf/i.test(item.source) ? "Axis PDF" : /mail/i.test(item.source) ? "Axis Mail" : "Axis";
-        return <button type="button" className={`${selected.symbol === item.symbol ? "active" : ""} ${tone}`} onClick={() => setSelectedSymbol(item.symbol)} key={`${item.symbol}-${axisBucket(item)}-${item.call}`}>
+        return <button type="button" className={`${selected.symbol === item.symbol && detailOpen ? "active" : ""} ${tone}`} onClick={() => openPick(item.symbol)} key={`${item.symbol}-${axisBucket(item)}-${item.call}`}>
           <b>{item.symbol}</b>
           <small>{item.name}</small>
           <span className="axis-pick-cmp">CMP {formatAxisCmp(progress.cmp)}</span>
@@ -481,8 +539,10 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
           <AxisCmpProgressBar progress={progress} compact />
         </button>;
       })}</nav>
-      <article className="panel axis-pick-detail" style={{"--axis-color": selected.color} as CSSProperties}>
-        <div className="axis-pick-heading"><div><span>{category} · {selected.date}</span><h3>{selected.name}</h3><p className="axis-target-line">{formatAxisTargetLine(selected.target, selectedCmp, sourceLabel)}</p><p>{selected.symbol} · {selected.source}</p></div><span className="pill blue">{selected.call}</span></div>
+    </div>
+    {detailOpen && <div className="axis-pick-backdrop" role="presentation" onClick={() => setDetailOpen(false)}>
+      <article className="panel axis-pick-detail" style={{"--axis-color": selected.color} as CSSProperties} role="dialog" aria-modal="true" aria-labelledby="axis-pick-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="axis-pick-heading"><div><span>{category} · {selected.date}</span><h3 id="axis-pick-detail-title">{selected.name}</h3><p className="axis-target-line">{formatAxisTargetLine(selected.target, selectedCmp, sourceLabel)}</p><p>{selected.symbol} · {selected.source}</p></div><div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}><span className="pill blue">{selected.call}</span><button type="button" className="axis-pick-close" aria-label="Close Axis pick detail" onClick={() => setDetailOpen(false)}><X size={18}/></button></div></div>
         <div className="axis-numeric-grid">
           <div><span>CMP · {cmpSourceLabel}</span><b>{formatAxisCmp(selectedCmp)}</b></div>
           <div><span>Target</span><b>{selected.target ? inr.format(selected.target) : "No explicit TP"}</b></div>
@@ -493,7 +553,7 @@ function AxisRecommendationWorkbench({ recommendations, content, kiteBySymbol, y
         <ThesisBulletList bullets={detailBullets} className="axis-thesis-bullets" />
         <div className="axis-evidence"><FileText size={15}/><span><b>Evidence:</b> {evidenceBits.join(" · ")}</span></div>
       </article>
-    </div>
+    </div>}
     <div className="table-note"><FileText size={16}/><span>PDF-archive policy: Axis Recommended Stocks are driven by text-layer extraction across the local Axis Research archive ({audit.validPdfs} valid PDFs / {audit.pagesRead.toLocaleString("en-IN")} pages), merged with the NSE trading-day mail window (as-of {content.investment.axisTradingAsOfLabel ?? analysisWindowLabel(content)}). Holding Trading Calls (ETERNAL, ICICIBANK, JSWENERGY, BHARTIARTL) use Axis Investment Picks targets with progress-to-target. CMP prefers Kite holding price, else yfinance, else Axis PDF CMP. Refreshed {content.asOf}.</span></div>
   </section>;
 }
@@ -528,7 +588,7 @@ export type InvestmentWorkspaceProps = {
   mailAxisRecommendations: MailRecommendation[];
   mailAxisProfiles: RiskProfile[];
   livePortfolioRiskProfiles: RiskProfile[];
-  analystRows: Array<{ symbol: string; house: string; rating: string; target: number | null | undefined; date: string; thesis: string; mail: boolean }>;
+  analystRows: AnalystMatrixRow[];
   donutHoldings: KiteSnapshot["holdings"];
   exposureComposition: Array<{
     symbol: string;
@@ -586,6 +646,8 @@ export function InvestmentWorkspace({
   const [orderSelection, setOrderSelection] = useState<KiteOrderSelection>(null);
   const [gttSelection, setGttSelection] = useState<KiteGttSelection>(null);
   const [alertSelection, setAlertSelection] = useState<KiteAlertSelection>(null);
+  const [analystGroupMode, setAnalystGroupMode] = useState<AnalystGroupMode>("calls");
+  const [collapsedAnalystGroups, setCollapsedAnalystGroups] = useState<Set<string>>(() => new Set());
   const { holdings, portfolio, orders, gtts, marketCapAllocation, sectorAllocation, subSectorAllocation, classification } = snapshot;
   const positions = snapshot.positions ?? [];
   const alerts = snapshot.alerts ?? [];
@@ -629,6 +691,19 @@ export function InvestmentWorkspace({
   const activeHoldingSymbol = engagedHoldingSymbol ?? selectedHoldingSymbol;
   const activeMapHolding = portfolioMapData.find((holding) => holding.symbol === activeHoldingSymbol) ?? null;
   const toggleHoldingSelection = (symbol: string) => setSelectedHoldingSymbol((current) => current === symbol ? null : symbol);
+  const analystGroups = useMemo(
+    () => groupAnalystRows(analystRows, analystGroupMode, currentBySymbol, holdings),
+    [analystGroupMode, analystRows, currentBySymbol, holdings],
+  );
+  const toggleAnalystGroup = (groupKey: string) => {
+    const scopedKey = `${analystGroupMode}:${groupKey}`;
+    setCollapsedAnalystGroups((current) => {
+      const next = new Set(current);
+      if (next.has(scopedKey)) next.delete(scopedKey);
+      else next.add(scopedKey);
+      return next;
+    });
+  };
   const holdingBySymbol = new Map(holdings.map((holding) => [holding.symbol.toUpperCase(), holding]));
   const matchedAxisTargets = Array.from(new Map(mailAxisRecommendations
     .filter((recommendation) => recommendation.target && holdingBySymbol.has(recommendation.symbol.toUpperCase()))
@@ -722,6 +797,26 @@ export function InvestmentWorkspace({
         />
       </section>
 
+      <div className="portfolio-analysis-grid orbital-planet">
+      <section className="panel chart-panel nested-chart-panel">
+        <div className="panel-title"><div><h3>Nested portfolio allocation</h3><p>Outer: live Kite holdings and P&amp;L · upper-middle: sub-sector · lower-middle: industry · inner: AMFI market-cap tier</p></div><Gauge size={18}/></div>
+        {hasPortfolio ? <><div className="nested-chart-wrap">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart margin={{top:4,right:4,bottom:4,left:4}}>
+              <Pie data={marketCapAllocation} dataKey="value" nameKey="name" innerRadius="18%" outerRadius="31%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="inner"/>}>{marketCapAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
+              <Pie data={sectorAllocation} dataKey="value" nameKey="name" innerRadius="34%" outerRadius="50%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="industry"/>}>{sectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
+              <Pie data={subSectorAllocation} dataKey="value" nameKey="name" innerRadius="53%" outerRadius="70%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="subsector"/>}>{subSectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
+              <Pie data={donutHoldings} dataKey="value" nameKey="symbol" innerRadius="73%" outerRadius="96%" startAngle={90} endAngle={-270} paddingAngle={0} isAnimationActive={false} labelLine={false} label={(props) => <HoldingLabel {...props}/> }>
+                {donutHoldings.map((h,index) => <Cell key={h.symbol} fill={holdingOuterFill(h.pnl, index)} fillOpacity={h.dayPnl >= 0 ? 1 : .52} stroke={h.dayPnl >= 0 ? "#ffffff" : "#9b2f36"} strokeWidth={h.dayPnl >= 0 ? 2 : 1.5}/>) }
+              </Pie>
+              <Tooltip formatter={(value,name) => [inr.format(Number(value)),String(name)]}/>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="nested-center"><b className={portfolio.pnl>=0?"positive":"negative"}>{portfolio.pnl>=0?"+":""}{inr.format(portfolio.pnl)}</b><span>Unrealised · {portfolio.pnlPct>=0?"+":""}{portfolio.pnlPct.toFixed(2)}%</span><strong className={portfolio.dayPnl>=0?"positive":"negative"}>{portfolio.dayPnl>=0?"+":""}{inr.format(portfolio.dayPnl)}</strong><span>Day · {portfolio.dayPct>=0?"+":""}{portfolio.dayPct.toFixed(2)}%</span></div>
+        </div>
+        <div className="ring-key"><span><i className="ring outer"/>Outer · holding weight + U/Day P&amp;L (green gain / red loss)</span><span><i className="ring subsector"/>Upper-middle · sub-sector</span><span><i className="ring industry"/>Lower-middle · industry</span><span><i className="ring inner"/>Inner · AMFI market-cap tier</span><span><i className="shade"/>Shaded outer segment = negative day P&amp;L</span></div><div className={"classification-audit " + (classification.pendingSymbols.length ? "pending" : "verified")}><CheckCircle2 size={14}/><span>{classification.pendingSymbols.length ? "Verification pending: " + classification.pendingSymbols.join(", ") : "Verified industry and sub-sector · " + classification.industrySource + " · " + classification.marketCapSource + " · as of " + classification.asOf}{!classification.pendingSymbols.length && <> · <a href={classification.industryUrl} target="_blank" rel="noreferrer">NSE</a> · <a href={classification.marketCapUrl} target="_blank" rel="noreferrer">AMFI</a></>}{holdings.some((holding) => holding.symbol === "ADANIGREEN") && <small>ADANIGREEN · Power Generation · Renewable Power · Large Cap</small>}{holdings.some((holding) => holding.symbol === "LTF") && <small>LTF · Non Banking Financial Company · Diversified Retail NBFC · Mid Cap</small>}</span></div></> : <div className="live-empty"><Activity size={24}/><b>Live allocation is unavailable</b><p>{snapshot.message}</p>{snapshot.authUrl && <a href={snapshot.authUrl} target="_blank" rel="noreferrer">Authenticate Kite <ExternalLink size={14}/></a>}</div>}
+      </section>
+
       <section className="portfolio-management" aria-labelledby="portfolio-management-title">
         <div className="portfolio-management-heading"><div><Sparkles size={20}/><span><b id="portfolio-management-title">Portfolio management</b><small>Live Kite baseline + explicit Axis targets + audited local research coverage</small></span></div><span className="pill blue">{axisAsOfLabel}</span></div>
         <div className="portfolio-management-grid">
@@ -746,27 +841,6 @@ export function InvestmentWorkspace({
         <div className="portfolio-management-sources"><span>Axis Research: {mailAxisRecommendations.length} current calls · {content.investment.latestAxisAt}</span><span>Newsletters: {content.sources.newsletters.displayedCount ?? content.newsletters.length} items · {content.investment.latestNewsletterAt}</span></div>
       </section>
 
-      <div className="portfolio-analysis-grid orbital-planet">
-      <section className="panel chart-panel nested-chart-panel">
-        <div className="panel-title"><div><h3>Nested portfolio allocation</h3><p>Outer: live Kite holdings and P&amp;L · upper-middle: sub-sector · lower-middle: industry · inner: AMFI market-cap tier</p></div><Gauge size={18}/></div>
-        {hasPortfolio ? <><div className="nested-chart-wrap">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart margin={{top:4,right:4,bottom:4,left:4}}>
-              <Pie data={marketCapAllocation} dataKey="value" nameKey="name" innerRadius="18%" outerRadius="31%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="inner"/>}>{marketCapAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
-              <Pie data={sectorAllocation} dataKey="value" nameKey="name" innerRadius="34%" outerRadius="50%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="industry"/>}>{sectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
-              <Pie data={subSectorAllocation} dataKey="value" nameKey="name" innerRadius="53%" outerRadius="70%" startAngle={90} endAngle={-270} paddingAngle={0} stroke="#ffffff" strokeWidth={1.25} isAnimationActive={false} labelLine={false} label={(props) => <AllocationLabel {...props} ring="subsector"/>}>{subSectorAllocation.map((item) => <Cell key={item.id ?? item.name} fill={item.color}/>)}</Pie>
-              <Pie data={donutHoldings} dataKey="value" nameKey="symbol" innerRadius="73%" outerRadius="96%" startAngle={90} endAngle={-270} paddingAngle={0} isAnimationActive={false} labelLine={false} label={(props) => <HoldingLabel {...props}/> }>
-                {donutHoldings.map((h,index) => <Cell key={h.symbol} fill={holdingOuterFill(h.pnl, index)} fillOpacity={h.dayPnl >= 0 ? 1 : .52} stroke={h.dayPnl >= 0 ? "#ffffff" : "#9b2f36"} strokeWidth={h.dayPnl >= 0 ? 2 : 1.5}/>) }
-              </Pie>
-              <Tooltip formatter={(value,name) => [inr.format(Number(value)),String(name)]}/>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="nested-center"><b className={portfolio.pnl>=0?"positive":"negative"}>{portfolio.pnl>=0?"+":""}{inr.format(portfolio.pnl)}</b><span>Unrealised · {portfolio.pnlPct>=0?"+":""}{portfolio.pnlPct.toFixed(2)}%</span><strong className={portfolio.dayPnl>=0?"positive":"negative"}>{portfolio.dayPnl>=0?"+":""}{inr.format(portfolio.dayPnl)}</strong><span>Day · {portfolio.dayPct>=0?"+":""}{portfolio.dayPct.toFixed(2)}%</span></div>
-        </div>
-        <div className="ring-key"><span><i className="ring outer"/>Outer · holding weight + U/Day P&amp;L (green gain / red loss)</span><span><i className="ring subsector"/>Upper-middle · sub-sector</span><span><i className="ring industry"/>Lower-middle · industry</span><span><i className="ring inner"/>Inner · AMFI market-cap tier</span><span><i className="shade"/>Shaded outer segment = negative day P&amp;L</span></div><div className={"classification-audit " + (classification.pendingSymbols.length ? "pending" : "verified")}><CheckCircle2 size={14}/><span>{classification.pendingSymbols.length ? "Verification pending: " + classification.pendingSymbols.join(", ") : "Verified industry and sub-sector · " + classification.industrySource + " · " + classification.marketCapSource + " · as of " + classification.asOf}{!classification.pendingSymbols.length && <> · <a href={classification.industryUrl} target="_blank" rel="noreferrer">NSE</a> · <a href={classification.marketCapUrl} target="_blank" rel="noreferrer">AMFI</a></>}{holdings.some((holding) => holding.symbol === "ADANIGREEN") && <small>ADANIGREEN · Power Generation · Renewable Power · Large Cap</small>}{holdings.some((holding) => holding.symbol === "LTF") && <small>LTF · Non Banking Financial Company · Diversified Retail NBFC · Mid Cap</small>}</span></div></> : <div className="live-empty"><Activity size={24}/><b>Live allocation is unavailable</b><p>{snapshot.message}</p>{snapshot.authUrl && <a href={snapshot.authUrl} target="_blank" rel="noreferrer">Authenticate Kite <ExternalLink size={14}/></a>}</div>}
-      </section>
-
-      <div className="portfolio-analysis-stack">
       <section className="panel holdings-panel portfolio-activity-panel spectrum-sheet">
         <div className="panel-title"><div><h3>Portfolio activity</h3></div>
           <div className="segmented portfolio-activity-tabs">{activityTabs.map((tab) => <button key={tab.key} type="button" onClick={() => setView(tab.key)} className={`vo-pop${view === tab.key ? " active" : ""}`}>{tab.label}</button>)}</div>
@@ -801,7 +875,7 @@ export function InvestmentWorkspace({
               </article>)}
             </div></>
           : <div className="table-empty">No static positions are shown. Connect Kite to load the live portfolio.</div>)}
-        {view === "orders" && <div className="activity-single">{orders.map(o=><div className="activity-row" key={o.id}><div><b>{o.symbol}</b><small>{o.side} {o.qty} · {o.type}</small></div><strong>{inr.format(o.price)}</strong><span className={`pill ${o.status.toLowerCase()==="complete"?"green":"amber"}`}>{o.status}</span></div>)}{!orders.length&&<div className="table-empty">{unavailable.has("orders") ? "Kite orders are temporarily unavailable." : "No live orders."}</div>}</div>}
+        {view === "orders" && <div className="activity-single"><div className="activity-create-bar"><button type="button" className="create-order" disabled={!isLive} title={isLive ? "Trade any NSE cash equity" : "Live Kite authentication is required"} onClick={() => setOrderSelection({ side: "BUY" })}>Create NSE order</button></div>{orders.map(o=><div className="activity-row" key={o.id}><div><b>{o.symbol}</b><small>{o.side} {o.qty} · {o.type}{o.statusMessage ? ` · ${o.statusMessage}` : ""}</small></div><strong>{inr.format(o.price)}</strong><span className={`pill ${o.status.toLowerCase()==="complete"?"green":"amber"}`}>{o.status}</span></div>)}{!orders.length&&<div className="table-empty">{unavailable.has("orders") ? "Kite orders are temporarily unavailable." : "No live orders."}</div>}</div>}
         {view === "positions" && <div className="activity-single">{positions.map(p=><div className="activity-row" key={p.id}><div><b>{p.symbol}</b><small>{p.side} {p.qty} · {p.product}</small></div><strong className={p.pnl>=0?"positive":"negative"}>{p.pnl>=0?"+":""}{inr.format(p.pnl)}</strong><span className="pill blue">{inr.format(p.price)}</span></div>)}{!positions.length&&<div className="table-empty">{unavailable.has("positions") ? "Kite positions are temporarily unavailable." : "No open day/net positions beyond the holdings book."}</div>}</div>}
         {view === "gtts" && <div className="activity-single">
           <div className="activity-create-bar"><button type="button" className="create-gtt" disabled={!isLive} title={isLive ? "Open Create GTT ticket" : "Live Kite authentication is required"} onClick={() => setGttSelection({ kind: "gtt" })}>Create GTT</button></div>
@@ -830,10 +904,11 @@ export function InvestmentWorkspace({
             const selected = selectedHoldingSymbol === holding.symbol;
             const dimmed = selectedHoldingSymbol !== null && !selected;
             const showSecondary = holding.width >= 24 && holding.height >= 32;
+            const density = holding.width < 15 || holding.height < 17 ? "micro" : holding.width < 24 || holding.height < 25 ? "compact" : "roomy";
             return <button
               type="button"
               key={holding.symbol}
-              className={`portfolio-map-tile ${holding.returnTone}${selected ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
+              className={`portfolio-map-tile ${holding.returnTone} ${density}${selected ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
               style={{ left: `${holding.x}%`, top: `${holding.y}%`, width: `${holding.width}%`, height: `${holding.height}%`, "--portfolio-map-color": holding.displayColor } as CSSProperties}
               aria-pressed={selected}
               aria-label={portfolioMapTooltip(holding).replaceAll("\n", ". ")}
@@ -844,7 +919,7 @@ export function InvestmentWorkspace({
               onBlur={() => setEngagedHoldingSymbol(null)}
               onClick={() => toggleHoldingSelection(holding.symbol)}
             >
-              <span className="portfolio-map-primary"><b>{holding.symbol}</b><strong>{holding.weight.toFixed(1)}%</strong><em>{inr.format(holding.value)}</em></span>
+              <span className="portfolio-map-primary"><b title={holding.symbol}>{holding.symbol}</b><strong>{holding.weight.toFixed(1)}%</strong><em>{inr.format(holding.value)}</em></span>
               {showSecondary && <span className="portfolio-map-secondary"><span>U {holding.pnl >= 0 ? "+" : ""}{inr.format(holding.pnl)}</span><span>Day {holding.dayPnl >= 0 ? "+" : ""}{inr.format(holding.dayPnl)}</span></span>}
             </button>;
           })}
@@ -857,8 +932,7 @@ export function InvestmentWorkspace({
           </aside>}
         </div> : <div className="live-empty compact"><Activity size={22}/><b>Concentration map unavailable</b><p>Connect Kite to load current holding values.</p></div>}
       </section>
-      </div>
-      {orderSelection && <KiteOrderTicket key={`${orderSelection.side}-${orderSelection.holding.symbol}`} selection={orderSelection} onClose={() => setOrderSelection(null)} onSubmitted={onKiteRefresh}/>}
+      {orderSelection && <KiteOrderTicket key={`${orderSelection.side}-${orderSelection.holding?.symbol ?? "new"}`} selection={orderSelection} holdings={holdings} onClose={() => setOrderSelection(null)} onSubmitted={onKiteRefresh}/>} 
       {gttSelection && <KiteGttTicket key={`${gttSelection.kind}-${gttSelection.holding?.symbol ?? "new"}`} selection={gttSelection} holdings={holdings} onClose={() => setGttSelection(null)} onSubmitted={onKiteRefresh}/>}
       {alertSelection && <KiteAlertTicket key={alertSelection.holding?.symbol ?? "new-alert"} selection={alertSelection} holdings={holdings} onClose={() => setAlertSelection(null)} onSubmitted={onKiteRefresh}/>}
       </div>
@@ -902,27 +976,47 @@ export function InvestmentWorkspace({
       <CollapsibleSection number="I-4" title="Axis picks" note={`Call matrix · Axis recommended stocks · recommended risk radar · as-of ${axisAsOfLabel}${content.investment.axisUsedLastTradingDay ? " · weekend/holiday fallback" : ""}`}>
         <section className="panel analyst-matrix" data-visual="axis-call-constellation">
           <div className="panel-title"><div><h3>Analyst call matrix</h3><p>Targets are reference points, not quarter forecasts</p></div><Target size={18}/></div>
-          <div className="table-scroll">
-            <table className="analyst-table">
-              <thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>CMP</th><th>Target</th><th>Implied vs CMP</th><th>Published</th><th>What matters</th></tr></thead>
-              <tbody>{analystRows.map((a) => {
-                const current = currentBySymbol.get(a.symbol);
-                const implied = current && a.target ? (a.target / current - 1) * 100 : null;
-                const bullets = thesisBullets(a.thesis, { symbol: a.symbol, call: a.rating, limit: 4 });
-                return <tr key={`${a.symbol}-${a.house}-${a.rating}-${a.target ?? "na"}-${a.date}`}>
-                  <td data-label="Stock"><b>{a.symbol}</b>{a.mail && <small className="mail-row-label">WINDOW MAIL</small>}</td>
-                  <td data-label="Source / house">{a.house}</td>
-                  <td data-label="Call"><span className="pill blue">{a.rating}</span></td>
-                  <td data-label="CMP">{current ? inr.format(current) : "—"}</td>
-                  <td data-label="Target">{a.target ? inr.format(a.target) : "—"}</td>
-                  <td data-label="Implied vs CMP" className={implied === null ? "" : implied >= 0 ? "positive" : "negative"}>{implied === null ? "—" : `${implied >= 0 ? "+" : ""}${implied.toFixed(1)}%`}</td>
-                  <td data-label="Published">{a.date}</td>
-                  <td data-label="What matters"><ThesisBulletList bullets={bullets} className="thesis-bullet-list" /></td>
-                </tr>;
-              })}</tbody>
-            </table>
+          <div className="analyst-matrix-controls">
+            <label htmlFor="analyst-group-by">Group by
+              <select id="analyst-group-by" value={analystGroupMode} onChange={(event) => setAnalystGroupMode(event.target.value as AnalystGroupMode)}>
+                <option value="calls">Analyst calls</option>
+                <option value="industries">Industries</option>
+                <option value="performance">Performance</option>
+                <option value="posted-month">Posted-in-month</option>
+                <option value="target-achieved">Target achieved</option>
+              </select>
+            </label>
           </div>
-          <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol (trading over fundamental when BUY/TRADING BUY share the same target and date). Other houses remain explicitly labelled supplementary references. CMP prefers Kite last price when held; otherwise a yfinance delayed NSE quote. Em dash only when both are unavailable.</span></div>
+          {analystGroups.length ? analystGroups.map((group) => {
+            const groupStateKey = `${analystGroupMode}:${group.key}`;
+            const groupControlId = `analyst-group-${groupStateKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+            const isCollapsed = collapsedAnalystGroups.has(groupStateKey);
+            return <div className={`analyst-group-block${isCollapsed ? " collapsed" : ""}`} key={`${analystGroupMode}-${group.key}`}>
+            <button type="button" className={`analyst-group-header call-${group.tone}`} aria-expanded={!isCollapsed} aria-controls={groupControlId} onClick={() => toggleAnalystGroup(group.key)}><span className="analyst-group-title"><ChevronDown size={15} aria-hidden="true"/><b>{group.label}</b></span><span>{group.rows.length} call{group.rows.length === 1 ? "" : "s"}</span></button>
+            <div className="table-scroll" id={groupControlId} hidden={isCollapsed}>
+              <table className="analyst-table">
+                <thead><tr><th>Stock</th><th>Source / house</th><th>Call</th><th>CMP</th><th>Target</th><th>Implied vs CMP</th><th>Published</th><th>What matters</th></tr></thead>
+                <tbody>{group.rows.map((a) => {
+                  const current = currentBySymbol.get(a.symbol);
+                  const implied = !a.targetAchieved && current && a.target ? (a.target / current - 1) * 100 : null;
+                  const bullets = thesisBullets(a.thesis, { symbol: a.symbol, call: a.rating, limit: 4 });
+                  const callTone = analystCallTone(a.rating);
+                  return <tr key={`${a.symbol}-${a.house}-${a.rating}-${a.target ?? "na"}-${a.date}`}>
+                    <td data-label="Stock"><b>{a.symbol}</b></td>
+                    <td data-label="Source / house">{a.house}</td>
+                    <td data-label="Call"><span className={`pill ${callTone}`}>{a.rating}</span></td>
+                    <td data-label="CMP">{current ? inr.format(current) : "—"}</td>
+                    <td data-label="Target">{a.target ? inr.format(a.target) : "—"}</td>
+                    <td data-label="Implied vs CMP" className={implied === null ? "" : implied >= 0 ? "positive" : "negative"}>{implied === null ? "—" : `${implied >= 0 ? "+" : ""}${implied.toFixed(1)}%`}</td>
+                    <td data-label="Published">{a.date}</td>
+                    <td data-label="What matters"><ThesisBulletList bullets={bullets} className="thesis-bullet-list" /></td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </div>;
+          }) : <div className="analyst-matrix-empty"><Target size={18}/><b>No source-backed rows in this group</b><span>Target achieved includes only explicit Axis Research Mail/PDF closure evidence.</span></div>}
+          <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol. Plain BUY variants resolve to one BUY category; Trading and Technical BUY remain distinct. Target achieved is a separate closed-call view sourced from explicit Axis Research Mail/PDF evidence and is never treated as an active recommendation. CMP prefers Kite last price when held; otherwise a yfinance delayed NSE quote.</span></div>
         </section>
         <AxisRecommendationWorkbench recommendations={mailAxisRecommendations} content={content} kiteBySymbol={resolvedKiteBySymbol} yfinanceBySymbol={resolvedYfinanceBySymbol}/>
         <article className="panel risk-panel threat-flower"><div className="panel-title"><div><h3>Recommended risk radar</h3><p>{axisAsOfLabel} · {mailAxisProfiles.length} deduplicated Axis calls from iCloud → Axis Research</p></div><Target size={18}/></div><RiskRadar profiles={mailAxisProfiles} selected={axisRisk} onSelect={setAxisRisk} averageLabel="Axis list average" idPrefix="axis-recommended-risk" emptyLabel={`No Axis risk profiles for ${mailWindow}`} /></article>

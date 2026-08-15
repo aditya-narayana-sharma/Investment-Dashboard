@@ -182,20 +182,35 @@ function digestItemId(item: DigestItem) {
   return `${item.receivedAt ?? item.time}|${item.source}|${item.title}`;
 }
 
-function DigestSourceLinks({ item, kind }: { item: DigestItem; kind: DigestKind }) {
+function DigestSourceLinks({ item, kind, axisResearch = false }: { item: DigestItem; kind: DigestKind; axisResearch?: boolean }) {
   const links: Array<{ href: string; label: string; icon: "mail" | "pdf" | "episode" }> = [];
+  // Axis PDFs are the primary evidence, so place their action first and give it
+  // a dedicated, high-contrast treatment instead of burying it among tiny links.
+  const pdfLinks = item.pdfLinks?.length
+    ? item.pdfLinks
+    : item.pdfUrl
+      ? [{ url: item.pdfUrl, label: item.pdfFile ?? "Axis Research report" }]
+      : [];
+  if (axisResearch && pdfLinks[0]) {
+    // One primary report action per mail card. Some Axis result-update emails
+    // contain many tracked anchors; rendering every anchor creates a wall of
+    // indistinguishable controls and disconnects the action from the card.
+    links.push({ href: pdfLinks[0].url, label: "Open PDF", icon: "pdf" });
+  }
   if (item.messageUrl) links.push({ href: item.messageUrl, label: "Open in Mail", icon: "mail" });
-  if (item.pdfUrl) links.push({ href: item.pdfUrl, label: "Open PDF", icon: "pdf" });
+  if (!axisResearch) {
+    pdfLinks.forEach((pdf) => links.push({ href: pdf.url, label: "Open PDF", icon: "pdf" }));
+  }
   if (kind === "podcast" && item.episodeUrl) {
     links.push({ href: item.episodeUrl, label: "Open in Podcasts", icon: "episode" });
   }
   if (!links.length) return null;
   return (
-    <div className="digest-item-links" aria-label="Source links">
+    <div className={`digest-item-links${axisResearch ? " axis-research-links" : ""}`} aria-label="Source links">
       {links.map((link) => (
         <a
           key={`${link.label}-${link.href}`}
-          className="digest-source-link"
+          className={`digest-source-link${axisResearch && link.icon === "pdf" ? " axis-open-pdf" : ""}`}
           href={link.href}
           target={link.icon === "mail" ? undefined : "_blank"}
           rel={link.icon === "mail" ? undefined : "noopener noreferrer"}
@@ -213,11 +228,13 @@ function DigestSourceLinks({ item, kind }: { item: DigestItem; kind: DigestKind 
 function DigestMailItem({
   item,
   kind,
+  axisResearch = false,
   saved = false,
   onToggleSaved,
 }: {
   item: DigestItem;
   kind: DigestKind;
+  axisResearch?: boolean;
   saved?: boolean;
   onToggleSaved?: (item: DigestItem) => void;
 }) {
@@ -293,6 +310,7 @@ function DigestMailItem({
             </span>
           )}
         </div>
+        {axisResearch && <DigestSourceLinks item={item} kind={kind} axisResearch />}
         {kind === "podcast" && <WaveformStrip seed={item.title.length} />}
         <DigestBulletList bullets={bullets} evidenceChips={kind !== "podcast"} podcastInsights={podcastInsights} />
         {kind === "podcast" && hasTranscriptSummary && bullets.length > 0 && (
@@ -313,7 +331,7 @@ function DigestMailItem({
                 : "Transcript and substantive episode description unavailable."}
           </p>
         )}
-        <DigestSourceLinks item={item} kind={kind} />
+        {!axisResearch && <DigestSourceLinks item={item} kind={kind} />}
         {kind === "podcast" && item.contentSource === "transcript" && Boolean(item.timestampLinks?.length) && (
           <div className="podcast-timestamp-links" aria-label="Transcript timestamps">
             {item.timestampLinks?.map((link) => (
@@ -355,6 +373,7 @@ function SenderDigestGroups({
               key={`${item.time}-${item.source}-${item.title}`}
               item={item}
               kind={kind}
+              axisResearch={layout === "axis"}
               saved={savedIds?.has(digestItemId(item))}
               onToggleSaved={onToggleSaved}
             />

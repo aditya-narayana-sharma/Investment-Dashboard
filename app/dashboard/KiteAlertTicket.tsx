@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
 import { inr } from "./utils";
+import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
 export type AlertDirection = "above" | "below";
 export type AlertExchange = "NSE" | "BSE";
@@ -48,6 +49,7 @@ export function KiteAlertTicket({
 
   const normalizedSymbol = symbol.trim().toUpperCase();
   const matchedHolding = holdings.find((holding) => holding.symbol.toUpperCase() === normalizedSymbol);
+  const lookup = useKiteInstrumentLookup(normalizedSymbol, exchange);
   const trigger = Number(triggerPrice);
   const triggerText = trigger > 0 ? String(trigger) : "";
   const expected = useMemo(
@@ -59,7 +61,8 @@ export function KiteAlertTicket({
     && reviewed
     && confirmation.trim().toUpperCase() === expected
     && /^[A-Z0-9&.\- ]{1,48}$/.test(normalizedSymbol)
-    && trigger > 0,
+    && trigger > 0
+    && lookup.exact !== null,
   );
 
   if (!selection) return null;
@@ -118,7 +121,7 @@ export function KiteAlertTicket({
         <div>
           <span>Create price alert · {exchange} · simple LTP</span>
           <h3 id="kite-alert-title">{normalizedSymbol || "New alert"}</h3>
-          <p>{matchedHolding ? `${matchedHolding.name} · last ${inr.format(matchedHolding.price)}` : "Enter an exchange tradingsymbol. Notifications fire in Kite when LTP crosses the trigger."}</p>
+          <p>{matchedHolding ? `${matchedHolding.name} · last ${inr.format(matchedHolding.price)}` : lookup.exact ? `${lookup.exact.name}${lookup.publicPrice ? ` · public delayed ${inr.format(lookup.publicPrice)}` : ""}` : "Search the Kite cash-equity catalogue. Notifications fire in Kite when LTP crosses the trigger."}</p>
         </div>
         <button type="button" onClick={onClose} disabled={submitting} aria-label="Close alert ticket"><X size={18}/></button>
       </header>
@@ -131,8 +134,9 @@ export function KiteAlertTicket({
       </div>
       <div className="kite-order-fields">
         <label>Symbol
-          <input list="kite-alert-holdings" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. INFY" autoComplete="off" spellCheck={false}/>
-          <datalist id="kite-alert-holdings">{holdings.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.name}</option>)}</datalist>
+          <input list="kite-alert-instruments" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. NTPC" autoComplete="off" spellCheck={false}/>
+          <datalist id="kite-alert-instruments">{lookup.instruments.map((instrument) => <option key={instrument.id} value={instrument.symbol}>{instrument.name}</option>)}</datalist>
+          <small className={`kite-instrument-status ${lookup.status}`}>{lookup.status === "checking" ? "Checking Kite catalogue…" : lookup.exact ? `Verified ${lookup.exact.exchange}:${lookup.exact.symbol}` : normalizedSymbol && lookup.status === "invalid" ? "Not an active cash-market symbol" : "NSE/BSE cash equities"}</small>
         </label>
         <label>Exchange
           <select value={exchange} onChange={(event) => { setExchange(event.target.value as AlertExchange); setConfirmation(""); }}>

@@ -310,48 +310,48 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "Operating margin", value: "13.3%", change: "EBITDA ₹1,727 Cr", tone: "green" },
     { label: "Management guidance", value: "16.77 L units", change: "+23% YoY volumes · premium + EV + global", tone: "green" },
   ], summary: "Board approved Q1 FY27 on 6 Aug 2026. Standalone revenue ₹12,999 crore (+36% YoY), PAT ₹1,454 crore (+29% YoY), EBITDA margin 13.3%. Volumes 16.77 lakh (+23% YoY).", source: "https://economictimes.indiatimes.com/industry/auto/two-wheelers-three-wheelers/hero-motocorp-q1-profit-jumps-29-revenue-surges-36/articleshow/133013044.cms" },
-  { date: "7 Aug", dateKey: "2026-08-07", day: "07", symbol: "SBIN", name: "State Bank of India", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "117725FB-9C14-43CB-86D4-771CA77F704B", kpis: [
-    { label: "PAT", value: "", change: "" },
-    { label: "NII / income", value: "", change: "" },
-    { label: "Asset quality", value: "", change: "" },
-    { label: "Margin / credit cost", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "HAL", name: "Hindustan Aeronautics", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "EDAF3718-92A3-418A-9361-1470105097F0", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "ONGC", name: "Oil & Natural Gas Corporation", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "FCD46B90-AAB9-4D49-A0CF-2716FA512D7A", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "12 Aug", dateKey: "2026-08-12", day: "12", symbol: "HAL", name: "Hindustan Aeronautics", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "3AEA98D2-226F-403D-8A2E-1B54FA46B2CE", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings (second HAL date). KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "IRCTC", name: "Indian Railway Catering and Tourism", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "EB672D7D-CE3E-43FA-845C-D0C8045956A1", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "JUBLFOOD", name: "Jubilant FoodWorks", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "365BE3F4-15D9-4BB1-8674-6B7B1123F698", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
-  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "TMPV", name: "Tata Motors Passenger Vehicles", state: "Pending · Apple Calendar", portfolio: false, period: "Q1 FY27", reported: false, eventKind: "results", calendarEventId: "24F6A768-8D23-4FFE-906D-D22427C44009", kpis: [
-    { label: "Revenue", value: "", change: "" },
-    { label: "Profit", value: "", change: "" },
-    { label: "Operating margin", value: "", change: "" },
-    { label: "Management guidance", value: "", change: "" },
-  ], summary: "Scheduled from Apple Calendar Earnings. KPI fields remain blank until a cited company or exchange result is available." },
+  { date: "7 Aug", dateKey: "2026-08-07", day: "07", symbol: "SBIN", name: "State Bank of India", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "117725FB-9C14-43CB-86D4-771CA77F704B", kpis: [
+    { label: "PAT", value: "₹21,121 Cr", change: "+10.23% YoY", tone: "green" },
+    { label: "Net interest income", value: "₹46,992 Cr", change: "+14.88% YoY", tone: "green" },
+    { label: "Gross / net NPA", value: "1.47% / 0.38%", change: "Improved 36 / 9 bps YoY", tone: "green" },
+    { label: "Operating profit", value: "₹33,529 Cr", change: "+9.77% YoY", tone: "green" },
+  ], summary: "NSE-filed press release dated 7 Aug 2026: Q1 FY27 PAT ₹21,121 crore (+10.23% YoY), NII ₹46,992 crore (+14.88%), and operating profit ₹33,529 crore (+9.77%). Asset quality improved to 1.47% gross NPA and 0.38% net NPA.", source: "https://nsearchives.nseindia.com/corporate/SBIN_07082026135523_PressRelease.pdf" },
+  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "HAL", name: "Hindustan Aeronautics", state: "Reported · filed 12 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "EDAF3718-92A3-418A-9361-1470105097F0", kpis: [
+    { label: "Revenue", value: "₹5,515.17 Cr", change: "+14.4% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹1,589.66 Cr", change: "+14.9% YoY · consolidated PAT", tone: "green" },
+    { label: "Profit before tax", value: "₹2,134.33 Cr", change: "+15.1% YoY", tone: "green" },
+    { label: "Total income", value: "₹6,415.41 Cr", change: "+15.2% YoY", tone: "green" },
+  ], summary: "The 11 Aug Apple Calendar row is scheduling evidence; HAL filed the result on 12 Aug 2026. Consolidated Q1 FY27 revenue was ₹5,515.17 crore, PAT ₹1,589.66 crore and PBT ₹2,134.33 crore, all up about 14-15% YoY.", source: "https://nsearchives.nseindia.com/corporate/HAL_12082026140538_FR_30062026.pdf" },
+  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "ONGC", name: "Oil & Natural Gas Corporation", state: "Reported · filed 4 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "FCD46B90-AAB9-4D49-A0CF-2716FA512D7A", kpis: [
+    { label: "Standalone revenue", value: "₹46,460 Cr", change: "+45.2% YoY", tone: "green" },
+    { label: "Standalone PAT", value: "₹17,034 Cr", change: "+112.3% YoY", tone: "green" },
+    { label: "Oil realisation", value: "$99.45/bbl", change: "+50.4% YoY · nomination", tone: "green" },
+    { label: "Western offshore capex", value: ">₹40,000 Cr", change: "Benefits expected from FY28", tone: "green" },
+  ], summary: "The Apple Calendar date is scheduling evidence; ONGC's NSE-filed release was published 4 Aug 2026. Standalone revenue rose 45.2% to ₹46,460 crore and PAT more than doubled to ₹17,034 crore, while management highlighted a ₹40,000-crore-plus Western Offshore programme.", source: "https://nsearchives.nseindia.com/corporate/ONGC_04082026201314_PressreleaseQ1FY27.pdf" },
+  { date: "12 Aug", dateKey: "2026-08-12", day: "12", symbol: "HAL", name: "Hindustan Aeronautics", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "3AEA98D2-226F-403D-8A2E-1B54FA46B2CE", kpis: [
+    { label: "Revenue", value: "₹5,515.17 Cr", change: "+14.4% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹1,589.66 Cr", change: "+14.9% YoY · consolidated PAT", tone: "green" },
+    { label: "Profit before tax", value: "₹2,134.33 Cr", change: "+15.1% YoY", tone: "green" },
+    { label: "Total income", value: "₹6,415.41 Cr", change: "+15.2% YoY", tone: "green" },
+  ], summary: "HAL filed Q1 FY27 results with NSE on 12 Aug 2026. Consolidated revenue was ₹5,515.17 crore (+14.4% YoY), PAT ₹1,589.66 crore (+14.9%) and PBT ₹2,134.33 crore (+15.1%).", source: "https://nsearchives.nseindia.com/corporate/HAL_12082026140538_FR_30062026.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "IRCTC", name: "Indian Railway Catering and Tourism", state: "Reported · filed 12 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "EB672D7D-CE3E-43FA-845C-D0C8045956A1", kpis: [
+    { label: "Revenue", value: "₹1,369.53 Cr", change: "+18.1% YoY · standalone ops", tone: "green" },
+    { label: "Profit", value: "₹329.86 Cr", change: "−1.4% YoY · standalone PAT", tone: "amber" },
+    { label: "Profit before tax", value: "₹441.29 Cr", change: "Broadly flat YoY", tone: "amber" },
+    { label: "Catering revenue", value: "₹732.26 Cr", change: "+33.9% YoY", tone: "green" },
+  ], summary: "IRCTC filed Q1 FY27 results on 12 Aug 2026, one day before the Apple Calendar row. Standalone revenue rose 18.1% to ₹1,369.53 crore, catering revenue rose 33.9%, and PAT eased 1.4% to ₹329.86 crore.", source: "https://nsearchives.nseindia.com/corporate/IRCTC_12082026202956_Results30062026.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "JUBLFOOD", name: "Jubilant FoodWorks", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "365BE3F4-15D9-4BB1-8674-6B7B1123F698", kpis: [
+    { label: "Revenue", value: "₹2,570 Cr", change: "+14.1% YoY · consolidated ops", tone: "green" },
+    { label: "Operating EBITDA", value: "₹504 Cr", change: "+14.2% YoY", tone: "green" },
+    { label: "EBITDA margin", value: "19.6%", change: "Broadly flat YoY", tone: "green" },
+    { label: "PAT", value: "₹100 Cr", change: "+6.0% YoY · total", tone: "green" },
+  ], summary: "NSE-filed shareholder update dated 13 Aug 2026: consolidated revenue grew 14.1% to ₹2,570 crore and operating EBITDA 14.2% to ₹504 crore, holding margin at 19.6%. Total PAT was ₹100 crore (+6% YoY); 76 net stores were added.", source: "https://nsearchives.nseindia.com/corporate/JUBLFOOD_13082026142813_2SELetter_to_Shareholders.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "TMPV", name: "Tata Motors Passenger Vehicles", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "24F6A768-8D23-4FFE-906D-D22427C44009", kpis: [
+    { label: "Group revenue", value: "₹95,799 Cr", change: "+9.3% YoY", tone: "green" },
+    { label: "Group EBITDA", value: "₹7,128 Cr", change: "−6.4% YoY", tone: "red" },
+    { label: "EBITDA margin", value: "7.4%", change: "vs 8.7% YoY", tone: "red" },
+    { label: "PBT before exceptional", value: "₹1,606 Cr", change: "−59.3% YoY", tone: "red" },
+  ], summary: "NSE-filed investor presentation dated 13 Aug 2026: group revenue increased 9.3% to ₹95,799 crore, but EBITDA fell to ₹7,128 crore and margin compressed to 7.4%. PBT before exceptional items declined to ₹1,606 crore amid JLR volume and profitability headwinds.", source: "https://nsearchives.nseindia.com/corporate/TATAMOTORSSJS_13082026161711_NSEBSEInvestorPresentation.pdf" },
 ];
 
 export const analystCalls = [

@@ -32,6 +32,7 @@ import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
+import { completeAxisPicks } from "./axis-pick-metrics";
 
 export default function Home() {
   const [workspace, setWorkspace] = useState<WorkspaceKey>("investment");
@@ -113,10 +114,21 @@ export default function Home() {
       : axisRecommendations.map((item) => ({ ...item }));
     return mergeHoldingTradingCalls(base);
   }, [content]);
+  const completeMailAxisRecommendations = useMemo(
+    () => completeAxisPicks(mailAxisRecommendations, kiteBySymbol, yfinanceBySymbol),
+    [kiteBySymbol, mailAxisRecommendations, yfinanceBySymbol],
+  );
+  const axisCompleteCurrentBySymbol = useMemo(() => {
+    const next = new Map(currentBySymbol);
+    for (const item of completeMailAxisRecommendations) {
+      if (!next.has(item.symbol)) next.set(item.symbol, item.cmp);
+    }
+    return next;
+  }, [completeMailAxisRecommendations, currentBySymbol]);
   const mailWindow = useMemo(() => analysisWindowLabel(content), [content]);
   const analystRows = useMemo(() => {
     // Flat matrix: one logical Axis call per symbol (trading > technical > fundamental).
-    const axisUnique = dedupeAxisCallsBySymbol(mailAxisRecommendations);
+    const axisUnique = dedupeAxisCallsBySymbol(completeMailAxisRecommendations);
     return [
       ...axisUnique.map((item) => ({
         symbol: item.symbol,
@@ -130,11 +142,24 @@ export default function Home() {
       ...analystCalls
         .filter((item) => !axisUnique.some((axis) => axis.symbol === item.symbol))
         .map((item) => ({ ...item, mail: false })),
+      ...(content.investment.axisTargetAchievements ?? []).map((item) => ({
+        symbol: item.symbol,
+        house: `${item.origin === "mail" && item.evidenceFile ? "Axis Mail + PDF" : item.origin === "pdf" ? "Axis PDF" : "Axis Mail"} / iCloud Axis Research`,
+        rating: item.call,
+        target: item.target ?? item.achievedPrice,
+        date: item.date,
+        thesis: item.thesis,
+        mail: true,
+        targetAchieved: true,
+      })),
     ];
-  }, [mailAxisRecommendations]);
+  }, [completeMailAxisRecommendations, content.investment.axisTargetAchievements]);
   const analystMatrixSymbols = useMemo(
-    () => [...new Set(analystRows.map((row) => row.symbol))],
-    [analystRows],
+    () => [...new Set([
+      ...mailAxisRecommendations.filter((row) => row.target != null && row.target > 0).map((row) => row.symbol),
+      ...analystCalls.map((row) => row.symbol),
+    ])],
+    [mailAxisRecommendations],
   );
   // Stable key so Kite price polls (new holdings array identity) do not cancel in-flight yfinance chunks.
   const kiteQuoteSymbolsKey = useMemo(
@@ -189,7 +214,7 @@ export default function Home() {
     })();
     return () => { cancelled = true; };
   }, [missingYfinanceKey]);
-  const mailAxisProfiles = useMemo<RiskProfile[]>(() => Array.from(new Map(mailAxisRecommendations.map((item) => [item.symbol, { symbol: item.symbol, name: item.name, color: item.color, scores: item.scores }])).values()), [mailAxisRecommendations]);
+  const mailAxisProfiles = useMemo<RiskProfile[]>(() => Array.from(new Map(completeMailAxisRecommendations.map((item) => [item.symbol, { symbol: item.symbol, name: item.name, color: item.color, scores: item.scores }])).values()), [completeMailAxisRecommendations]);
   const livePortfolioRiskProfiles = useMemo<RiskProfile[]>(() => {
     const known = new Map(portfolioRiskProfiles.map((profile) => [profile.symbol, profile]));
     return snapshot.holdings.map((holding) => known.get(holding.symbol) ?? {
@@ -416,6 +441,7 @@ export default function Home() {
       // Surface Kite, S-2 yfinance quotes, S-3 benchmarks, and sector news quickly;
       // the bundled refresh can wait on Mail/content.
       const kiteEarly = loadKite();
+      const healthEarly = loadHealth();
       const benchmarksEarly = loadBenchmarks();
       const sectorNewsEarly = loadSectorNews();
       const selectedIds = selectedSectorRef.current;
@@ -444,7 +470,7 @@ export default function Home() {
           setContentError(error instanceof Error ? error.message : "Complete refresh failed; source adapters are retrying.");
           await Promise.allSettled([kiteEarly, benchmarksEarly, sectorNewsEarly, loadContent(), loadEarnings(), loadHealth(), loadBenchmarks()]);
         }
-        await Promise.allSettled([kiteEarly, benchmarksEarly, sectorNewsEarly, primarySectorEarly, allSectorsEarly]);
+        await Promise.allSettled([kiteEarly, healthEarly, benchmarksEarly, sectorNewsEarly, primarySectorEarly, allSectorsEarly]);
       } finally {
         setRefreshing(false);
         refreshInFlightRef.current = null;
@@ -613,13 +639,13 @@ export default function Home() {
         isSnapshot={isSnapshot}
         hasPortfolio={hasPortfolio}
         mailWindow={mailWindow}
-        mailAxisRecommendations={mailAxisRecommendations}
+        mailAxisRecommendations={completeMailAxisRecommendations}
         mailAxisProfiles={mailAxisProfiles}
         livePortfolioRiskProfiles={livePortfolioRiskProfiles}
         analystRows={analystRows}
         donutHoldings={donutHoldings}
         exposureComposition={exposureComposition}
-        currentBySymbol={currentBySymbol}
+        currentBySymbol={axisCompleteCurrentBySymbol}
         kiteBySymbol={kiteBySymbol}
         yfinanceBySymbol={yfinanceBySymbol}
         onKiteRefresh={loadKite}
