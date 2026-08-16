@@ -1078,7 +1078,9 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /Water represents the logged Lifesum target/);
   assert.match(page, /isAnimationActive=\{false\}/);
   assert.match(page, /kite\/snapshot\?refresh=/);
-  assert.match(page, /Latest refresh failed; retaining the last validated values/);
+  assert.match(page, /sanitizeKiteStatusNote/);
+  assert.doesNotMatch(page, /Latest refresh failed; retaining the last validated values/);
+  assert.doesNotMatch(page, /`\$\{current\.message\} Latest refresh failed/);
   assert.match(liveServer, /callKiteTool\("get_holdings"\)/);
   assert.match(liveServer, /callKiteTool\("get_positions"\)/);
   assert.match(liveServer, /netPositionsFromKitePayload\(positionsRaw\)/);
@@ -1089,6 +1091,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(liveServer, /number\(raw\.collateral_quantity\)/);
   assert.doesNotMatch(liveServer, /sector: "Other"/);
   assert.doesNotMatch(liveServer, /marketCap: "Unclassified"/);
+  assert.match(liveServer, /sanitizeKiteStatusNote/);
+  assert.doesNotMatch(liveServer, /Retaining the last validated Kite snapshot until the next five-minute refresh/);
   assert.match(liveServer, /Portfolio figures are hidden because live Kite data is unavailable/);
   assert.match(liveServer, /AUTH_URL_MAX_AGE_MS = 20 \* 60 \* 1000/);
   assert.match(liveServer, /authUrlCreatedAt = Date\.now\(\)/);

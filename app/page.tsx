@@ -11,6 +11,7 @@ import type { ContentDigestSnapshot, MailRecommendation } from "./content-types"
 import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
 import { kiteAuthPresentation } from "./kite-auth-presentation";
+import { sanitizeKiteStatusNote } from "./kite-status-note";
 import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
@@ -321,6 +322,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         // keep claiming Authenticated from a bare `status: "live"` cache.
         setSnapshot({
           ...data,
+          message: sanitizeKiteStatusNote(data.message),
           authStatus: data.authStatus
             ?? (data.status === "live"
               ? "authenticated"
@@ -346,7 +348,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
           ...current,
           status: "snapshot",
           authStatus: "unknown",
-          message: `${current.message} Latest refresh failed; retaining the last validated values.`,
+          message: sanitizeKiteStatusNote(current.message),
         }
       : { ...emptySnapshot, message: lastError instanceof Error ? lastError.message : "Could not load live Kite data." });
   }, []);
@@ -503,7 +505,12 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
           const result = await response.json() as DashboardRefreshResult;
           if (!response.ok) throw new Error(`Complete refresh returned ${response.status}`);
           setSourceFreshness(result.sources);
-          if (result.kite) setSnapshot(result.kite);
+          if (result.kite) {
+            setSnapshot({
+              ...result.kite,
+              message: sanitizeKiteStatusNote(result.kite.message),
+            });
+          }
           if (result.content) { setContent(result.content); setContentError(""); }
           if (result.earnings) { setEarningsSnapshot(result.earnings); setEarningsError(""); }
           if (result.health) applyHealthSnapshot(result.health);
@@ -641,7 +648,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       </header>
 
       <section className={`live-feed-banner ${snapshot.status}`}>
-        <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite snapshot" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{snapshot.message}</small></span></div>
+        <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite snapshot" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{sanitizeKiteStatusNote(snapshot.message)}</small></span></div>
         <div className="live-feed-actions">
           {kiteAuthControl === "authenticated"
             ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>

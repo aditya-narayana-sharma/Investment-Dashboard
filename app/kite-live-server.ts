@@ -3,6 +3,7 @@ import { buildContiguousAllocations, sortDonutHoldings } from "./portfolio-donut
 import { netPositionsFromKitePayload } from "./kite-positions";
 import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
 import type { KiteAuthStatus, KiteSnapshot, LiveAlert, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
+import { sanitizeKiteStatusNote } from "./kite-status-note";
 
 type JsonObject = Record<string, unknown>;
 export type KiteOrderRequest = {
@@ -599,8 +600,9 @@ function fallbackSnapshot(message: string, authUrl?: string): KiteSnapshot {
 }
 
 /** Retain last holdings visually, but never claim a verified live auth session. */
-async function retainedSnapshot(base: KiteSnapshot, message: string): Promise<KiteSnapshot> {
+async function retainedSnapshot(base: KiteSnapshot): Promise<KiteSnapshot> {
   const { expiresAt } = kiteDailyExpiryHint();
+  const retainedMessage = sanitizeKiteStatusNote(base.message);
   try {
     await callKiteTool("get_profile");
     return {
@@ -610,7 +612,7 @@ async function retainedSnapshot(base: KiteSnapshot, message: string): Promise<Ki
       // UI must treat status=snapshot as cached (never "Kite authenticated").
       authStatus: "authenticated",
       asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
-      message,
+      message: retainedMessage,
       authUrl: undefined,
       tokenExpiresAt: expiresAt,
     };
@@ -624,11 +626,7 @@ async function retainedSnapshot(base: KiteSnapshot, message: string): Promise<Ki
         status: "snapshot",
         authStatus,
         asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
-        message: withDailyAuthHint(
-          authStatus === "expired"
-            ? `Kite session expired at the daily ~06:00 IST boundary (${detail}). ${message}`
-            : message,
-        ),
+        message: retainedMessage,
         authUrl,
         tokenExpiresAt: expiresAt,
       };
@@ -638,7 +636,7 @@ async function retainedSnapshot(base: KiteSnapshot, message: string): Promise<Ki
         status: "snapshot",
         authStatus: "unknown",
         asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
-        message,
+        message: retainedMessage,
         authUrl: undefined,
         tokenExpiresAt: expiresAt,
       };
@@ -782,15 +780,12 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const message = error instanceof Error ? error.message : String(error);
     if (/too many requests|rate limit/i.test(message)) {
       return lastLiveSnapshot
-        ? retainedSnapshot(lastLiveSnapshot, "Zerodha rate limit reached; retaining the last validated Kite snapshot until the next five-minute refresh.")
+        ? retainedSnapshot(lastLiveSnapshot)
         : fallbackSnapshot("Zerodha rate limit reached. Retry after the current request window resets.");
     }
 
     if (lastLiveSnapshot) {
-      return retainedSnapshot(
-        lastLiveSnapshot,
-        `Kite refresh failed (${message}). Retaining the last validated Kite snapshot until the next five-minute refresh.`,
-      );
+      return retainedSnapshot(lastLiveSnapshot);
     }
 
     // Some Kite SDK failures arrive as a generic "Failed to execute" message
