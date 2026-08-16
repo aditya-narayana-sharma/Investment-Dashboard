@@ -96,8 +96,9 @@ valid Health snapshot with a failed extraction.
   content belongs on explicit URL-backed sub-pages, never in a vertically
   scrolling workspace. Incognito must gate thumbnail values, drill-down values,
   source/archive metadata, actions, recommendations, and accessibility text.
-  H-3 Vital Metrics groups KPIs into three comparison-direction columns
-  (favourable / context dependent / unfavourable) while retaining original
+  H-3 Vital Metrics groups KPIs into three comparison-direction collapsible
+  rows (favourable / context dependent / unfavourable), matching the Investment
+  BUY / HOLD group pattern, while retaining original
   Health category colour accents on each tile. Metrics without a selected-period
   average remain visible under Context dependent (no dedicated unavailable
   column). Body Measurements and Hearing remain excluded.
