@@ -618,10 +618,10 @@ export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" |
   return "moderate";
 }
 
-/** Direction-column bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
+/** Direction-row bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
 export type HealthDirectionBucket = "good" | "moderate" | "bad" | "unavailable";
 
-/** Visible H-3 columns only — unavailable averages render inside Context dependent, not a fourth column. */
+/** Visible H-3 rows only — unavailable averages render inside Context dependent, not a fourth group. */
 export const HEALTH_DIRECTION_COLUMNS: Array<{
   id: Exclude<HealthDirectionBucket, "unavailable">;
   title: string;
@@ -642,7 +642,7 @@ export function healthMetricDirectionBucket(
   return healthTrendTone(metric, average.direction);
 }
 
-/** Stable Health category order for deterministic column packing (Body Measurements / Hearing excluded). */
+/** Stable Health category order for deterministic row packing (Body Measurements / Hearing excluded). */
 export const HEALTH_CATEGORY_ORDER = [
   "Activity",
   "Sleep",
@@ -683,7 +683,7 @@ export type HealthDirectionMetricEntry = {
   metricIndex: number;
 };
 
-/** Flatten enabled Health categories into direction columns with stable category→metric order. */
+/** Flatten enabled Health categories into direction rows with stable category→metric order. */
 export function groupHealthMetricsByDirection(
   categories: Array<{ name: string; metrics: HealthMetric[] }>,
   averagePeriod: HealthAveragePeriod,
@@ -702,9 +702,13 @@ export function groupHealthMetricsByDirection(
     })
     .sort((left, right) => left.categoryIndex - right.categoryIndex || left.category.name.localeCompare(right.category.name));
 
+  const seen = new Set<string>();
   for (const { category, categoryIndex } of ranked) {
     const accent = healthCategoryAccentClass(category.name);
     category.metrics.forEach((metric, metricIndex) => {
+      const identity = `${category.name}::${metric.label.trim().toLowerCase()}`;
+      if (seen.has(identity)) return;
+      seen.add(identity);
       const bucket = healthMetricDirectionBucket(metric, averagePeriod);
       columns[bucket].push({
         categoryName: category.name,

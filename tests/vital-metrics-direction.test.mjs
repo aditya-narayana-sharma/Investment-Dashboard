@@ -16,6 +16,8 @@ test("direction helpers and category accents are exported from utils", () => {
   assert.match(utilsSource, /export function groupHealthMetricsByDirection/);
   assert.match(utilsSource, /export function healthCategoryAccentClass/);
   assert.match(utilsSource, /HEALTH_DIRECTION_COLUMNS/);
+  assert.match(utilsSource, /const seen = new Set<string>\(\)/);
+  assert.match(utilsSource, /if \(seen.has\(identity\)\) return/);
   assert.match(utilsSource, /health-cat-heart/);
   assert.match(utilsSource, /health-cat-activity/);
   assert.match(utilsSource, /health-cat-nutrition/);
@@ -26,8 +28,12 @@ test("direction helpers and category accents are exported from utils", () => {
   assert.match(utilsSource, /Hearing/);
 });
 
-test("Vital Metrics UI uses three direction columns with category colour classes", () => {
+test("Vital Metrics UI uses three collapsible direction rows with category colour classes", () => {
   assert.match(sharedUiSource, /health-direction-grid/);
+  assert.match(sharedUiSource, /health-direction-row/);
+  assert.match(sharedUiSource, /health-direction-header/);
+  assert.match(sharedUiSource, /aria-expanded/);
+  assert.match(sharedUiSource, /new Set\(\["moderate", "bad"\]\)/);
   assert.match(sharedUiSource, /groupHealthMetricsByDirection/);
   assert.match(sharedUiSource, /HEALTH_DIRECTION_COLUMNS/);
   assert.match(sharedUiSource, /health-kpi-category/);
@@ -37,6 +43,9 @@ test("Vital Metrics UI uses three direction columns with category colour classes
   assert.match(sharedUiSource, /directionColumns\.unavailable/);
   assert.match(sharedUiSource, /average-unavailable/);
   assert.match(sharedUiSource, /shown under Context dependent/);
+  assert.match(sharedUiSource, /Green row · favourable direction/);
+  assert.doesNotMatch(sharedUiSource, /health-direction-column/);
+  assert.doesNotMatch(sharedUiSource, /Green column · favourable direction/);
   assert.match(utilsSource, /title: "Favourable direction"/);
   assert.match(utilsSource, /title: "Context dependent"/);
   assert.match(utilsSource, /title: "Unfavourable direction"/);
@@ -44,13 +53,17 @@ test("Vital Metrics UI uses three direction columns with category colour classes
   assert.doesNotMatch(sharedUiSource, /health-category-grid/);
   assert.doesNotMatch(sharedUiSource, /Grey column · average unavailable/);
   assert.match(globalCss, /\.health-direction-grid/);
-  assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(globalCss, /\.health-direction-row/);
+  assert.match(globalCss, /\.health-direction-header/);
+  assert.match(globalCss, /grid-template-columns:repeat\(auto-fill,minmax\(168px,1fr\)\)/);
+  assert.doesNotMatch(globalCss, /\.health-direction-grid \{ display:grid; grid-template-columns:repeat\(3/);
   assert.match(globalCss, /\.health-cat-heart/);
   assert.match(globalCss, /\.health-cat-activity/);
   assert.match(globalCss, /\.average-unavailable/);
   assert.doesNotMatch(globalCss, /\.direction-unavailable/);
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile > b/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-direction-header/);
 });
 
 test("SparkFilament renders from per-metric history and has no hardcoded shared path", () => {
@@ -123,7 +136,7 @@ function groupByDirection(categories, period) {
   return columns;
 }
 
-test("fixture metrics assign once across direction columns; unavailable and favourable cases hold", () => {
+test("fixture metrics assign once across direction rows; unavailable and favourable cases hold", () => {
   const weekly = groupByDirection(healthCategories, "weekly");
   const all = [...weekly.good, ...weekly.moderate, ...weekly.bad, ...weekly.unavailable];
   assert.equal(new Set(all).size, all.length, "each metric appears exactly once");

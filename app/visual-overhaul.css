@@ -1397,11 +1397,10 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   line-height: 1.45;
 }
 .health-direction-grid.quadrant-vitals-stage {
-  gap: 12px;
+  gap: 0;
 }
-.health-direction-grid.quadrant-vitals-stage .health-direction-column {
+.health-direction-grid.quadrant-vitals-stage .health-direction-row {
   position: relative;
-  min-height: 160px;
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile {
   position: relative;

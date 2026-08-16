@@ -1056,7 +1056,8 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.match(globalCss, /\.health-direction-grid/);
     assert.match(globalCss, /\.health-cat-heart/);
     assert.match(globalCss, /\.health-direction-grid\.compact/);
-    assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+    assert.match(globalCss, /\.health-direction-row/);
+    assert.match(globalCss, /grid-template-columns:repeat\(auto-fill,minmax\(168px,1fr\)\)/);
     assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
     assert.doesNotMatch(globalCss, /\.direction-unavailable/);
     const utilsSource = await readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8");

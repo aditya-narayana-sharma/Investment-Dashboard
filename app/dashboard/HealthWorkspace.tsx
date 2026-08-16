@@ -68,7 +68,7 @@ const SECTION_PAGES: Record<HealthWorkspaceSection, Array<{ id: HealthSectionPag
 
 const SECTION_META = {
   h2: { number: "H-2", title: "Daily Optimism", note: "Exact  Health Daily optimism plus HealthKit guidance and guardrails", icon: Sparkles },
-  h3: { number: "H-3", title: "Vital Metrics", note: "Direction columns with category-coloured KPIs and weekly/monthly comparisons", icon: HeartPulse },
+  h3: { number: "H-3", title: "Vital Metrics", note: "Collapsible direction rows with category-coloured KPIs and weekly/monthly comparisons", icon: HeartPulse },
 } as const;
 
 const HEALTH_CATEGORY_PAGE: Record<string, HealthSectionPage> = {
