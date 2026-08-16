@@ -1,7 +1,8 @@
-import type { BuilderSection, WorkspaceKey } from "./types";
+import type { BuilderSection, StrategiesSection, WorkspaceKey } from "./types";
 
-export const WORKSPACE_VIEW_VALUES = ["investment", "sectors", "intelligence", "health", "builder"] as const;
+export const WORKSPACE_VIEW_VALUES = ["investment", "sectors", "intelligence", "health", "builder", "strategies"] as const;
 export const BUILDER_SECTIONS = ["board", "canvas", "json"] as const;
+export const STRATEGIES_SECTIONS = ["y1", "y2"] as const;
 
 export function isWorkspaceKey(value: string | null | undefined): value is WorkspaceKey {
   switch (value) {
@@ -10,6 +11,7 @@ export function isWorkspaceKey(value: string | null | undefined): value is Works
     case "intelligence":
     case "health":
     case "builder":
+    case "strategies":
       return true;
     default:
       return false;
@@ -27,7 +29,17 @@ export function isBuilderSection(value: string | null | undefined): value is Bui
   }
 }
 
-/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder. */
+export function isStrategiesSection(value: string | null | undefined): value is StrategiesSection {
+  switch (value) {
+    case "y1":
+    case "y2":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder, strategy-library → strategies. */
 export function parseWorkspaceView(value: string | null | undefined): WorkspaceKey {
   switch (value) {
     case "investment":
@@ -35,11 +47,14 @@ export function parseWorkspaceView(value: string | null | undefined): WorkspaceK
     case "intelligence":
     case "health":
     case "builder":
+    case "strategies":
       return value;
     case "market-intelligence":
       return "intelligence";
     case "algorithm-canvas":
       return "builder";
+    case "strategy-library":
+      return "strategies";
     default:
       return "investment";
   }
@@ -54,6 +69,20 @@ export function parseBuilderSection(value: string | null | undefined): BuilderSe
       return value;
     default:
       return "canvas";
+  }
+}
+
+/** Strategies sections. Missing or foreign values default to the library. */
+export function parseStrategiesSection(value: string | null | undefined): StrategiesSection {
+  switch (value) {
+    case "y1":
+    case "board":
+      return "y1";
+    case "y2":
+    case "library":
+      return "y2";
+    default:
+      return "y2";
   }
 }
 
@@ -72,12 +101,29 @@ export function builderSectionNumber(section: BuilderSection): "B-1" | "B-2" | "
   }
 }
 
+export function strategiesSectionNumber(section: StrategiesSection): "Y-1" | "Y-2" {
+  switch (section) {
+    case "y1":
+      return "Y-1";
+    case "y2":
+      return "Y-2";
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
+  }
+}
+
 export function applyCanonicalWorkspaceUrl(url: URL): { view: WorkspaceKey; rewritten: boolean } {
   const raw = url.searchParams.get("view");
   const view = parseWorkspaceView(raw);
   let rewritten = raw !== view;
   if (raw === "algorithm-canvas" && !isBuilderSection(url.searchParams.get("section"))) {
     url.searchParams.set("section", "canvas");
+    rewritten = true;
+  }
+  if (raw === "strategy-library" && !isStrategiesSection(url.searchParams.get("section"))) {
+    url.searchParams.set("section", "y2");
     rewritten = true;
   }
   if (rewritten) url.searchParams.set("view", view);

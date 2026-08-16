@@ -11,10 +11,10 @@ import {
   type StrategyGraphV2,
   type StrategyNode,
   type ValidationIssue,
-} from "../../packages/contracts/src/strategy";
+} from "../../packages/contracts/src/strategy.ts";
 import { edgeKindForConnection, inputPortKind, outputPortKind } from "./ports";
 
-export type { GraphValidation, ValidationIssue, ValidationSeverity } from "../../packages/contracts/src/strategy";
+export type { GraphValidation, ValidationIssue, ValidationSeverity } from "../../packages/contracts/src/strategy.ts";
 
 function nodeById(graph: StrategyGraphV2): Map<string, StrategyNode> {
   return new Map(graph.nodes.map((node) => [node.id, node]));

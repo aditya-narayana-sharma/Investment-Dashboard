@@ -181,6 +181,36 @@ export async function callKiteTool(name: string, args: JsonObject = {}): Promise
   return scheduled;
 }
 
+async function invokeKiteToolsList(): Promise<string[]> {
+  await ensureSession();
+  const { body } = await postMcp({
+    jsonrpc: "2.0",
+    id: state.requestId++,
+    method: "tools/list",
+    params: {},
+  });
+  const result = body.result && typeof body.result === "object" ? body.result as JsonObject : {};
+  const tools = Array.isArray(result.tools) ? result.tools : [];
+  return tools
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      return string((item as JsonObject).name);
+    })
+    .filter((name) => name.length > 0);
+}
+
+/** Discover registered Kite MCP tool names. Never invent a watchlist tool. */
+export async function listKiteToolNames(): Promise<string[]> {
+  const scheduled = kiteCallChain.then(async () => {
+    const waitMs = Math.max(0, KITE_CALL_MIN_GAP_MS - (Date.now() - lastKiteCallAt));
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    lastKiteCallAt = Date.now();
+    return invokeKiteToolsList();
+  });
+  kiteCallChain = scheduled.then(() => undefined, () => undefined);
+  return scheduled;
+}
+
 function instrumentRows(payload: unknown): JsonObject[] {
   if (Array.isArray(payload)) return payload.filter((item): item is JsonObject => Boolean(item && typeof item === "object"));
   if (!payload || typeof payload !== "object") return [];

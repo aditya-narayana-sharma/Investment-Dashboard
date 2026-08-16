@@ -44,6 +44,8 @@ const DESKTOP_QUERY = "(min-width: 1080px)";
 export type AlgorithmBuilderProps = {
   initialGraph?: StrategyGraphV2;
   onGraphChange?: (graph: StrategyGraphV2) => void;
+  forceReadOnly?: boolean;
+  hideLibraryActions?: boolean;
 };
 
 type DragPayload = { kind: NodeKind; kpiId?: string };
@@ -133,7 +135,12 @@ function parseDragPayload(raw: string): DragPayload | null {
   }
 }
 
-export function AlgorithmBuilder({ initialGraph, onGraphChange }: AlgorithmBuilderProps = {}) {
+export function AlgorithmBuilder({
+  initialGraph,
+  onGraphChange,
+  forceReadOnly = false,
+  hideLibraryActions = false,
+}: AlgorithmBuilderProps = {}) {
   const seed = useMemo(() => initialGraph ?? createSeedGraph(), [initialGraph]);
   const historyRef = useRef<GraphHistory>(new GraphHistory(seed, UNDO_DEPTH));
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -152,7 +159,7 @@ export function AlgorithmBuilder({ initialGraph, onGraphChange }: AlgorithmBuild
   const [connectHint, setConnectHint] = useState("");
   const [historyFlags, setHistoryFlags] = useState({ undo: false, redo: false });
   const validation = useMemo(() => validateStrategyGraph(graph), [graph]);
-  const readOnly = !desktop;
+  const readOnly = forceReadOnly || !desktop;
 
   const publish = useCallback((next: StrategyGraphV2) => {
     graphRef.current = next;
@@ -175,6 +182,7 @@ export function AlgorithmBuilder({ initialGraph, onGraphChange }: AlgorithmBuild
   }, []);
 
   useEffect(() => {
+    if (forceReadOnly) return;
     if (!window.matchMedia(DESKTOP_QUERY).matches) return;
     if (readTutorialDismissed()) return;
     autoOpenedTutorial.current = true;
@@ -184,7 +192,7 @@ export function AlgorithmBuilder({ initialGraph, onGraphChange }: AlgorithmBuild
       setHelpOpen(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [forceReadOnly]);
 
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -448,14 +456,16 @@ export function AlgorithmBuilder({ initialGraph, onGraphChange }: AlgorithmBuild
           <button type="button" disabled={readOnly} onClick={clearGraph}>Clear</button>
           <button type="button" aria-pressed={helpOpen && helpMode === "tutorial"} onClick={() => openHelp("tutorial")}>Tutorial</button>
           <button type="button" aria-pressed={helpOpen && helpMode === "shortcuts"} onClick={() => openHelp("shortcuts")}>Shortcuts</button>
-          <BuilderLibraryActions
-            graph={graph}
-            disabled={readOnly}
-            onValidation={(result) => {
-              setConnectHint(result.stripDetail || result.stripTitle);
-              window.setTimeout(() => setConnectHint(""), 2400);
-            }}
-          />
+          {!hideLibraryActions && (
+            <BuilderLibraryActions
+              graph={graph}
+              disabled={readOnly}
+              onValidation={(result) => {
+                setConnectHint(result.stripDetail || result.stripTitle);
+                window.setTimeout(() => setConnectHint(""), 2400);
+              }}
+            />
+          )}
         </div>
         <div className="builder-status">
           <em>KPI REGISTRY - {KPI_REGISTRY_COUNT}</em>

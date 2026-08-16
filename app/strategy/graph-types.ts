@@ -2,7 +2,7 @@
  * Client StrategyGraphV2 schema helpers + validator re-exports.
  * Canonical types live in `packages/contracts/src/strategy.ts` (schemaVersion "2").
  */
-import type { StrategyGraphV2 } from "../../packages/contracts/src/strategy";
+import type { StrategyGraphV2 } from "../../packages/contracts/src/strategy.ts";
 
 export {
   ASSET_CLASSES,
@@ -61,7 +61,35 @@ export {
   type ValidationCode,
   type ValidationIssue,
   type ValidationSeverity,
-} from "../../packages/contracts/src/strategy";
+} from "../../packages/contracts/src/strategy.ts";
+
+export {
+  STRATEGY_TREE_VERSION,
+  TREE_BLOCK_KINDS,
+  childNodesOf,
+  cloneTree,
+  collectTreeNodeIds,
+  findTreeNode,
+  isTreeBlockKind,
+  isTreeOperand,
+  isWeightMethod,
+  parseStrategyTree,
+  walkTreeNodes,
+  type AnyAllNode,
+  type AssetNode,
+  type FilterNode,
+  type GroupNode,
+  type IfElseNode,
+  type StrategyTreeV1,
+  type TreeBlockKind,
+  type TreeNode,
+  type TreeOperand,
+  type TreeValidation,
+  type TreeValidationIssue,
+  type WeightChild,
+  type WeightMethod,
+  type WeightNode,
+} from "../../packages/contracts/src/strategy-tree.ts";
 
 export { validateStrategyGraph } from "./validate";
 

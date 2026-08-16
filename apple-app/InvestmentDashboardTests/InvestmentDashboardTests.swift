@@ -45,12 +45,15 @@ struct InvestmentDashboardTests {
         #expect(DashboardWorkspace.sectors.dashboardURL(baseURL: base).absoluteString == "https://dashboard.example.ts.net/?view=sectors")
         #expect(DashboardWorkspace.intelligence.dashboardURL(baseURL: base).absoluteString == "https://dashboard.example.ts.net/?view=intelligence")
         #expect(DashboardWorkspace.health.dashboardURL(baseURL: base).absoluteString == "https://dashboard.example.ts.net/?view=health")
+        #expect(DashboardWorkspace.strategies.dashboardURL(baseURL: base).absoluteString == "https://dashboard.example.ts.net/?view=strategies&section=y2")
     }
 
     @Test func readsWorkspaceFromDashboardURL() {
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=sectors")) == .sectors)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=intelligence")) == .intelligence)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=market-intelligence")) == .intelligence)
+        #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=strategies")) == .strategies)
+        #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=strategy-library")) == .strategies)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=unknown")) == nil)
     }
 

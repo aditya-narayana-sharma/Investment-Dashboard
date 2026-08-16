@@ -67,6 +67,80 @@ def market_from_closes(symbol: str, closes: list[float]) -> dict[str, Any]:
     }
 
 
+def ohlcv_from_frame(frame) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if frame is None or getattr(frame, "empty", True):
+        return rows
+    for index, row in frame.iterrows():
+        open_px = number_or_null(row.get("Open"))
+        high_px = number_or_null(row.get("High"))
+        low_px = number_or_null(row.get("Low"))
+        close_px = number_or_null(row.get("Close"))
+        volume = number_or_null(row.get("Volume"))
+        if None in (open_px, high_px, low_px, close_px, volume):
+            continue
+        date = ""
+        try:
+            date = index.strftime("%Y-%m-%d")
+        except Exception:
+            date = str(index)
+        rows.append({
+            "date": date,
+            "open": open_px,
+            "high": high_px,
+            "low": low_px,
+            "close": close_px,
+            "volume": volume,
+        })
+    return rows
+
+
+def fundamentals_from_ticker(ticker: str) -> dict[str, Any]:
+    """Return only keys yfinance actually populated. Never invent fundamentals."""
+    info: dict[str, Any] = {}
+    try:
+        payload = yf.Ticker(ticker).info
+        if isinstance(payload, dict):
+            info = payload
+    except Exception:
+        return {}
+
+    mapped = {
+        "revenue": number_or_null(info.get("totalRevenue")),
+        "sales": number_or_null(info.get("totalRevenue") if info.get("totalRevenue") is not None else info.get("revenue")),
+        "operatingMargin": number_or_null(info.get("operatingMargins")),
+        "profitMargin": number_or_null(info.get("profitMargins")),
+        "pat": number_or_null(info.get("netIncomeToCommon")),
+        "ebitda": number_or_null(info.get("ebitda")),
+        "salesGrowthYoy": number_or_null(info.get("revenueGrowth")),
+        "peTtm": number_or_null(info.get("trailingPE")),
+        "evEbitda": number_or_null(info.get("enterpriseToEbitda")),
+    }
+    return {key: value for key, value in mapped.items() if value is not None}
+
+
+def fetch_strategy_kpis(symbols: list[str]) -> list[dict[str, Any]]:
+    companies: list[dict[str, Any]] = []
+    for symbol in symbols:
+        ticker = yahoo_symbol(symbol)
+        ohlcv: list[dict[str, Any]] = []
+        as_of = None
+        try:
+            history = yf.Ticker(ticker).history(period="2y", interval="1d", auto_adjust=False)
+            ohlcv = ohlcv_from_frame(history)
+            if ohlcv:
+                as_of = ohlcv[-1]["date"]
+        except Exception:
+            ohlcv = []
+        companies.append({
+            "symbol": symbol,
+            "asOf": as_of,
+            "ohlcv": ohlcv,
+            "fundamentals": fundamentals_from_ticker(ticker),
+        })
+    return companies
+
+
 def fetch_companies(symbols: list[str]) -> list[dict[str, Any]]:
     tickers = [yahoo_symbol(symbol) for symbol in symbols]
     history = yf.download(
@@ -113,6 +187,7 @@ def main() -> int:
         return 2
 
     symbols = payload.get("symbols") if isinstance(payload, dict) else None
+    mode = payload.get("mode") if isinstance(payload, dict) else "sector"
     if not isinstance(symbols, list) or not symbols:
         print(json.dumps({"error": "stdin must include a non-empty symbols array"}), file=sys.stderr)
         return 2
@@ -121,6 +196,16 @@ def main() -> int:
     if not cleaned:
         print(json.dumps({"error": "stdin must include a non-empty symbols array"}), file=sys.stderr)
         return 2
+
+    if mode == "strategy_kpis":
+        try:
+            companies = fetch_strategy_kpis(cleaned)
+        except Exception as exc:
+            print(json.dumps({"error": f"yfinance strategy KPI download failed: {exc}"}), file=sys.stderr)
+            return 1
+        json.dump({"source": "yfinance", "mode": "strategy_kpis", "companies": companies}, sys.stdout)
+        sys.stdout.write("\n")
+        return 0
 
     try:
         companies = fetch_companies(cleaned)

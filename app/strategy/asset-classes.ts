@@ -23,4 +23,4 @@ export {
   type ExchangeInstrumentType,
   type InstrumentFilter,
   type InstrumentType,
-} from "../../packages/contracts/src/strategy";
+} from "../../packages/contracts/src/strategy.ts";

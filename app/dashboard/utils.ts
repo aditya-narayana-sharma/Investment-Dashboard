@@ -1,4 +1,4 @@
-import { CircleDollarSign, HeartPulse, Layers3, Newspaper, Spline } from "lucide-react";
+import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Newspaper } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
 import {
   healthActions,
@@ -567,10 +567,16 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "health-diary", title: "Complete nutrition diary", detail: "Treat logged intake as incomplete until all meals and portions are entered.", numericAdvantage: "100% meal coverage target", strategicAdvantage: "Improves nutrition signal quality", lane: "monitor", tone: "red" },
   ],
   builder: [
-    { id: "builder-validate", title: "Validate the strategy graph", detail: "Confirm entry and exit triggers, typed edges and pinned algorithm versions before paper or broker preview.", numericAdvantage: "0 invalid graphs", strategicAdvantage: "Blocks broken logic from leaving the canvas", lane: "today", tone: "blue" },
-    { id: "builder-asset", title: "Confirm universe asset classes", detail: "Keep Equity and ETF selected unless the sleeve is intentionally cash-only.", numericAdvantage: "Default Equity + ETF", strategicAdvantage: "Keeps the backtest universe explicit", lane: "today", tone: "green" },
-    { id: "builder-export", title: "Export lossless StrategyGraphV2 JSON", detail: "Preserve ids, positions, params and pinned versions before switching machines or sessions.", numericAdvantage: "Round-trip identical graph", strategicAdvantage: "Protects canvas work from session loss", lane: "monitor", tone: "amber" },
-    { id: "builder-exit", title: "Wire the demo exit trigger", detail: "The seed RSI entry is connected; connect the exit path before treating validation as clean.", numericAdvantage: "1 entry + 1 exit", strategicAdvantage: "Completes the required trigger pair", lane: "monitor", tone: "red" },
+    { id: "builder-validate", title: "Validate the strategy tree", detail: "Confirm Weight percents, If/Else operands and compiled StrategyGraphV2 before paper or broker preview.", numericAdvantage: "0 invalid trees", strategicAdvantage: "Blocks broken logic from leaving the canvas", lane: "today", tone: "blue" },
+    { id: "builder-asset", title: "Add Indian assets on the tree", detail: "Use Add a Block → Asset. Resolve symbols against live Kite holdings and watchlist, not a static US list.", numericAdvantage: "Holdings ∪ watchlist", strategicAdvantage: "Keeps the sleeve on real NSE instruments", lane: "today", tone: "green" },
+    { id: "builder-export", title: "Export the tree plus compiled graph", detail: "Save StrategyTreeV1 with compiled schemaVersion 2 before switching machines or sessions.", numericAdvantage: "Round-trip identical tree", strategicAdvantage: "Protects canvas work from session loss", lane: "monitor", tone: "amber" },
+    { id: "builder-else", title: "Fill or accept an empty ELSE", detail: "If/Else THEN can hold assets; empty ELSE is allowed and warned. Do not draw wires.", numericAdvantage: "THEN / ELSE wells", strategicAdvantage: "Completes the condition without a flowchart", lane: "monitor", tone: "red" },
+  ],
+  strategies: [
+    { id: "strat-review", title: "Review featured Composer reconstructions", detail: "Read the highest published OOS annualized and cumulative trees before opening one in Algorithm Canvas.", numericAdvantage: "9 public trees", strategicAdvantage: "Keeps research scoped to reconstructable pages", lane: "today", tone: "blue" },
+    { id: "strat-stats", title: "Check as-of dates on published OOS stats", detail: "Treat listing and page figures as Composer-published snapshots dated on the card, not as live alpha.", numericAdvantage: "As-of on every card", strategicAdvantage: "Prevents fabricated performance", lane: "today", tone: "green" },
+    { id: "strat-market", title: "Keep US Composer trees off the Indian seed", detail: "These cards use SPY/TQQQ-family symbols as Composer published them. Indian Core-Satellite stays on Algorithm Canvas.", numericAdvantage: "US symbols labeled", strategicAdvantage: "Avoids mixing market universes", lane: "monitor", tone: "amber" },
+    { id: "strat-open", title: "Open one tree in Algorithm Canvas", detail: "Deep-link a reconstruction into the tree editor when you want to edit. The library stays read-only.", numericAdvantage: "?view=builder&section=canvas&tree=", strategicAdvantage: "Edits stay on the canvas, not in Health or Sectors", lane: "monitor", tone: "red" },
   ],
 };
 
@@ -579,7 +585,8 @@ export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string;
   { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
   { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
-  { key: "builder", label: "Algorithm Canvas", note: "Strategy graph and JSON", icon: Spline },
+  { key: "builder", label: "Algorithm Canvas", note: "Nested tree and JSON", icon: GitBranch },
+  { key: "strategies", label: "Strategies", note: "Public Composer trees", icon: GitBranch },
 ];
 
 export function number(value: number | string | undefined) {

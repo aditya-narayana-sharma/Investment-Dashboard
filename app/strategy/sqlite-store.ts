@@ -20,8 +20,8 @@ export type StoredBacktestConfigure = {
   id: string;
   strategyId: string;
   requestJson: string;
-  status: "configured";
-  ran: false;
+  status: "configured" | "ran";
+  ran: boolean;
   createdAt: string;
 };
 
@@ -119,6 +119,20 @@ export function upsertStrategy(graph: StrategyGraphV2): StoredStrategy {
   });
 }
 
+export function listBacktestConfigures(): StoredBacktestConfigure[] {
+  return withDb((db) => {
+    const rows = db.prepare("SELECT * FROM backtest_requests ORDER BY created_at ASC").all() as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: String(row.id),
+      strategyId: String(row.strategy_id),
+      requestJson: String(row.request_json),
+      status: Number(row.ran) === 1 ? "ran" as const : "configured" as const,
+      ran: Number(row.ran) === 1,
+      createdAt: String(row.created_at),
+    }));
+  });
+}
+
 export function insertBacktestConfigure(strategyId: string, requestJson: string): StoredBacktestConfigure {
   const id = `bt-${strategyId}-${Date.now()}`;
   const createdAt = new Date().toISOString();
@@ -133,6 +147,25 @@ export function insertBacktestConfigure(strategyId: string, requestJson: string)
       requestJson,
       status: "configured",
       ran: false,
+      createdAt,
+    };
+  });
+}
+
+export function insertBacktestRun(strategyId: string, resultJson: string): StoredBacktestConfigure {
+  const id = `bt-run-${strategyId}-${Date.now()}`;
+  const createdAt = new Date().toISOString();
+  return withDb((db) => {
+    db.prepare(`
+      INSERT INTO backtest_requests (id, strategy_id, request_json, status, ran, created_at)
+      VALUES (?, ?, ?, 'ran', 1, ?)
+    `).run(id, strategyId, resultJson, createdAt);
+    return {
+      id,
+      strategyId,
+      requestJson: resultJson,
+      status: "ran",
+      ran: true,
       createdAt,
     };
   });

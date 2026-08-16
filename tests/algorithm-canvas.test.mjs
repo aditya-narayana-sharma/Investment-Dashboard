@@ -48,6 +48,8 @@ test("parseWorkspaceView maps builder and algorithm-canvas without breaking exis
   assert.equal(parseWorkspaceView("sectors"), "sectors");
   assert.equal(parseWorkspaceView("intelligence"), "intelligence");
   assert.equal(parseWorkspaceView("health"), "health");
+  assert.equal(parseWorkspaceView("strategies"), "strategies");
+  assert.equal(parseWorkspaceView("strategy-library"), "strategies");
   assert.equal(parseWorkspaceView("market-intelligence"), "intelligence");
   assert.equal(parseWorkspaceView("unknown"), "investment");
   assert.equal(parseBuilderSection("canvas"), "canvas");
