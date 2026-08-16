@@ -2,9 +2,10 @@ import type { AllocationSlice, LiveHolding } from "../live-types";
 
 export type MacroEventKey = "oilWar" | "flows" | "rates" | "breadth" | "earnings";
 export type MacroBandKey = "supportive" | "base" | "stress";
-export type WorkspaceKey = "investment" | "sectors" | "intelligence" | "health";
+export type WorkspaceKey = "investment" | "sectors" | "intelligence" | "health" | "builder";
+export type BuilderSection = "board" | "canvas" | "json";
 export type SectorRankingView = "market" | "fundamentals";
-export type KanbanWorkspace = "investment" | "sectors" | "intelligence" | "health";
+export type KanbanWorkspace = WorkspaceKey;
 
 export type KanbanItem = {
   id: string;

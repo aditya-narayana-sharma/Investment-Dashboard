@@ -7,6 +7,7 @@ import { buildRiskExplanation, riskScoreBand } from "../app/risk-explanations.ts
 const workspacePath = new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url);
 const cssPath = new URL("../app/globals.css", import.meta.url);
 const visualCssPath = new URL("../app/visual-overhaul.css", import.meta.url);
+const utilsPath = new URL("../app/dashboard/utils.ts", import.meta.url);
 
 test("selected-company explanations switch without including unselected companies", () => {
   const icici = buildRiskExplanation(portfolioRiskProfiles.find((profile) => profile.symbol === "ICICIBANK"), riskAxes);
@@ -67,10 +68,11 @@ test("generated bullets avoid probability and investment-advice claims", () => {
 });
 
 test("risk panel uses selected tab semantics and remains content-sized", async () => {
-  const [workspace, css, visualCss] = await Promise.all([
+  const [workspace, css, visualCss, utils] = await Promise.all([
     readFile(workspacePath, "utf8"),
     readFile(cssPath, "utf8"),
     readFile(visualCssPath, "utf8"),
+    readFile(utilsPath, "utf8"),
   ]);
 
   assert.match(workspace, /buildRiskExplanation\(profile, riskAxes\)/);
@@ -107,7 +109,16 @@ test("risk panel uses selected tab semantics and remains content-sized", async (
   assert.match(riskGridRule, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(riskGridRule, /align-items:stretch/);
   assert.match(css, /\.investment-risk-grid>\.exposure-composition-panel\s*\{[^}]*display:flex;[^}]*align-self:stretch;[^}]*flex-direction:column;/s);
-  assert.match(css, /\.investment-risk-grid>\.exposure-composition-panel \.exposure-driver-map\s*\{[^}]*display:grid;[^}]*flex:1 1 auto;[^}]*grid-template-rows:auto repeat\(7,minmax\(0,1fr\)\);/s);
+  assert.match(css, /\.investment-risk-grid>\.exposure-composition-panel \.exposure-driver-map\s*\{[^}]*display:grid;[^}]*flex:0 0 auto;[^}]*grid-auto-rows:auto;/s);
+  assert.match(css, /\.exposure-driver-head\s*\{[^}]*font-size:12px/);
+  assert.match(css, /\.exposure-driver-row\s*\{[^}]*font-size:13px/);
+  assert.match(css, /\.exposure-driver-list li\[data-tone="positive"\]/);
+  assert.match(css, /\.exposure-driver-list li\[data-tone="negative"\]/);
+  assert.match(workspace, /eventBullets\.map/);
+  assert.match(workspace, /kpiBullets\.map/);
+  assert.match(workspace, /data-tone=\{bullet\.tone\}/);
+  assert.match(utils, /export function buildExposureDrivers/);
+  assert.match(utils, /export function exposureDriverTone/);
   assert.doesNotMatch(riskPanelRule, /(?:min-)?height\s*:/);
   assert.doesNotMatch(explanationRules, /(?:^|[;{]\s*)(?:min-)?height\s*:|100vh|100dvh/);
   assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-radar-layout\s*\{[^}]*grid-template-columns:\s*1fr/);

@@ -28,6 +28,9 @@ struct ContentView: View {
                 if workspaceRawValue == "market-intelligence" {
                     return .intelligence
                 }
+                if workspaceRawValue == "algorithm-canvas" {
+                    return .builder
+                }
                 return DashboardWorkspace(rawValue: workspaceRawValue) ?? .investment
             },
             set: { workspaceRawValue = $0.rawValue }

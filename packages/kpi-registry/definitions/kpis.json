@@ -1,0 +1,912 @@
+{
+  "schemaVersion": 1,
+  "count": 128,
+  "buckets": {
+    "ohlcv": 16,
+    "trend": 16,
+    "momentum": 16,
+    "vol": 16,
+    "volume": 16,
+    "breadth": 16,
+    "risk": 16,
+    "valuation": 16
+  },
+  "kpis": [
+    {
+      "id": "open",
+      "label": "Open",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Open (OHLCV)"
+    },
+    {
+      "id": "high",
+      "label": "High",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "High (OHLCV)"
+    },
+    {
+      "id": "low",
+      "label": "Low",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Low (OHLCV)"
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Close (OHLCV)"
+    },
+    {
+      "id": "volume",
+      "label": "Volume",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Volume (OHLCV)"
+    },
+    {
+      "id": "typical_price",
+      "label": "Typical price",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Typical price (OHLCV)"
+    },
+    {
+      "id": "median_price",
+      "label": "Median price",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Median price (OHLCV)"
+    },
+    {
+      "id": "weighted_close",
+      "label": "Weighted close",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Weighted close (OHLCV)"
+    },
+    {
+      "id": "vwap",
+      "label": "VWAP",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "VWAP (OHLCV)"
+    },
+    {
+      "id": "hl2",
+      "label": "HL2",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "HL2 (OHLCV)"
+    },
+    {
+      "id": "hlc3",
+      "label": "HLC3",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "HLC3 (OHLCV)"
+    },
+    {
+      "id": "ohlc4",
+      "label": "OHLC4",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "OHLC4 (OHLCV)"
+    },
+    {
+      "id": "gap_pct",
+      "label": "Gap %",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Gap % (OHLCV)"
+    },
+    {
+      "id": "range",
+      "label": "Range",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Range (OHLCV)"
+    },
+    {
+      "id": "true_range",
+      "label": "True range",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "True range (OHLCV)"
+    },
+    {
+      "id": "log_return",
+      "label": "Log return",
+      "bucket": "ohlcv",
+      "output": "series",
+      "description": "Log return (OHLCV)"
+    },
+    {
+      "id": "sma_20",
+      "label": "SMA 20",
+      "bucket": "trend",
+      "output": "series",
+      "description": "SMA 20 (TREND)"
+    },
+    {
+      "id": "sma_50",
+      "label": "SMA 50",
+      "bucket": "trend",
+      "output": "series",
+      "description": "SMA 50 (TREND)"
+    },
+    {
+      "id": "sma_200",
+      "label": "SMA 200",
+      "bucket": "trend",
+      "output": "series",
+      "description": "SMA 200 (TREND)"
+    },
+    {
+      "id": "ema_12",
+      "label": "EMA 12",
+      "bucket": "trend",
+      "output": "series",
+      "description": "EMA 12 (TREND)"
+    },
+    {
+      "id": "ema_26",
+      "label": "EMA 26",
+      "bucket": "trend",
+      "output": "series",
+      "description": "EMA 26 (TREND)"
+    },
+    {
+      "id": "ema_50",
+      "label": "EMA 50",
+      "bucket": "trend",
+      "output": "series",
+      "description": "EMA 50 (TREND)"
+    },
+    {
+      "id": "wma_20",
+      "label": "WMA 20",
+      "bucket": "trend",
+      "output": "series",
+      "description": "WMA 20 (TREND)"
+    },
+    {
+      "id": "dema_20",
+      "label": "DEMA 20",
+      "bucket": "trend",
+      "output": "series",
+      "description": "DEMA 20 (TREND)"
+    },
+    {
+      "id": "tema_20",
+      "label": "TEMA 20",
+      "bucket": "trend",
+      "output": "series",
+      "description": "TEMA 20 (TREND)"
+    },
+    {
+      "id": "adx_14",
+      "label": "ADX 14",
+      "bucket": "trend",
+      "output": "series",
+      "description": "ADX 14 (TREND)"
+    },
+    {
+      "id": "plus_di_14",
+      "label": "+DI 14",
+      "bucket": "trend",
+      "output": "series",
+      "description": "+DI 14 (TREND)"
+    },
+    {
+      "id": "minus_di_14",
+      "label": "−DI 14",
+      "bucket": "trend",
+      "output": "series",
+      "description": "−DI 14 (TREND)"
+    },
+    {
+      "id": "supertrend_10_3",
+      "label": "Supertrend 10/3",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Supertrend 10/3 (TREND)"
+    },
+    {
+      "id": "ichimoku_tenkan",
+      "label": "Ichimoku tenkan",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Ichimoku tenkan (TREND)"
+    },
+    {
+      "id": "ichimoku_kijun",
+      "label": "Ichimoku kijun",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Ichimoku kijun (TREND)"
+    },
+    {
+      "id": "parabolic_sar",
+      "label": "Parabolic SAR",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Parabolic SAR (TREND)"
+    },
+    {
+      "id": "rsi_14",
+      "label": "RSI 14",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "RSI 14 (MOMENTUM)"
+    },
+    {
+      "id": "rsi_7",
+      "label": "RSI 7",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "RSI 7 (MOMENTUM)"
+    },
+    {
+      "id": "macd_12_26_9",
+      "label": "MACD 12/26/9",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "MACD 12/26/9 (MOMENTUM)"
+    },
+    {
+      "id": "macd_signal",
+      "label": "MACD signal",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "MACD signal (MOMENTUM)"
+    },
+    {
+      "id": "macd_hist",
+      "label": "MACD histogram",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "MACD histogram (MOMENTUM)"
+    },
+    {
+      "id": "stoch_k_14",
+      "label": "Stoch %K 14",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Stoch %K 14 (MOMENTUM)"
+    },
+    {
+      "id": "stoch_d_14",
+      "label": "Stoch %D 14",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Stoch %D 14 (MOMENTUM)"
+    },
+    {
+      "id": "cci_20",
+      "label": "CCI 20",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "CCI 20 (MOMENTUM)"
+    },
+    {
+      "id": "williams_r_14",
+      "label": "Williams %R 14",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Williams %R 14 (MOMENTUM)"
+    },
+    {
+      "id": "roc_12",
+      "label": "ROC 12",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "ROC 12 (MOMENTUM)"
+    },
+    {
+      "id": "mfi_14",
+      "label": "MFI 14",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "MFI 14 (MOMENTUM)"
+    },
+    {
+      "id": "momentum_10",
+      "label": "Momentum 10",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Momentum 10 (MOMENTUM)"
+    },
+    {
+      "id": "tsi_25_13",
+      "label": "TSI 25/13",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "TSI 25/13 (MOMENTUM)"
+    },
+    {
+      "id": "ultimate_osc",
+      "label": "Ultimate oscillator",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Ultimate oscillator (MOMENTUM)"
+    },
+    {
+      "id": "awesome_osc",
+      "label": "Awesome oscillator",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Awesome oscillator (MOMENTUM)"
+    },
+    {
+      "id": "coppock",
+      "label": "Coppock",
+      "bucket": "momentum",
+      "output": "series",
+      "description": "Coppock (MOMENTUM)"
+    },
+    {
+      "id": "atr_14",
+      "label": "ATR 14",
+      "bucket": "vol",
+      "output": "series",
+      "description": "ATR 14 (VOL)"
+    },
+    {
+      "id": "atr_pct_14",
+      "label": "ATR % 14",
+      "bucket": "vol",
+      "output": "series",
+      "description": "ATR % 14 (VOL)"
+    },
+    {
+      "id": "bbands_upper_20",
+      "label": "Bollinger upper 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Bollinger upper 20 (VOL)"
+    },
+    {
+      "id": "bbands_mid_20",
+      "label": "Bollinger mid 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Bollinger mid 20 (VOL)"
+    },
+    {
+      "id": "bbands_lower_20",
+      "label": "Bollinger lower 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Bollinger lower 20 (VOL)"
+    },
+    {
+      "id": "bbands_width_20",
+      "label": "Bollinger width 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Bollinger width 20 (VOL)"
+    },
+    {
+      "id": "keltner_upper",
+      "label": "Keltner upper",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Keltner upper (VOL)"
+    },
+    {
+      "id": "keltner_lower",
+      "label": "Keltner lower",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Keltner lower (VOL)"
+    },
+    {
+      "id": "hist_vol_20",
+      "label": "Hist vol 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Hist vol 20 (VOL)"
+    },
+    {
+      "id": "hist_vol_60",
+      "label": "Hist vol 60",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Hist vol 60 (VOL)"
+    },
+    {
+      "id": "natr_14",
+      "label": "NATR 14",
+      "bucket": "vol",
+      "output": "series",
+      "description": "NATR 14 (VOL)"
+    },
+    {
+      "id": "stddev_20",
+      "label": "Stdev 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Stdev 20 (VOL)"
+    },
+    {
+      "id": "chaikin_vol",
+      "label": "Chaikin volatility",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Chaikin volatility (VOL)"
+    },
+    {
+      "id": "donchian_high_20",
+      "label": "Donchian high 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Donchian high 20 (VOL)"
+    },
+    {
+      "id": "donchian_low_20",
+      "label": "Donchian low 20",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Donchian low 20 (VOL)"
+    },
+    {
+      "id": "hv_rank_252",
+      "label": "HV rank 252",
+      "bucket": "vol",
+      "output": "series",
+      "description": "HV rank 252 (VOL)"
+    },
+    {
+      "id": "obv",
+      "label": "OBV",
+      "bucket": "volume",
+      "output": "series",
+      "description": "OBV (VOLUME)"
+    },
+    {
+      "id": "ad_line",
+      "label": "A/D line",
+      "bucket": "volume",
+      "output": "series",
+      "description": "A/D line (VOLUME)"
+    },
+    {
+      "id": "cmf_20",
+      "label": "CMF 20",
+      "bucket": "volume",
+      "output": "series",
+      "description": "CMF 20 (VOLUME)"
+    },
+    {
+      "id": "fi_13",
+      "label": "Force index 13",
+      "bucket": "volume",
+      "output": "series",
+      "description": "Force index 13 (VOLUME)"
+    },
+    {
+      "id": "vpt",
+      "label": "VPT",
+      "bucket": "volume",
+      "output": "series",
+      "description": "VPT (VOLUME)"
+    },
+    {
+      "id": "emv_14",
+      "label": "EMV 14",
+      "bucket": "volume",
+      "output": "series",
+      "description": "EMV 14 (VOLUME)"
+    },
+    {
+      "id": "nvi",
+      "label": "NVI",
+      "bucket": "volume",
+      "output": "series",
+      "description": "NVI (VOLUME)"
+    },
+    {
+      "id": "pvi",
+      "label": "PVI",
+      "bucket": "volume",
+      "output": "series",
+      "description": "PVI (VOLUME)"
+    },
+    {
+      "id": "vwma_20",
+      "label": "VWMA 20",
+      "bucket": "volume",
+      "output": "series",
+      "description": "VWMA 20 (VOLUME)"
+    },
+    {
+      "id": "volume_sma_20",
+      "label": "Volume SMA 20",
+      "bucket": "volume",
+      "output": "series",
+      "description": "Volume SMA 20 (VOLUME)"
+    },
+    {
+      "id": "volume_ratio_20",
+      "label": "Volume ratio 20",
+      "bucket": "volume",
+      "output": "series",
+      "description": "Volume ratio 20 (VOLUME)"
+    },
+    {
+      "id": "pvt",
+      "label": "PVT",
+      "bucket": "volume",
+      "output": "series",
+      "description": "PVT (VOLUME)"
+    },
+    {
+      "id": "klinger",
+      "label": "Klinger",
+      "bucket": "volume",
+      "output": "series",
+      "description": "Klinger (VOLUME)"
+    },
+    {
+      "id": "adosc",
+      "label": "A/D oscillator",
+      "bucket": "volume",
+      "output": "series",
+      "description": "A/D oscillator (VOLUME)"
+    },
+    {
+      "id": "vroc_12",
+      "label": "VROC 12",
+      "bucket": "volume",
+      "output": "series",
+      "description": "VROC 12 (VOLUME)"
+    },
+    {
+      "id": "relative_volume",
+      "label": "Relative volume",
+      "bucket": "volume",
+      "output": "series",
+      "description": "Relative volume (VOLUME)"
+    },
+    {
+      "id": "advance_decline",
+      "label": "Advance/decline",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Advance/decline (BREADTH)"
+    },
+    {
+      "id": "ad_ratio",
+      "label": "A/D ratio",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "A/D ratio (BREADTH)"
+    },
+    {
+      "id": "mcclellan_osc",
+      "label": "McClellan oscillator",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "McClellan oscillator (BREADTH)"
+    },
+    {
+      "id": "new_highs_20",
+      "label": "New highs 20",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "New highs 20 (BREADTH)"
+    },
+    {
+      "id": "new_lows_20",
+      "label": "New lows 20",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "New lows 20 (BREADTH)"
+    },
+    {
+      "id": "pct_above_sma50",
+      "label": "% above SMA 50",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "% above SMA 50 (BREADTH)"
+    },
+    {
+      "id": "pct_above_sma200",
+      "label": "% above SMA 200",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "% above SMA 200 (BREADTH)"
+    },
+    {
+      "id": "up_volume_ratio",
+      "label": "Up-volume ratio",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Up-volume ratio (BREADTH)"
+    },
+    {
+      "id": "tick_index",
+      "label": "Tick index",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Tick index (BREADTH)"
+    },
+    {
+      "id": "trin",
+      "label": "TRIN",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "TRIN (BREADTH)"
+    },
+    {
+      "id": "high_low_index",
+      "label": "High-low index",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "High-low index (BREADTH)"
+    },
+    {
+      "id": "breadth_thrust",
+      "label": "Breadth thrust",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Breadth thrust (BREADTH)"
+    },
+    {
+      "id": "equal_weight_vs_cap",
+      "label": "Equal-weight vs cap",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Equal-weight vs cap (BREADTH)"
+    },
+    {
+      "id": "sector_dispersion",
+      "label": "Sector dispersion",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Sector dispersion (BREADTH)"
+    },
+    {
+      "id": "correlation_nifty",
+      "label": "Correlation vs NIFTY",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Correlation vs NIFTY (BREADTH)"
+    },
+    {
+      "id": "participation_rate",
+      "label": "Participation rate",
+      "bucket": "breadth",
+      "output": "series",
+      "description": "Participation rate (BREADTH)"
+    },
+    {
+      "id": "beta_60",
+      "label": "Beta 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Beta 60 (RISK)"
+    },
+    {
+      "id": "beta_252",
+      "label": "Beta 252",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Beta 252 (RISK)"
+    },
+    {
+      "id": "sharpe_60",
+      "label": "Sharpe 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Sharpe 60 (RISK)"
+    },
+    {
+      "id": "sortino_60",
+      "label": "Sortino 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Sortino 60 (RISK)"
+    },
+    {
+      "id": "max_drawdown_60",
+      "label": "Max drawdown 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Max drawdown 60 (RISK)"
+    },
+    {
+      "id": "var_95_20",
+      "label": "VaR 95 20",
+      "bucket": "risk",
+      "output": "series",
+      "description": "VaR 95 20 (RISK)"
+    },
+    {
+      "id": "cvar_95_20",
+      "label": "CVaR 95 20",
+      "bucket": "risk",
+      "output": "series",
+      "description": "CVaR 95 20 (RISK)"
+    },
+    {
+      "id": "downside_dev_20",
+      "label": "Downside deviation 20",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Downside deviation 20 (RISK)"
+    },
+    {
+      "id": "ulcer_index",
+      "label": "Ulcer index",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Ulcer index (RISK)"
+    },
+    {
+      "id": "calmar_60",
+      "label": "Calmar 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Calmar 60 (RISK)"
+    },
+    {
+      "id": "treynor_60",
+      "label": "Treynor 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Treynor 60 (RISK)"
+    },
+    {
+      "id": "information_ratio",
+      "label": "Information ratio",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Information ratio (RISK)"
+    },
+    {
+      "id": "tracking_error",
+      "label": "Tracking error",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Tracking error (RISK)"
+    },
+    {
+      "id": "vol_of_vol",
+      "label": "Vol of vol",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Vol of vol (RISK)"
+    },
+    {
+      "id": "skew_60",
+      "label": "Skew 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Skew 60 (RISK)"
+    },
+    {
+      "id": "kurtosis_60",
+      "label": "Kurtosis 60",
+      "bucket": "risk",
+      "output": "series",
+      "description": "Kurtosis 60 (RISK)"
+    },
+    {
+      "id": "pe_ttm",
+      "label": "P/E TTM",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "P/E TTM (VALUATION)"
+    },
+    {
+      "id": "pe_fwd",
+      "label": "Forward P/E",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Forward P/E (VALUATION)"
+    },
+    {
+      "id": "pb",
+      "label": "P/B",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "P/B (VALUATION)"
+    },
+    {
+      "id": "ps_ttm",
+      "label": "P/S TTM",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "P/S TTM (VALUATION)"
+    },
+    {
+      "id": "ev_ebitda",
+      "label": "EV/EBITDA",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "EV/EBITDA (VALUATION)"
+    },
+    {
+      "id": "ev_sales",
+      "label": "EV/Sales",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "EV/Sales (VALUATION)"
+    },
+    {
+      "id": "dividend_yield",
+      "label": "Dividend yield",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Dividend yield (VALUATION)"
+    },
+    {
+      "id": "earnings_yield",
+      "label": "Earnings yield",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Earnings yield (VALUATION)"
+    },
+    {
+      "id": "fcf_yield",
+      "label": "FCF yield",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "FCF yield (VALUATION)"
+    },
+    {
+      "id": "roe",
+      "label": "ROE",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "ROE (VALUATION)"
+    },
+    {
+      "id": "roce",
+      "label": "ROCE",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "ROCE (VALUATION)"
+    },
+    {
+      "id": "peg",
+      "label": "PEG",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "PEG (VALUATION)"
+    },
+    {
+      "id": "price_to_fcf",
+      "label": "Price / FCF",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Price / FCF (VALUATION)"
+    },
+    {
+      "id": "book_yield",
+      "label": "Book yield",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Book yield (VALUATION)"
+    },
+    {
+      "id": "ev_ebit",
+      "label": "EV/EBIT",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "EV/EBIT (VALUATION)"
+    },
+    {
+      "id": "sales_growth_yoy",
+      "label": "Sales growth YoY",
+      "bucket": "valuation",
+      "output": "series",
+      "description": "Sales growth YoY (VALUATION)"
+    }
+  ]
+}
