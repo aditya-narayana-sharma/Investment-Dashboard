@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseWorkspaceView } from "../app/dashboard/workspace-routing.ts";
+import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseWorkspaceView, workspaceFromPageSearch } from "../app/dashboard/workspace-routing.ts";
 import {
   DEFAULT_ASSET_CLASSES,
   inferAssetClassForSymbol,
   normalizeAssetClasses,
 } from "../app/strategy/asset-classes.ts";
-import { cloneGraph, defaultNodeParams, validateStrategyGraph, VALIDATION_OK_TITLE } from "../app/strategy/graph-types.ts";
+import { cloneGraph, defaultNodeParams, VALIDATION_OK_TITLE } from "../app/strategy/graph-types.ts";
+import { validateStrategyGraph } from "../app/strategy/validate.ts";
 import { connectNodes, createNode, removeNode } from "../app/strategy/graph-ops.ts";
 import { incompatibilityReason, portsCompatible } from "../app/strategy/ports.ts";
 import { createSeedGraph } from "../app/strategy/seed-graph.ts";
@@ -65,6 +66,12 @@ test("parseWorkspaceView maps builder and algorithm-canvas without breaking exis
   const explicit = new URL("http://localhost/?view=builder&section=canvas");
   assert.deepEqual(applyCanonicalWorkspaceUrl(explicit), { view: "builder", rewritten: false });
   assert.equal(explicit.searchParams.get("section"), "canvas");
+
+  assert.equal(workspaceFromPageSearch({ view: "builder" }), "builder");
+  assert.equal(workspaceFromPageSearch({ view: ["strategies"] }), "strategies");
+  assert.equal(workspaceFromPageSearch(undefined, "?view=builder&section=canvas"), "builder");
+  assert.equal(workspaceFromPageSearch(undefined, "?view=strategy-library"), "strategies");
+  assert.equal(workspaceFromPageSearch(), "investment");
 });
 
 test("universe defaults to Equity and ETF asset classes", () => {

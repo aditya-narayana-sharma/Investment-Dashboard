@@ -2158,6 +2158,8 @@ footer { display:flex; justify-content:space-between; gap:16px; margin-top:26px;
 .investment-workspace-shell > .workspace-section + .workspace-section { margin-top:18px; }
 .builder-workspace-shell { display:block; min-height:0; overflow:visible; }
 .builder-workspace-shell > .workspace-section + .workspace-section { margin-top:18px; }
+.builder-workspace-shell > .workspace-section[hidden] { display:none !important; }
+.builder-workspace-chrome .workspace-section-nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .strategies-workspace-shell { display:block; min-height:0; overflow:visible; }
 .strategies-workspace-shell > .workspace-section + .workspace-section { margin-top:18px; }
 .builder-workspace-chrome {
