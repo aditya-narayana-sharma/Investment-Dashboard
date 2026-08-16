@@ -1,4 +1,7 @@
+import kpiRegistry from "../../packages/kpi-registry/definitions/kpis.json" with { type: "json" };
 import { parseStrategyTree, type StrategyTreeV1 } from "../../packages/contracts/src/strategy-tree.ts";
+
+const kpiDefinitions = kpiRegistry.kpis as Array<{ id: string }>;
 import type { KiteSnapshot } from "../live-types";
 import { computeKpisFromOhlcv } from "./tree-indicators";
 import {
@@ -87,39 +90,47 @@ function emptyFundamentals(): YfinanceFundamentals {
   return {};
 }
 
-export function buildTreeLivePreview(tree: StrategyTreeV1, sources: TreeLiveSources): TreeLivePreview {
+export function parseTreeLiveKpiSymbol(raw: unknown): string {
+  if (!raw || typeof raw !== "object") return "";
+  const value = (raw as Record<string, unknown>).kpiSymbol;
+  if (typeof value !== "string") return "";
+  return value.trim().toUpperCase();
+}
+
+export function buildTreeLivePreview(
+  tree: StrategyTreeV1,
+  sources: TreeLiveSources,
+  extraSymbols: readonly string[] = [],
+): TreeLivePreview {
   const instruments = resolveTreeInstruments(sources.kite.holdings, sources.watchlist);
   const yfinanceBySymbol = new Map(sources.yfinance.map((row) => [row.symbol, row]));
   const kiteStatus = kiteLiveStatus(sources.kite);
   const kpis: Record<string, TreeKpiLiveValue> = {};
   const fundamentals: Record<string, YfinanceFundamentals> = {};
 
-  for (const symbol of collectTreeSymbols(tree)) {
+  const benchmark = yfinanceBySymbol.get("RELIANCE")?.ohlcv;
+  const universe = sources.yfinance
+    .filter((row) => row.ohlcv.length > 0)
+    .map((row) => ({ symbol: row.symbol, bars: row.ohlcv }));
+
+  const symbols = [...new Set([
+    ...collectTreeSymbols(tree),
+    ...extraSymbols.map((item) => item.trim().toUpperCase()).filter(Boolean),
+  ])];
+
+  for (const symbol of symbols) {
     const yf = yfinanceBySymbol.get(symbol);
     const instrument = findTreeInstrument(instruments, symbol);
-    const computed = yf ? computeKpisFromOhlcv(yf.ohlcv) : [];
     const fund = yf?.fundamentals ?? emptyFundamentals();
     fundamentals[symbol] = fund;
-    const needed = new Set<string>();
-    if (instrument) needed.add("close");
-    for (const item of computed) needed.add(item.kpiId);
-    for (const key of Object.keys(fund)) needed.add(key);
-    needed.add("close");
-    needed.add("sma_20");
-    needed.add("sma_50");
-    needed.add("sma_200");
-    needed.add("ema_12");
-    needed.add("rsi_14");
-    needed.add("macd_12_26_9");
-    needed.add("bbands_upper_20");
-    needed.add("bbands_lower_20");
-    needed.add("wma_20");
-    needed.add("sales_growth_yoy");
-    needed.add("pe_ttm");
-    needed.add("ev_ebitda");
-    for (const kpiId of needed) {
-      const value = lookupKpiValue(kpiId, symbol, computed, fund, instrument, yf?.asOf ?? sources.kite.asOf, kiteStatus);
-      kpis[`${kpiId}:${symbol}`] = value;
+    const computed = computeKpisFromOhlcv(yf?.ohlcv ?? [], {
+      fundamentals: fund,
+      benchmark,
+      universe: universe.length >= 5 ? universe : undefined,
+    });
+    for (const definition of kpiDefinitions) {
+      const value = lookupKpiValue(definition.id, symbol, computed, fund, instrument, yf?.asOf ?? sources.kite.asOf, kiteStatus);
+      kpis[`${definition.id}:${symbol}`] = value;
     }
   }
 

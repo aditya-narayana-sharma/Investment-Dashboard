@@ -266,7 +266,7 @@ export function parseTreeNode(raw: unknown): TreeNode | null {
       };
     }
     case "if_else": {
-      const left = parseTreeOperand(params.left, { type: "kpi", kpiId: "close", symbol: "NIFTYBEES" });
+      const left = parseTreeOperand(params.left, { type: "kpi", kpiId: "close", symbol: "RELIANCE" });
       const right = parseTreeOperand(params.right, { type: "number", value: 0 });
       const op = typeof params.op === "string" && isComparatorOp(params.op) ? params.op : ">";
       return {

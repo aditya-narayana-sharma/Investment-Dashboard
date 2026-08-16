@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, RefreshCw } from "lucide-react";
 import { analystCalls, axisRecommendations, portfolioRiskProfiles, type RiskProfile } from "./portfolio-data";
 import type { HealthLiveSnapshot } from "./health-live-types";
@@ -14,7 +15,7 @@ import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseStrategiesSection } from "./dashboard/workspace-routing";
+import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseStrategiesSection, workspaceFromPageSearch } from "./dashboard/workspace-routing";
 import {
   analysisWindowLabel,
   buildExposureDrivers,
@@ -36,8 +37,43 @@ import { StrategiesWorkspace } from "./dashboard/StrategiesWorkspace";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
 
-export default function Home() {
-  const [workspace, setWorkspace] = useState<WorkspaceKey>("investment");
+type HomeSearchParams = {
+  view?: string | string[];
+  section?: string | string[];
+};
+
+class WorkspaceRenderGuard extends Component<{ label: string; children: ReactNode }, { message: string | null }> {
+  state = { message: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { message: error.message };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(error);
+  }
+
+  render() {
+    if (this.state.message) {
+      return (
+        <div className="workspace-render-guard" role="alert">
+          <h2>{this.props.label} could not render</h2>
+          <p>{this.state.message}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function Home({ searchParams: searchParamsProp }: { searchParams?: HomeSearchParams } = {}) {
+  const searchParams = useSearchParams();
+  const [workspace, setWorkspace] = useState<WorkspaceKey>(() => (
+    workspaceFromPageSearch(
+      { view: searchParams.get("view") ?? (Array.isArray(searchParamsProp?.view) ? searchParamsProp.view[0] : searchParamsProp?.view) },
+      typeof window !== "undefined" ? window.location.search : null,
+    )
+  ));
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
   const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
@@ -694,9 +730,9 @@ export default function Home() {
         healthNoteSource={content.sources.healthNote}
       />}
 
-      {workspace === "builder" && <BuilderWorkspace />}
+      {workspace === "builder" && <WorkspaceRenderGuard label="Algorithm Builder"><BuilderWorkspace /></WorkspaceRenderGuard>}
 
-      {workspace === "strategies" && <StrategiesWorkspace />}
+      {workspace === "strategies" && <WorkspaceRenderGuard label="Strategies"><StrategiesWorkspace /></WorkspaceRenderGuard>}
 
       </section>
 

@@ -1,8 +1,9 @@
 /**
- * Composer.trade public reconstructions (as-of 2026-08-16).
- * Trees are rebuilt from publicly visible How-it-works block structure into StrategyTreeV1.
- * US listed symbols are intentional; Indian-market seeds stay in seed-tree.ts.
+ * Composer.trade logic adapted onto Nifty 500 equities (as-of 2026-08-16).
+ * Block structure follows the public How-it-works pages; every leaf is an NSE Nifty 500 name.
+ * Published US/Nasdaq OOS figures are not shown — those books are not this market.
  */
+import { formatTickerName, nifty500Name } from "./builder-universe";
 import type { ComparatorOp } from "./graph-types";
 import type {
   AssetNode,
@@ -19,18 +20,36 @@ import type {
 export const COMPOSER_RESEARCH_AS_OF = "2026-08-16";
 export const COMPOSER_CATALOG_URL = "https://www.composer.trade/trading-strategies";
 
+/** Official NSE Nifty 500 sleeves used in place of the old India ETF reconstruction. */
+export const NSE_SLEEVE = {
+  market: "RELIANCE",
+  it: "TCS",
+  bank: "HDFCBANK",
+  defensive: "HINDUNILVR",
+  metal: "HINDALCO",
+  cash: "ITC",
+  bond: "POWERGRID",
+  pharma: "SUNPHARMA",
+  junior: "BEL",
+  infra: "LT",
+  market2: "INFY",
+} as const;
+
 export type ComposerPublishedStats = {
-  oosStart: string;
-  cumulativeReturnPct: number;
-  annualizedReturnPct: number;
-  sharpe: number;
-  maxDrawdownPct: number;
-  stdevPct: number;
-  calmar: number;
+  oosStart?: string;
+  cumulativeReturnPct?: number;
+  annualizedReturnPct?: number;
+  sharpe?: number;
+  maxDrawdownPct?: number;
+  stdevPct?: number;
+  calmar?: number;
   trailing1mPct?: number;
   trailing3mPct?: number;
   trailing1yPct?: number;
   rebalance?: "day" | "";
+  source?: "yfinance";
+  asOf?: string;
+  unavailableReason?: string;
 };
 
 export type ComposerStrategyCard = {
@@ -71,11 +90,19 @@ export const COMPOSER_UNRECONSTRUCTED: Array<{ name: string; sourceUrl: string; 
 ];
 
 const AS_OF = COMPOSER_RESEARCH_AS_OF;
-const US_NOTE = "Uses US-listed symbols published on Composer (SPY, TQQQ, SOXL, and similar). This is not the Indian-market Algorithm Builder seed.";
-const RECON_NOTE = "Composer-public reconstruction from the strategy page’s How-it-works text. Not a live broker-connected portfolio and not a Composer Symphony export.";
+const IN_NOTE = "Nifty 500 equity sleeves only (RELIANCE, TCS, HDFCBANK, INFY, ITC, and other official NSE constituent names). No US/Nasdaq tickers. India has no 3x or inverse products — those Composer sleeves become the unlevered Indian analog or a defensive name.";
+const RECON_NOTE = "Composer How-it-works logic adapted onto Nifty 500 equities. Not a live Kite portfolio, not a Composer Symphony export, and not the published US backtest.";
 const RSI_MAP = "Composer pages that name a 10-day RSI are mapped to registry kpiId rsi_14 (no rsi_10 in the 128-KPI catalog). 10-day relative strength uses roc_12.";
+const UNRUN_STATS: ComposerPublishedStats = {};
+
+function requireNifty500(symbol: string): string {
+  const name = nifty500Name(symbol);
+  if (!name) throw new Error(`${symbol} is not in the NSE Nifty 500 constituent cache.`);
+  return name;
+}
 
 function kpi(kpiId: string, symbol: string): TreeOperand {
+  requireNifty500(symbol);
   return { type: "kpi", kpiId, symbol };
 }
 
@@ -83,8 +110,9 @@ function num(value: number): TreeOperand {
   return { type: "number", value };
 }
 
-function asset(id: string, symbol: string, label?: string): AssetNode {
-  return { id, kind: "asset", label: label ?? symbol, params: { symbol }, children: [] };
+function asset(id: string, symbol: string, extra?: string): AssetNode {
+  const name = requireNifty500(symbol);
+  return { id, kind: "asset", label: extra ?? formatTickerName(symbol, name), params: { symbol }, children: [] };
 }
 
 function group(id: string, label: string, children: TreeNode[]): GroupNode {
@@ -112,7 +140,8 @@ function ifElse(
 }
 
 function filter(id: string, symbols: string[], children: TreeNode[], label?: string): FilterNode {
-  return { id, kind: "filter", label, params: { assetClasses: ["ETF"], symbols }, children };
+  for (const symbol of symbols) requireNifty500(symbol);
+  return { id, kind: "filter", label, params: { assetClasses: ["Equity"], symbols }, children };
 }
 
 function strongerOf(id: string, leftSymbol: string, rightSymbol: string, leftNode: TreeNode, rightNode: TreeNode, label?: string): IfElseNode {
@@ -135,206 +164,173 @@ function treeDoc(id: string, name: string, description: string, children: TreeNo
 function holyGrailLogic(prefix: string, includeCash: boolean): TreeNode {
   const logic = ifElse(
     `${prefix}-trend`,
-    kpi("close", "TQQQ"),
+    kpi("close", NSE_SLEEVE.market),
     ">",
-    kpi("sma_200", "TQQQ"),
+    kpi("sma_200", NSE_SLEEVE.market),
     [
       ifElse(
         `${prefix}-heat`,
-        kpi("rsi_14", "TQQQ"),
+        kpi("rsi_14", NSE_SLEEVE.market),
         ">",
         num(79),
-        [asset(`${prefix}-uvxy`, "UVXY", "ProShares Ultra VIX Short-Term Futures")],
-        [asset(`${prefix}-tqqq`, "TQQQ", "ProShares UltraPro QQQ")],
-        "IF RSI(TQQQ) > 79 → UVXY else TQQQ",
+        [asset(`${prefix}-gold`, NSE_SLEEVE.defensive)],
+        [asset(`${prefix}-nifty`, NSE_SLEEVE.market)],
+        `IF RSI(${NSE_SLEEVE.market}) > 79 → ${NSE_SLEEVE.defensive} else ${NSE_SLEEVE.market}`,
       ),
     ],
     [
       ifElse(
-        `${prefix}-tecl`,
-        kpi("rsi_14", "TQQQ"),
+        `${prefix}-it`,
+        kpi("rsi_14", NSE_SLEEVE.market),
         "<",
         num(31),
-        [asset(`${prefix}-tecl`, "TECL", "Direxion Daily Technology Bull 3X")],
+        [asset(`${prefix}-it-sleeve`, NSE_SLEEVE.it)],
         [
           ifElse(
-            `${prefix}-soxl`,
-            kpi("rsi_14", "SOXL"),
+            `${prefix}-it-oversold`,
+            kpi("rsi_14", NSE_SLEEVE.it),
             "<",
             num(30),
-            [asset(`${prefix}-soxl`, "SOXL", "Direxion Daily Semiconductor Bull 3X")],
+            [asset(`${prefix}-it-bounce`, NSE_SLEEVE.it)],
             [
               ifElse(
                 `${prefix}-below20`,
-                kpi("close", "TQQQ"),
+                kpi("close", NSE_SLEEVE.market),
                 "<",
-                kpi("sma_20", "TQQQ"),
+                kpi("sma_20", NSE_SLEEVE.market),
                 [
                   strongerOf(
                     `${prefix}-hedge`,
-                    "SQQQ",
-                    "BSV",
-                    asset(`${prefix}-sqqq`, "SQQQ", "ProShares UltraPro Short QQQ"),
-                    asset(`${prefix}-bsv`, "BSV", "Vanguard Short-Term Bond ETF"),
-                    "Stronger of SQQQ vs BSV (roc_12)",
+                    NSE_SLEEVE.cash,
+                    NSE_SLEEVE.bond,
+                    asset(`${prefix}-liquid`, NSE_SLEEVE.cash),
+                    asset(`${prefix}-gilt`, NSE_SLEEVE.bond),
+                    `Stronger of ${NSE_SLEEVE.cash} vs ${NSE_SLEEVE.bond} (roc_12)`,
                   ),
                 ],
-                [asset(`${prefix}-tqqq-resume`, "TQQQ", "ProShares UltraPro QQQ")],
-                "IF TQQQ < SMA 20 → hedge else TQQQ",
+                [asset(`${prefix}-nifty-resume`, NSE_SLEEVE.market)],
+                `IF ${NSE_SLEEVE.market} < SMA 20 → hedge else ${NSE_SLEEVE.market}`,
               ),
             ],
-            "IF RSI(SOXL) < 30 → SOXL",
+            `IF RSI(${NSE_SLEEVE.it}) < 30 → ${NSE_SLEEVE.it}`,
           ),
         ],
-        "IF RSI(TQQQ) < 31 → TECL",
+        `IF RSI(${NSE_SLEEVE.market}) < 31 → ${NSE_SLEEVE.it}`,
       ),
     ],
-    "IF TQQQ > SMA 200",
+    `IF ${NSE_SLEEVE.market} > SMA 200`,
   );
   if (!includeCash) return logic;
   return weight(`${prefix}-cash-split`, [
     sleeve(80, logic),
-    sleeve(20, asset(`${prefix}-cash`, "BIL", "Cash sleeve (page: often ~20% cash; BIL as T-bill proxy)")),
+    sleeve(20, asset(`${prefix}-cash`, NSE_SLEEVE.cash, `${formatTickerName(NSE_SLEEVE.cash)} · cash sleeve (~20% as published)`)),
   ], "80% logic / 20% cash");
 }
 
 const HOLY_GRAIL: ComposerStrategyCard = {
   id: "holy-grail",
   name: "The Holy Grail",
-  description: "Nasdaq 3x trend sleeve with a heat hedge into UVXY, oversold TECL/SOXL bounces, and a SQQQ vs BSV defensive pick when TQQQ is below its 20-day average.",
+  description: `RELIANCE trend sleeve: HINDUNILVR when RSI is hot, TCS on oversold, and ITC vs POWERGRID when Reliance is below its 20-day average.`,
   sourceUrl: "https://www.composer.trade/trading-strategies/the-holy-grail-MmQbpf2U5TMQFmr9Nt2e",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} Page publishes TQQQ 200-day, RSI>79 / <31, SOXL RSI<30, TQQQ 20-day, and an ~20% cash sleeve.`,
-  categories: ["Trend/momentum", "Leveraged ETFs", "Tech/Nasdaq", "Volatility hedge"],
-  stats: {
-    oosStart: "2022-07-20",
-    cumulativeReturnPct: 2061.93,
-    annualizedReturnPct: 113.37,
-    sharpe: 1.52,
-    maxDrawdownPct: 46.96,
-    stdevPct: 62.41,
-    calmar: 2.41,
-    trailing1mPct: 8.47,
-    trailing3mPct: 5.39,
-    trailing1yPct: 53.43,
-  },
-  tree: treeDoc("holy-grail", "The Holy Grail", "Composer-public reconstruction of The Holy Grail.", [holyGrailLogic("holy", true)]),
+  mappingNote: `${RSI_MAP} TQQQ→RELIANCE, UVXY→HINDUNILVR, TECL/SOXL→TCS, SQQQ→ITC, BSV→POWERGRID. No 3x/inverse on NSE.`,
+  categories: ["Trend/momentum", "Nifty 500", "Reliance", "Defensive hedge"],
+  stats: UNRUN_STATS,
+  tree: treeDoc("holy-grail", "The Holy Grail", "Nifty 500 adaptation of The Holy Grail.", [holyGrailLogic("holy", true)]),
 };
 
 const HOLIER_GRAIL: ComposerStrategyCard = {
   id: "holier-grail",
   name: "The Holier Grail (NMB Cleaned)",
-  description: "Cleaned Holy Grail sibling: TQQQ uptrend unless RSI>79 (UVXY); otherwise oversold TECL/SOXL or the stronger of SQQQ vs BSV.",
+  description: "Holy Grail sibling on Nifty 500: RELIANCE uptrend unless RSI>79 (HINDUNILVR); otherwise oversold TCS or the stronger of ITC vs POWERGRID.",
   sourceUrl: "https://www.composer.trade/trading-strategies/the-holier-grail-nmb-cleaned-QNYVjfpD6XdMVEdDHAIN",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} This page names RSI>79 and TECL/SOXL/SQQQ/BSV but not SMA 200; long-term uptrend is mapped to TQQQ close > sma_200 as published on the sibling Holy Grail page (identical OOS stats). No 20% cash sleeve on this page.`,
-  categories: ["Trend-following", "Momentum", "Leveraged ETFs", "Volatility hedging"],
-  stats: {
-    oosStart: "2022-07-20",
-    cumulativeReturnPct: 2061.93,
-    annualizedReturnPct: 113.37,
-    sharpe: 1.52,
-    maxDrawdownPct: 46.96,
-    stdevPct: 62.41,
-    calmar: 2.41,
-    trailing1mPct: 8.47,
-    trailing3mPct: 5.39,
-    trailing1yPct: 53.43,
-  },
-  tree: treeDoc("holier-grail", "The Holier Grail (NMB Cleaned)", "Composer-public reconstruction of The Holier Grail (NMB Cleaned).", [holyGrailLogic("holier", false)]),
+  mappingNote: `${RSI_MAP} Same Nifty 500 map as Holy Grail. No 20% cash sleeve on this page.`,
+  categories: ["Trend-following", "Momentum", "Nifty 500", "Defensive hedge"],
+  stats: UNRUN_STATS,
+  tree: treeDoc("holier-grail", "The Holier Grail (NMB Cleaned)", "Nifty 500 adaptation of The Holier Grail (NMB Cleaned).", [holyGrailLogic("holier", false)]),
 };
 
 const SIMONS_KMLM: ComposerStrategyCard = {
   id: "simons-kmlm",
   name: "Simons KMLM switcher (single pops) V2",
-  description: "Event-driven switcher: UVXY when several equity sleeves look hot, leveraged bounce basket when cold, otherwise Tech vs KMLM into the two weakest of TECL/SOXL/SVIX or the stronger of SQQQ vs TLT.",
+  description: "Event-driven Nifty 500 switcher: HINDUNILVR when Reliance/TCS look hot, TCS/SUNPHARMA bounce when cold, otherwise TCS vs HINDALCO into the weaker growth names or ITC vs POWERGRID.",
   sourceUrl: "https://www.composer.trade/trading-strategies/simons-kmlm-switcher-single-pops-bt-41322-ar-466-dd-22-v2-u5iBJE751BM5FKPRJvKf",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} “Many funds look very hot (~80)” is reconstructed as any RSI>80 on SPY/TECL/SOXL/SPXL from the published ticker list. Tech vs KMLM uses QQQE (published ticker) vs KMLM via roc_12. Page lists 20 assets; tree uses the named sleeves only.`,
-  categories: ["Tactical", "Volatility timing", "Leveraged ETFs", "Managed futures"],
-  stats: {
-    oosStart: "2024-07-22",
-    cumulativeReturnPct: 1892.51,
-    annualizedReturnPct: 327.49,
-    sharpe: 2.15,
-    maxDrawdownPct: 31.42,
-    stdevPct: 83.56,
-    calmar: 10.42,
-    trailing1mPct: 72.69,
-    trailing3mPct: 99.47,
-    trailing1yPct: 161.32,
-  },
-  tree: treeDoc("simons-kmlm", "Simons KMLM switcher V2", "Composer-public reconstruction of Simons KMLM switcher V2.", [
+  mappingNote: `${RSI_MAP} SPY→RELIANCE, TECL/SOXL/SPXL→TCS/RELIANCE, LABU→SUNPHARMA, UVXY/SVIX→HINDUNILVR, QQQE→TCS, KMLM→HINDALCO, SQQQ→ITC, TLT→POWERGRID.`,
+  categories: ["Tactical", "Nifty 500", "Defensive timing", "Diversifier"],
+  stats: UNRUN_STATS,
+  tree: treeDoc("simons-kmlm", "Simons KMLM switcher V2", "Nifty 500 adaptation of Simons KMLM switcher V2.", [
     ifElse(
       "simons-hot-gate",
-      kpi("rsi_14", "SPY"),
+      kpi("rsi_14", NSE_SLEEVE.market),
       ">",
       num(80),
-      [asset("simons-uvxy-spy", "UVXY", "ProShares Ultra VIX Short-Term Futures")],
+      [asset("simons-gold-nifty", NSE_SLEEVE.defensive)],
       [
         ifElse(
           "simons-hot-or",
-          kpi("rsi_14", "TECL"),
+          kpi("rsi_14", NSE_SLEEVE.it),
           ">",
           num(80),
-          [asset("simons-uvxy-tecl", "UVXY", "ProShares Ultra VIX Short-Term Futures")],
+          [asset("simons-gold-it", NSE_SLEEVE.defensive)],
           [
             ifElse(
               "simons-cold",
-              kpi("rsi_14", "TECL"),
+              kpi("rsi_14", NSE_SLEEVE.it),
               "<",
               num(30),
               [
-                filter("simons-bounce", ["TECL", "SOXL", "SPXL", "LABU"], [
+                filter("simons-bounce", [NSE_SLEEVE.it, NSE_SLEEVE.market, NSE_SLEEVE.pharma, NSE_SLEEVE.junior], [
                   group("simons-bounce-group", "Washed-out bounce basket", [
-                    asset("simons-tecl", "TECL"),
-                    asset("simons-soxl", "SOXL"),
-                    asset("simons-spxl", "SPXL"),
-                    asset("simons-labu", "LABU"),
+                    asset("simons-it", NSE_SLEEVE.it),
+                    asset("simons-nifty", NSE_SLEEVE.market),
+                    asset("simons-pharma", NSE_SLEEVE.pharma),
+                    asset("simons-junior", NSE_SLEEVE.junior),
                   ]),
-                ], "Filter bounce names (TECL / SOXL / SPXL / LABU)"),
+                ], `Filter bounce names (${NSE_SLEEVE.it} / ${NSE_SLEEVE.market} / ${NSE_SLEEVE.pharma} / ${NSE_SLEEVE.junior})`),
               ],
               [
                 ifElse(
                   "simons-tech-kmlm",
-                  kpi("roc_12", "QQQE"),
+                  kpi("roc_12", NSE_SLEEVE.it),
                   ">",
-                  kpi("roc_12", "KMLM"),
+                  kpi("roc_12", NSE_SLEEVE.metal),
                   [
-                    filter("simons-weak-2", ["TECL", "SOXL", "SVIX"], [
-                      group("simons-weak-group", "2 weakest of TECL / SOXL / SVIX (page)", [
-                        asset("simons-w-tecl", "TECL"),
-                        asset("simons-w-soxl", "SOXL"),
-                        asset("simons-w-svix", "SVIX"),
+                    filter("simons-weak-2", [NSE_SLEEVE.it, NSE_SLEEVE.junior, NSE_SLEEVE.defensive], [
+                      group("simons-weak-group", `2 weakest of ${NSE_SLEEVE.it} / ${NSE_SLEEVE.junior} / ${NSE_SLEEVE.defensive}`, [
+                        asset("simons-w-it", NSE_SLEEVE.it),
+                        asset("simons-w-junior", NSE_SLEEVE.junior),
+                        asset("simons-w-gold", NSE_SLEEVE.defensive),
                       ]),
                     ], "Filter: 2 weakest (select-N not in tree params — label only)"),
                   ],
                   [
                     strongerOf(
                       "simons-defensive",
-                      "SQQQ",
-                      "TLT",
-                      asset("simons-sqqq", "SQQQ"),
-                      asset("simons-tlt", "TLT"),
-                      "Stronger of SQQQ vs TLT",
+                      NSE_SLEEVE.cash,
+                      NSE_SLEEVE.bond,
+                      asset("simons-liquid", NSE_SLEEVE.cash),
+                      asset("simons-gilt", NSE_SLEEVE.bond),
+                      `Stronger of ${NSE_SLEEVE.cash} vs ${NSE_SLEEVE.bond}`,
                     ),
                   ],
-                  "IF QQQE roc_12 > KMLM roc_12",
+                  `IF ${NSE_SLEEVE.it} roc_12 > ${NSE_SLEEVE.metal} roc_12`,
                 ),
               ],
-              "IF RSI(TECL) < 30 → bounce basket",
+              `IF RSI(${NSE_SLEEVE.it}) < 30 → bounce basket`,
             ),
           ],
-          "IF RSI(TECL) > 80 → UVXY",
+          `IF RSI(${NSE_SLEEVE.it}) > 80 → ${NSE_SLEEVE.defensive}`,
         ),
       ],
-      "IF RSI(SPY) > 80 → UVXY",
+      `IF RSI(${NSE_SLEEVE.market}) > 80 → ${NSE_SLEEVE.defensive}`,
     ),
   ]),
 };
@@ -342,65 +338,53 @@ const SIMONS_KMLM: ComposerStrategyCard = {
 const INVERSE_BETA_BALLER: ComposerStrategyCard = {
   id: "inverse-beta-baller",
   name: "Inverse of [DEV] Beta Baller v0.21",
-  description: "Daily BIL-vs-BND regime: if T-bills lead, buy UVXY/VIXY when SPY RSI>76 else SOXL; if bonds lead, hold the stronger 3-day name of SOXS vs BIL.",
+  description: "Daily ITC-vs-POWERGRID regime: if cash-like ITC leads, buy HINDUNILVR when Reliance RSI>76 else TCS; if POWERGRID leads, hold the stronger of HINDUNILVR vs ITC.",
   sourceUrl: "https://www.composer.trade/trading-strategies/inverse-of-dev-beta-baller-v021-deez-oct22-0hwHbRPQjoOk0XV3zrEa",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} BIL vs BND “stronger” and the 3-day SOXS/BIL race use roc_12. Page says 80% in the beaten-down vol ETF; the unnamed remainder is omitted rather than invented.`,
-  categories: ["Tactical", "Daily rebalance", "Volatility (VIX)", "Semiconductors"],
-  stats: {
-    oosStart: "2022-11-10",
-    cumulativeReturnPct: 1649.69,
-    annualizedReturnPct: 115.04,
-    sharpe: 1.25,
-    maxDrawdownPct: 80.84,
-    stdevPct: 108.6,
-    calmar: 1.42,
-    trailing1mPct: -17.32,
-    trailing3mPct: -28.43,
-    trailing1yPct: 231.77,
-    rebalance: "day",
-  },
-  tree: treeDoc("inverse-beta-baller", "Inverse Beta Baller v0.21", "Composer-public reconstruction of Inverse Beta Baller v0.21.", [
+  mappingNote: `${RSI_MAP} BIL→ITC, BND→POWERGRID, SPY→RELIANCE, UVXY/VIXY→HINDUNILVR, SOXL→TCS, SOXS→HINDUNILVR (no inverse IT product).`,
+  categories: ["Tactical", "Daily rebalance", "Defensive", "IT"],
+  stats: { ...UNRUN_STATS, rebalance: "day" },
+  tree: treeDoc("inverse-beta-baller", "Inverse Beta Baller v0.21", "Nifty 500 adaptation of Inverse Beta Baller v0.21.", [
     ifElse(
       "ibb-regime",
-      kpi("roc_12", "BIL"),
+      kpi("roc_12", NSE_SLEEVE.cash),
       ">",
-      kpi("roc_12", "BND"),
+      kpi("roc_12", NSE_SLEEVE.bond),
       [
         ifElse(
-          "ibb-spy-hot",
-          kpi("rsi_14", "SPY"),
+          "ibb-nifty-hot",
+          kpi("rsi_14", NSE_SLEEVE.market),
           ">",
           num(76),
           [
-            filter("ibb-vol", ["UVXY", "VIXY"], [
+            filter("ibb-defensive", [NSE_SLEEVE.defensive, NSE_SLEEVE.metal], [
               strongerOf(
-                "ibb-vol-pick",
-                "VIXY",
-                "UVXY",
-                asset("ibb-vixy", "VIXY", "More beaten-down vol ETF"),
-                asset("ibb-uvxy", "UVXY", "More beaten-down vol ETF"),
-                "Whichever vol ETF looks more beaten-down (lower roc_12)",
+                "ibb-metal-pick",
+                NSE_SLEEVE.metal,
+                NSE_SLEEVE.defensive,
+                asset("ibb-silver", NSE_SLEEVE.metal, "More beaten-down metal name"),
+                asset("ibb-gold", NSE_SLEEVE.defensive, "More beaten-down defensive name"),
+                "Whichever name looks more beaten-down (lower roc_12)",
               ),
-            ], "80% vol sleeve as published — remainder not named"),
+            ], "80% defensive sleeve as published — remainder not named"),
           ],
-          [asset("ibb-soxl", "SOXL", "Direxion Daily Semiconductor Bull 3X")],
-          "IF RSI(SPY) > 76 → UVXY or VIXY",
+          [asset("ibb-it", NSE_SLEEVE.it)],
+          `IF RSI(${NSE_SLEEVE.market}) > 76 → ${NSE_SLEEVE.defensive} or ${NSE_SLEEVE.metal}`,
         ),
       ],
       [
         strongerOf(
-          "ibb-soxs-bil",
-          "SOXS",
-          "BIL",
-          asset("ibb-soxs", "SOXS", "Direxion Daily Semiconductor Bear 3X"),
-          asset("ibb-bil", "BIL", "SPDR Bloomberg 1-3 Month T-Bill"),
-          "Stronger of SOXS vs BIL (page: last 3 days; mapped to roc_12)",
+          "ibb-gold-liquid",
+          NSE_SLEEVE.defensive,
+          NSE_SLEEVE.cash,
+          asset("ibb-gold-def", NSE_SLEEVE.defensive),
+          asset("ibb-liquid", NSE_SLEEVE.cash),
+          `Stronger of ${NSE_SLEEVE.defensive} vs ${NSE_SLEEVE.cash} (page: last 3 days; mapped to roc_12)`,
         ),
       ],
-      "IF BIL stronger than BND",
+      `IF ${NSE_SLEEVE.cash} stronger than ${NSE_SLEEVE.bond}`,
     ),
   ]),
 };
@@ -408,35 +392,23 @@ const INVERSE_BETA_BALLER: ComposerStrategyCard = {
 const RAMS_SOXX: ComposerStrategyCard = {
   id: "rams-soxx",
   name: "Ram's SOXX",
-  description: "Single-name daily flip: if SOXX rose more than about 2.5% yesterday, hold SOXS; otherwise hold SOXL.",
+  description: "Single-name daily flip: if TCS rose more than about 2.5% yesterday, hold ITC; otherwise hold TCS.",
   sourceUrl: "https://www.composer.trade/trading-strategies/rams-soxx-SkTp0zaQZb8sdGOs8YS7",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: "Yesterday’s SOXX change is mapped to log_return(SOXX) > 0.025. Page publishes the 2.5% cut and the SOXL/SOXS pair.",
-  categories: ["Semiconductors", "Mean reversion", "Daily switching", "Leveraged ETFs"],
-  stats: {
-    oosStart: "2021-12-16",
-    cumulativeReturnPct: 1336.61,
-    annualizedReturnPct: 77.62,
-    sharpe: 1.07,
-    maxDrawdownPct: 83.06,
-    stdevPct: 115.78,
-    calmar: 0.93,
-    trailing1mPct: 3.59,
-    trailing3mPct: 124.01,
-    trailing1yPct: 629.67,
-    rebalance: "day",
-  },
-  tree: treeDoc("rams-soxx", "Ram's SOXX", "Composer-public reconstruction of Ram's SOXX.", [
+  mappingNote: "SOXX/SOXL→TCS, SOXS→ITC (no inverse IT product on NSE). Yesterday’s change is log_return(TCS) > 0.025.",
+  categories: ["IT", "Mean reversion", "Daily switching", "Nifty 500"],
+  stats: { ...UNRUN_STATS, rebalance: "day" },
+  tree: treeDoc("rams-soxx", "Ram's SOXX", "Nifty 500 adaptation of Ram's SOXX.", [
     ifElse(
-      "rams-soxx-move",
-      kpi("log_return", "SOXX"),
+      "rams-it-move",
+      kpi("log_return", NSE_SLEEVE.it),
       ">",
       num(0.025),
-      [asset("rams-soxs", "SOXS", "Direxion Daily Semiconductor Bear 3X")],
-      [asset("rams-soxl", "SOXL", "Direxion Daily Semiconductor Bull 3X")],
-      "IF SOXX log_return > 2.5% → SOXS else SOXL",
+      [asset("rams-liquid", NSE_SLEEVE.cash)],
+      [asset("rams-it", NSE_SLEEVE.it)],
+      `IF ${NSE_SLEEVE.it} log_return > 2.5% → ${NSE_SLEEVE.cash} else ${NSE_SLEEVE.it}`,
     ),
   ]),
 };
@@ -444,246 +416,211 @@ const RAMS_SOXX: ComposerStrategyCard = {
 const KMLM_ORIGINAL: ComposerStrategyCard = {
   id: "kmlm-switcher-original",
   name: "KMLM Switcher of Simon97 - Original",
-  description: "Same public skeleton as the Simons V2 switcher: UVXY on heat, 3x bounce when cold, otherwise XLK/QQQE vs KMLM into risk-on mean-reversion or SQQQ/TLT.",
+  description: "Same public skeleton as Simons V2 on Nifty 500: HINDUNILVR on heat, Reliance/TCS bounce when cold, otherwise TCS vs HINDALCO into risk-on mean-reversion or ITC/POWERGRID.",
   sourceUrl: "https://www.composer.trade/trading-strategies/kmlm-switcher-of-simon97-original-syMn9OgFREE0wo8LtYsG",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} Page names RSI ~80 / <30, UVXY, TECL/SOXL/SPXL, and XLK vs KMLM. XLK is not in the extracted ticker list; QQQE (published) is the tech comparison asset.`,
-  categories: ["RSI mean-reversion", "KMLM signal", "Leveraged ETFs"],
-  stats: {
-    oosStart: "2024-07-22",
-    cumulativeReturnPct: 1077.72,
-    annualizedReturnPct: 231.16,
-    sharpe: 1.87,
-    maxDrawdownPct: 36.07,
-    stdevPct: 81.64,
-    calmar: 6.41,
-    trailing1mPct: 71.39,
-    trailing3mPct: 106.01,
-    trailing1yPct: 88.46,
-  },
-  tree: treeDoc("kmlm-switcher-original", "KMLM Switcher of Simon97 - Original", "Composer-public reconstruction of KMLM Switcher Original.", [
+  mappingNote: `${RSI_MAP} Same Nifty 500 map as Simons V2. KMLM→HINDALCO is a metals diversifier, not managed futures.`,
+  categories: ["RSI mean-reversion", "Metals signal", "Nifty 500"],
+  stats: UNRUN_STATS,
+  tree: treeDoc("kmlm-switcher-original", "KMLM Switcher of Simon97 - Original", "Nifty 500 adaptation of KMLM Switcher Original.", [
     ifElse(
       "kmlm-hot",
-      kpi("rsi_14", "SPY"),
+      kpi("rsi_14", NSE_SLEEVE.market),
       ">",
       num(80),
-      [asset("kmlm-uvxy", "UVXY")],
+      [asset("kmlm-gold", NSE_SLEEVE.defensive)],
       [
         ifElse(
           "kmlm-cold",
-          kpi("rsi_14", "TECL"),
+          kpi("rsi_14", NSE_SLEEVE.it),
           "<",
           num(30),
           [
-            group("kmlm-bounce", "Rebound 3x basket", [
-              asset("kmlm-tecl", "TECL"),
-              asset("kmlm-soxl", "SOXL"),
-              asset("kmlm-spxl", "SPXL"),
+            group("kmlm-bounce", "Rebound Nifty 500 basket", [
+              asset("kmlm-it", NSE_SLEEVE.it),
+              asset("kmlm-nifty", NSE_SLEEVE.market),
+              asset("kmlm-junior", NSE_SLEEVE.junior),
             ]),
           ],
           [
             ifElse(
               "kmlm-tech",
-              kpi("roc_12", "QQQE"),
+              kpi("roc_12", NSE_SLEEVE.it),
               ">",
-              kpi("roc_12", "KMLM"),
+              kpi("roc_12", NSE_SLEEVE.metal),
               [
-                filter("kmlm-mr", ["TECL", "SOXL", "SVIX"], [
-                  group("kmlm-mr-group", "Mean-revert TECL / SOXL / SVIX", [
-                    asset("kmlm-mr-tecl", "TECL"),
-                    asset("kmlm-mr-soxl", "SOXL"),
-                    asset("kmlm-mr-svix", "SVIX"),
+                filter("kmlm-mr", [NSE_SLEEVE.it, NSE_SLEEVE.junior, NSE_SLEEVE.defensive], [
+                  group("kmlm-mr-group", `Mean-revert ${NSE_SLEEVE.it} / ${NSE_SLEEVE.junior} / ${NSE_SLEEVE.defensive}`, [
+                    asset("kmlm-mr-it", NSE_SLEEVE.it),
+                    asset("kmlm-mr-junior", NSE_SLEEVE.junior),
+                    asset("kmlm-mr-gold", NSE_SLEEVE.defensive),
                   ]),
                 ], "Risk-on mean-reversion filter"),
               ],
               [
                 strongerOf(
                   "kmlm-def",
-                  "SQQQ",
-                  "TLT",
-                  asset("kmlm-sqqq", "SQQQ"),
-                  asset("kmlm-tlt", "TLT"),
-                  "Defensive: stronger of SQQQ vs TLT",
+                  NSE_SLEEVE.cash,
+                  NSE_SLEEVE.bond,
+                  asset("kmlm-liquid", NSE_SLEEVE.cash),
+                  asset("kmlm-gilt", NSE_SLEEVE.bond),
+                  `Defensive: stronger of ${NSE_SLEEVE.cash} vs ${NSE_SLEEVE.bond}`,
                 ),
               ],
-              "IF QQQE > KMLM (roc_12)",
+              `IF ${NSE_SLEEVE.it} > ${NSE_SLEEVE.metal} (roc_12)`,
             ),
           ],
-          "IF RSI(TECL) < 30 → bounce",
+          `IF RSI(${NSE_SLEEVE.it}) < 30 → bounce`,
         ),
       ],
-      "IF RSI(SPY) > 80 → UVXY",
+      `IF RSI(${NSE_SLEEVE.market}) > 80 → ${NSE_SLEEVE.defensive}`,
     ),
   ]),
 };
 
 const TQQQ_FTLT_V2: ComposerStrategyCard = {
   id: "tqqq-ftlt-v2",
-  name: "TQQQ For The Long Term V2",
-  description: "Daily one-ETF rotation on SPY’s 200-day trend: TQQQ unless 10-day heat, UVXY when hot; downtrend uses TECL/SPXL oversold bounces or SQQQ vs BSV.",
+  name: "Nifty For The Long Term V2",
+  description: "Daily one-name rotation on RELIANCE’s 200-day trend: Reliance unless RSI heat (HINDUNILVR); downtrend uses TCS/INFY oversold bounces or ITC vs POWERGRID.",
   sourceUrl: "https://www.composer.trade/trading-strategies/tqqq-for-the-long-term-v2-2267-rr461-max-dd-m8Hkj9NHOTljuTRLmVoy",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} Page publishes SPY 200-day, 10-day RSI ~≥80 → UVXY, TQQQ RSI<31 → TECL, SPY RSI<30 → SPXL, UVXY heat, TQQQ vs SMA 20, then stronger of SQQQ vs BSV.`,
-  categories: ["Trend following", "Daily rebalance", "Leveraged ETFs"],
-  stats: {
-    oosStart: "2022-08-24",
-    cumulativeReturnPct: 967.78,
-    annualizedReturnPct: 81.95,
-    sharpe: 1.27,
-    maxDrawdownPct: 51.17,
-    stdevPct: 62.25,
-    calmar: 1.6,
-    trailing1mPct: 2.36,
-    trailing3mPct: -0.55,
-    trailing1yPct: 46.02,
-    rebalance: "day",
-  },
-  tree: treeDoc("tqqq-ftlt-v2", "TQQQ For The Long Term V2", "Composer-public reconstruction of TQQQ FTLT V2.", [
+  mappingNote: `${RSI_MAP} SPY/TQQQ/SPXL/UPRO→RELIANCE, UVXY→HINDUNILVR, TECL→TCS, SQQQ→ITC, BSV→POWERGRID.`,
+  categories: ["Trend following", "Daily rebalance", "Nifty 500"],
+  stats: { ...UNRUN_STATS, rebalance: "day" },
+  tree: treeDoc("tqqq-ftlt-v2", "Nifty For The Long Term V2", "Nifty 500 adaptation of TQQQ FTLT V2.", [
     ifElse(
       "ftltv2-trend",
-      kpi("close", "SPY"),
+      kpi("close", NSE_SLEEVE.market),
       ">",
-      kpi("sma_200", "SPY"),
+      kpi("sma_200", NSE_SLEEVE.market),
       [
         ifElse(
           "ftltv2-heat",
-          kpi("rsi_14", "TQQQ"),
+          kpi("rsi_14", NSE_SLEEVE.market),
           ">=",
           num(80),
-          [asset("ftltv2-uvxy", "UVXY")],
-          [asset("ftltv2-tqqq", "TQQQ")],
-          "IF RSI(TQQQ) ≥ 80 → UVXY else TQQQ",
+          [asset("ftltv2-gold", NSE_SLEEVE.defensive)],
+          [asset("ftltv2-nifty", NSE_SLEEVE.market)],
+          `IF RSI(${NSE_SLEEVE.market}) ≥ 80 → ${NSE_SLEEVE.defensive} else ${NSE_SLEEVE.market}`,
         ),
       ],
       [
         ifElse(
-          "ftltv2-tecl",
-          kpi("rsi_14", "TQQQ"),
+          "ftltv2-it",
+          kpi("rsi_14", NSE_SLEEVE.market),
           "<",
           num(31),
-          [asset("ftltv2-tecl", "TECL")],
+          [asset("ftltv2-it-name", NSE_SLEEVE.it)],
           [
             ifElse(
-              "ftltv2-spxl",
-              kpi("rsi_14", "SPY"),
+              "ftltv2-junior",
+              kpi("rsi_14", NSE_SLEEVE.market),
               "<",
               num(30),
-              [asset("ftltv2-spxl", "SPXL")],
+              [asset("ftltv2-setfnif", NSE_SLEEVE.market2)],
               [
                 ifElse(
-                  "ftltv2-uvxy-hot",
-                  kpi("rsi_14", "UVXY"),
+                  "ftltv2-gold-hot",
+                  kpi("rsi_14", NSE_SLEEVE.defensive),
                   ">",
                   num(70),
-                  [asset("ftltv2-uvxy-hold", "UVXY")],
+                  [asset("ftltv2-gold-hold", NSE_SLEEVE.defensive)],
                   [
                     ifElse(
-                      "ftltv2-tqqq-20",
-                      kpi("close", "TQQQ"),
+                      "ftltv2-nifty-20",
+                      kpi("close", NSE_SLEEVE.market),
                       ">",
-                      kpi("sma_20", "TQQQ"),
-                      [asset("ftltv2-tqqq-hold", "TQQQ")],
+                      kpi("sma_20", NSE_SLEEVE.market),
+                      [asset("ftltv2-nifty-hold", NSE_SLEEVE.market)],
                       [
                         strongerOf(
                           "ftltv2-def",
-                          "SQQQ",
-                          "BSV",
-                          asset("ftltv2-sqqq", "SQQQ"),
-                          asset("ftltv2-bsv", "BSV"),
-                          "Stronger of SQQQ vs BSV",
+                          NSE_SLEEVE.cash,
+                          NSE_SLEEVE.bond,
+                          asset("ftltv2-liquid", NSE_SLEEVE.cash),
+                          asset("ftltv2-gilt", NSE_SLEEVE.bond),
+                          `Stronger of ${NSE_SLEEVE.cash} vs ${NSE_SLEEVE.bond}`,
                         ),
                       ],
-                      "IF TQQQ > SMA 20 → TQQQ",
+                      `IF ${NSE_SLEEVE.market} > SMA 20 → ${NSE_SLEEVE.market}`,
                     ),
                   ],
-                  "IF RSI(UVXY) high → UVXY (page: high; 70 is a labeled reconstruction)",
+                  `IF RSI(${NSE_SLEEVE.defensive}) high → ${NSE_SLEEVE.defensive} (page: high; 70 is a labeled reconstruction)`,
                 ),
               ],
-              "IF RSI(SPY) < 30 → SPXL",
+              `IF RSI(${NSE_SLEEVE.market}) < 30 → ${NSE_SLEEVE.market2}`,
             ),
           ],
-          "IF RSI(TQQQ) < 31 → TECL",
+          `IF RSI(${NSE_SLEEVE.market}) < 31 → ${NSE_SLEEVE.it}`,
         ),
       ],
-      "IF SPY > SMA 200",
+      `IF ${NSE_SLEEVE.market} > SMA 200`,
     ),
   ]),
 };
 
 const TQQQ_FTLT_REDDIT: ComposerStrategyCard = {
   id: "tqqq-ftlt-reddit",
-  name: "TQQQ For The Long Term (Reddit Post Link)",
-  description: "SPY 200-day gate into TQQQ or a 10-day heat hedge (UVXY). Below trend: try TECL/UPRO rebounds, else the stronger ~10-day name of SQQQ vs TLT.",
+  name: "Nifty For The Long Term (Reddit Post Link)",
+  description: "RELIANCE 200-day gate into Reliance or a heat hedge (HINDUNILVR). Below trend: try TCS/INFY rebounds, else the stronger of ITC vs POWERGRID.",
   sourceUrl: "https://www.composer.trade/trading-strategies/tqqq-for-the-long-term-reddit-post-link-HukRwDJLlYPLMbrQbua5",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: `${RSI_MAP} This page does not publish a numeric heat cut. RSI>79 is taken from the sibling FTLT V2 / Holy Grail pages in the same catalog. Rebound uses the weaker of TECL/UPRO via roc_12.`,
-  categories: ["Trend following", "Daily rotation", "Leveraged ETFs"],
-  stats: {
-    oosStart: "2023-01-24",
-    cumulativeReturnPct: 890.64,
-    annualizedReturnPct: 91,
-    sharpe: 1.37,
-    maxDrawdownPct: 50.19,
-    stdevPct: 60.22,
-    calmar: 1.81,
-    trailing1mPct: 2.36,
-    trailing3mPct: -0.55,
-    trailing1yPct: 45.71,
-    rebalance: "day",
-  },
-  tree: treeDoc("tqqq-ftlt-reddit", "TQQQ For The Long Term (Reddit)", "Composer-public reconstruction of TQQQ FTLT (Reddit).", [
+  mappingNote: `${RSI_MAP} Same Nifty 500 map as FTLT V2. Rebound uses the weaker of TCS/INFY via roc_12.`,
+  categories: ["Trend following", "Daily rotation", "Nifty 500"],
+  stats: { ...UNRUN_STATS, rebalance: "day" },
+  tree: treeDoc("tqqq-ftlt-reddit", "Nifty For The Long Term (Reddit)", "Nifty 500 adaptation of TQQQ FTLT (Reddit).", [
     ifElse(
       "ftltr-trend",
-      kpi("close", "SPY"),
+      kpi("close", NSE_SLEEVE.market),
       ">",
-      kpi("sma_200", "SPY"),
+      kpi("sma_200", NSE_SLEEVE.market),
       [
         ifElse(
           "ftltr-heat",
-          kpi("rsi_14", "TQQQ"),
+          kpi("rsi_14", NSE_SLEEVE.market),
           ">",
           num(79),
-          [asset("ftltr-uvxy", "UVXY")],
-          [asset("ftltr-tqqq", "TQQQ")],
-          "IF 10-day heat (mapped RSI>79) → UVXY else TQQQ",
+          [asset("ftltr-gold", NSE_SLEEVE.defensive)],
+          [asset("ftltr-nifty", NSE_SLEEVE.market)],
+          `IF 10-day heat (mapped RSI>79) → ${NSE_SLEEVE.defensive} else ${NSE_SLEEVE.market}`,
         ),
       ],
       [
         ifElse(
           "ftltr-rebound",
-          kpi("rsi_14", "TECL"),
+          kpi("rsi_14", NSE_SLEEVE.it),
           "<",
           num(35),
           [
             strongerOf(
               "ftltr-rebound-pick",
-              "UPRO",
-              "TECL",
-              asset("ftltr-upro", "UPRO"),
-              asset("ftltr-tecl", "TECL"),
-              "Weaker rebound name of TECL vs UPRO",
+              NSE_SLEEVE.market2,
+              NSE_SLEEVE.it,
+              asset("ftltr-setfnif", NSE_SLEEVE.market2),
+              asset("ftltr-it", NSE_SLEEVE.it),
+              `Weaker rebound name of ${NSE_SLEEVE.it} vs ${NSE_SLEEVE.market2}`,
             ),
           ],
           [
             strongerOf(
               "ftltr-def",
-              "SQQQ",
-              "TLT",
-              asset("ftltr-sqqq", "SQQQ"),
-              asset("ftltr-tlt", "TLT"),
-              "Stronger of SQQQ vs TLT (~10d → roc_12)",
+              NSE_SLEEVE.cash,
+              NSE_SLEEVE.bond,
+              asset("ftltr-liquid", NSE_SLEEVE.cash),
+              asset("ftltr-gilt", NSE_SLEEVE.bond),
+              `Stronger of ${NSE_SLEEVE.cash} vs ${NSE_SLEEVE.bond} (~10d → roc_12)`,
             ),
           ],
-          "Rebound TECL/UPRO if washed out, else defensive",
+          `Rebound ${NSE_SLEEVE.it}/${NSE_SLEEVE.market2} if washed out, else defensive`,
         ),
       ],
-      "IF SPY > SMA 200",
+      `IF ${NSE_SLEEVE.market} > SMA 200`,
     ),
   ]),
 };
@@ -691,56 +628,44 @@ const TQQQ_FTLT_REDDIT: ComposerStrategyCard = {
 const WOODEN_ARKK: ComposerStrategyCard = {
   id: "wooden-arkk",
   name: "Wooden ARKK Machine 2.2",
-  description: "Daily IEI vs SPHB RSI(7) regime: buy the worst recent performer from a bullish leveraged list if bonds lead, else from an inverse list. About 90% in that name.",
+  description: "Daily POWERGRID vs BEL RSI(7) regime: buy the worst recent performer from a bullish Nifty 500 list if POWERGRID leads, else from a defensive list. About 90% in that name.",
   sourceUrl: "https://www.composer.trade/trading-strategies/wooden-arkk-machine-22-kl2dR0Rlp4RgZUHAJY2k",
   asOf: AS_OF,
-  marketNote: US_NOTE,
+  marketNote: IN_NOTE,
   reconstructionNote: RECON_NOTE,
-  mappingNote: "Page publishes RSI(7) of IEI vs SPHB and a ~90% single-name sleeve. Worst 4-day pick is labeled on a Filter; roc_12 is the closest registry window. Bullish/bearish lists use only tickers printed on the page.",
-  categories: ["Mean reversion", "Leveraged ETFs", "Daily"],
-  stats: {
-    oosStart: "2023-04-22",
-    cumulativeReturnPct: 864.45,
-    annualizedReturnPct: 98.83,
-    sharpe: 1.47,
-    maxDrawdownPct: 42.72,
-    stdevPct: 58.28,
-    calmar: 2.31,
-    trailing1mPct: -0.84,
-    trailing3mPct: 7.29,
-    trailing1yPct: 118.53,
-    rebalance: "day",
-  },
-  tree: treeDoc("wooden-arkk", "Wooden ARKK Machine 2.2", "Composer-public reconstruction of Wooden ARKK Machine 2.2.", [
+  mappingNote: "IEI→POWERGRID, SPHB→BEL, leveraged bull list→BEL/TCS/LT/POWERGRID/HDFCBANK, inverse list→HINDUNILVR/ITC/HINDALCO. Worst 4-day pick is labeled on a Filter; roc_12 is the closest registry window.",
+  categories: ["Mean reversion", "Nifty 500", "Daily"],
+  stats: { ...UNRUN_STATS, rebalance: "day" },
+  tree: treeDoc("wooden-arkk", "Wooden ARKK Machine 2.2", "Nifty 500 adaptation of Wooden ARKK Machine 2.2.", [
     weight("arkk-90-10", [
       sleeve(90, ifElse(
         "arkk-regime",
-        kpi("rsi_7", "IEI"),
+        kpi("rsi_7", NSE_SLEEVE.bond),
         ">",
-        kpi("rsi_7", "SPHB"),
+        kpi("rsi_7", NSE_SLEEVE.junior),
         [
-          filter("arkk-bull", ["EDC", "TECL", "TARK", "TMF", "SOXX"], [
-            group("arkk-bull-group", "Worst 4-day bullish leveraged name", [
-              asset("arkk-edc", "EDC"),
-              asset("arkk-tecl", "TECL"),
-              asset("arkk-tark", "TARK"),
-              asset("arkk-tmf", "TMF"),
-              asset("arkk-soxx", "SOXX"),
+          filter("arkk-bull", [NSE_SLEEVE.junior, NSE_SLEEVE.it, NSE_SLEEVE.infra, NSE_SLEEVE.bond, NSE_SLEEVE.bank], [
+            group("arkk-bull-group", "Worst 4-day bullish Nifty 500 name", [
+              asset("arkk-junior", NSE_SLEEVE.junior),
+              asset("arkk-it", NSE_SLEEVE.it),
+              asset("arkk-infra", NSE_SLEEVE.infra),
+              asset("arkk-gilt", NSE_SLEEVE.bond),
+              asset("arkk-bank", NSE_SLEEVE.bank),
             ]),
           ], "Filter bullish list — pick worst 4-day (label only)"),
         ],
         [
-          filter("arkk-bear", ["DRV", "PSQ", "SARK"], [
-            group("arkk-bear-group", "Worst 4-day inverse name", [
-              asset("arkk-drv", "DRV"),
-              asset("arkk-psq", "PSQ"),
-              asset("arkk-sark", "SARK"),
+          filter("arkk-bear", [NSE_SLEEVE.defensive, NSE_SLEEVE.cash, NSE_SLEEVE.metal], [
+            group("arkk-bear-group", "Worst 4-day defensive name", [
+              asset("arkk-gold", NSE_SLEEVE.defensive),
+              asset("arkk-liquid", NSE_SLEEVE.cash),
+              asset("arkk-silver", NSE_SLEEVE.metal),
             ]),
-          ], "Filter inverse list — pick worst 4-day (label only)"),
+          ], "Filter defensive list — pick worst 4-day (label only)"),
         ],
-        "IF RSI(7) IEI > RSI(7) SPHB",
+        `IF RSI(7) ${NSE_SLEEVE.bond} > RSI(7) ${NSE_SLEEVE.junior}`,
       )),
-      sleeve(10, asset("arkk-cash", "BIL", "Uninvested cash (~10% as published)")),
+      sleeve(10, asset("arkk-cash", NSE_SLEEVE.cash, `${formatTickerName(NSE_SLEEVE.cash)} · uninvested cash (~10% as published)`)),
     ], "90% selected name / 10% cash"),
   ]),
 };
@@ -759,6 +684,11 @@ export const COMPOSER_STRATEGIES: ComposerStrategyCard[] = [
 
 export type ComposerSortKey = "annualized" | "cumulative" | "sharpe";
 
+function publishedStat(card: ComposerStrategyCard, key: "annualizedReturnPct" | "cumulativeReturnPct" | "sharpe"): number {
+  const value = card.stats[key];
+  return typeof value === "number" ? value : Number.NEGATIVE_INFINITY;
+}
+
 export function sortComposerStrategies(
   strategies: readonly ComposerStrategyCard[],
   key: ComposerSortKey = "annualized",
@@ -768,11 +698,11 @@ export function sortComposerStrategies(
     const delta = (() => {
       switch (key) {
         case "annualized":
-          return right.stats.annualizedReturnPct - left.stats.annualizedReturnPct;
+          return publishedStat(right, "annualizedReturnPct") - publishedStat(left, "annualizedReturnPct");
         case "cumulative":
-          return right.stats.cumulativeReturnPct - left.stats.cumulativeReturnPct;
+          return publishedStat(right, "cumulativeReturnPct") - publishedStat(left, "cumulativeReturnPct");
         case "sharpe":
-          return right.stats.sharpe - left.stats.sharpe;
+          return publishedStat(right, "sharpe") - publishedStat(left, "sharpe");
         default: {
           const _never: never = key;
           return _never;
@@ -780,7 +710,7 @@ export function sortComposerStrategies(
       }
     })();
     if (delta !== 0) return delta;
-    return right.stats.cumulativeReturnPct - left.stats.cumulativeReturnPct;
+    return left.name.localeCompare(right.name);
   });
   return copy;
 }

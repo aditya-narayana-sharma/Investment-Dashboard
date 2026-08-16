@@ -11,11 +11,12 @@ import {
   upsertStrategy,
 } from "./strategy-store";
 import { collectTreeSymbols } from "./tree-instruments";
-import { buildTreeLivePreview, parseTreeLiveBody } from "./tree-live";
+import { buildTreeLivePreview, parseTreeLiveBody, parseTreeLiveKpiSymbol } from "./tree-live";
 import { buildTradingSinkPreview, listTradingSinkPreviews, stampTradingSinksUnsubmitted } from "./trading-sinks";
 import { validateStrategyGraph } from "./graph-types";
 import { runTreeBacktest } from "./tree-backtest";
 import { loadYfinanceStrategyKpis } from "./yfinance-kpis";
+import { loadOrComputeLibraryNseStats } from "./library-nse-stats-server";
 
 const JSON_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
@@ -120,7 +121,9 @@ export async function handleTreeLivePreview(request: Request) {
     if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
       return jsonError(415, "Live preview requests must use JSON.");
     }
-    const tree = parseTreeLiveBody(await request.json());
+    const raw = await request.json();
+    const tree = parseTreeLiveBody(raw);
+    const extraSymbols = [parseTreeLiveKpiSymbol(raw)].filter(Boolean);
     const kite = await getKiteSnapshot();
     const watchlist = kite.status === "auth_required" || kite.status === "unavailable"
       ? unavailableWatchlist("Unavailable: Kite session is missing. Holdings and watchlist are not live.", false)
@@ -128,12 +131,12 @@ export async function handleTreeLivePreview(request: Request) {
     let yfinance = [] as Awaited<ReturnType<typeof loadYfinanceStrategyKpis>>;
     let yfinanceError: string | undefined;
     try {
-      yfinance = await loadYfinanceStrategyKpis(collectTreeSymbols(tree));
+      yfinance = await loadYfinanceStrategyKpis([...new Set([...collectTreeSymbols(tree), ...extraSymbols, "RELIANCE"])]);
     } catch (error) {
       yfinance = [];
       yfinanceError = error instanceof Error ? error.message : "yfinance strategy KPI fetch failed.";
     }
-    const preview = buildTreeLivePreview(tree, { kite, watchlist, yfinance, yfinanceError });
+    const preview = buildTreeLivePreview(tree, { kite, watchlist, yfinance, yfinanceError }, extraSymbols);
     return Response.json(preview, { headers: JSON_HEADERS });
   } catch (error) {
     const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;
@@ -144,7 +147,7 @@ export async function handleTreeLivePreview(request: Request) {
 export async function handleBacktestRun(request: Request) {
   try {
     const tree = parseTreeLiveBody(await request.json());
-    const symbols = [...new Set([...collectTreeSymbols(tree), "NIFTYBEES"])];
+    const symbols = [...new Set([...collectTreeSymbols(tree), "RELIANCE"])];
     let yfinanceError: string | undefined;
     let rows: Awaited<ReturnType<typeof loadYfinanceStrategyKpis>> = [];
     try {
@@ -169,6 +172,19 @@ export async function handleBacktestRun(request: Request) {
   } catch (error) {
     const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;
     return jsonError(status, errorMessage(error, "Backtest run failed."), { ran: false, status: "unavailable" });
+  }
+}
+
+export async function handleLibraryNseStats(request: Request) {
+  try {
+    const force = request.method === "POST" || new URL(request.url).searchParams.get("refresh") === "1";
+    const cache = await loadOrComputeLibraryNseStats(force);
+    return Response.json({
+      status: "ok",
+      ...cache,
+    }, { headers: JSON_HEADERS });
+  } catch (error) {
+    return jsonError(500, errorMessage(error, "Library NSE stats failed."));
   }
 }
 

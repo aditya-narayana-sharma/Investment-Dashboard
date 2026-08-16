@@ -12,6 +12,45 @@ export type KiteInstrumentOption = {
   lotSize: number;
 };
 
+export function useKiteInstrumentSearch(query: string, enabled = true, exchange = "NSE") {
+  const normalized = query.trim().toUpperCase();
+  const [result, setResult] = useState<{
+    query: string;
+    instruments: KiteInstrumentOption[];
+    status: "idle" | "checking" | "ok" | "unavailable";
+  }>({ query: "", instruments: [], status: "idle" });
+
+  useEffect(() => {
+    if (!enabled || !normalized || !/^[A-Z0-9&.\- ]{1,48}$/.test(normalized)) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setResult({ query: normalized, instruments: [], status: "checking" });
+      try {
+        const response = await fetch(`/api/kite/instruments?query=${encodeURIComponent(normalized)}&exchange=${exchange}`, { cache: "no-store", signal: controller.signal });
+        const payload = await response.json() as { instruments?: KiteInstrumentOption[] };
+        if (!response.ok) throw new Error("catalogue unavailable");
+        setResult({ query: normalized, instruments: payload.instruments ?? [], status: "ok" });
+      } catch (error) {
+        if ((error as { name?: string }).name !== "AbortError") {
+          setResult({ query: normalized, instruments: [], status: "unavailable" });
+        }
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [enabled, exchange, normalized]);
+
+  const usable = result.query === normalized;
+  return {
+    instruments: usable ? result.instruments : [],
+    status: !normalized || !enabled ? "idle" as const : usable ? result.status : "checking" as const,
+  };
+}
+
 export function useKiteInstrumentLookup(symbol: string, exchange = "NSE") {
   const normalized = symbol.trim().toUpperCase();
   const [result, setResult] = useState<{ key: string; instruments: KiteInstrumentOption[]; publicPrice: number | null; status: "checking" | "valid" | "invalid" | "unavailable" }>({ key: "", instruments: [], publicPrice: null, status: "checking" });

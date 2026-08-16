@@ -19,11 +19,12 @@ const BUILDER_SECTIONS = [
 ] as const;
 
 function builderSectionFromUrl(): BuilderSection {
+  if (typeof window === "undefined") return "canvas";
   return parseBuilderSection(new URLSearchParams(window.location.search).get("section"));
 }
 
 export function BuilderWorkspace() {
-  const [activeSection, setActiveSection] = useState<BuilderSection>("canvas");
+  const [activeSection, setActiveSection] = useState<BuilderSection>(builderSectionFromUrl);
   const [tree, setTree] = useState<StrategyTreeV1>(() => createSeedTree());
   const [graph, setGraph] = useState<StrategyGraphV2>(() => compileTreeToGraph(tree));
   const [canvasKey, setCanvasKey] = useState(0);
@@ -35,8 +36,12 @@ export function BuilderWorkspace() {
       expandDashboardSection(dashboardSectionNumberFromNavId(section));
     };
     sync();
+    const retry = window.setTimeout(sync, 0);
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
+    return () => {
+      window.clearTimeout(retry);
+      window.removeEventListener("popstate", sync);
+    };
   }, []);
 
   useEffect(() => {
@@ -71,7 +76,6 @@ export function BuilderWorkspace() {
     window.history.pushState({ view: "builder", section }, "", url);
     setActiveSection(section);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`builder-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   const applyDocument = useCallback((nextTree: StrategyTreeV1, nextGraph: StrategyGraphV2) => {
@@ -81,7 +85,7 @@ export function BuilderWorkspace() {
   }, []);
 
   return (
-    <div className="builder-workspace-shell investment-workspace-shell" data-workspace="builder">
+    <div className="builder-workspace-shell investment-workspace-shell" data-workspace="builder" data-active-section={activeSection}>
       <header className="builder-workspace-chrome">
         <h2>Algorithm Builder</h2>
         <WorkspaceSectionNav
@@ -92,17 +96,17 @@ export function BuilderWorkspace() {
         />
       </header>
 
-      <div id="builder-board" className="workspace-section action-board-workspace-section">
+      <div id="builder-board" className="workspace-section action-board-workspace-section" hidden={activeSection !== "board"}>
         <CollapsibleSection number={builderSectionNumber("board")} title="Action Board" note="Clickable daily canvas, validation and export actions">
           <DailyKanbanBoard workspace="builder"/>
         </CollapsibleSection>
       </div>
 
-      <div id="builder-canvas" className="workspace-section">
+      <div id="builder-canvas" className="workspace-section builder-canvas-section" hidden={activeSection !== "canvas"}>
         <CollapsibleSection
           number={builderSectionNumber("canvas")}
           title="Canvas"
-          note="Nested tree · Add a Block · compiles to StrategyGraphV2 · desktop editing"
+          note="Details and backtest above a full-width nested tree"
           defaultOpen
         >
           <SymphonyEditor
@@ -116,7 +120,7 @@ export function BuilderWorkspace() {
         </CollapsibleSection>
       </div>
 
-      <div id="builder-json" className="workspace-section">
+      <div id="builder-json" className="workspace-section" hidden={activeSection !== "json"}>
         <CollapsibleSection number={builderSectionNumber("json")} title="JSON" note="Lossless tree + compiled graph · ids, percents, If/Else, pins">
           <BuilderJsonPanel tree={tree} graph={graph} disabled={false} onApply={applyDocument} />
         </CollapsibleSection>

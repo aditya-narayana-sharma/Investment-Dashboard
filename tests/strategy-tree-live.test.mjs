@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { createSeedTree } from "../app/strategy/seed-tree.ts";
 import { computeKpisFromOhlcv } from "../app/strategy/tree-indicators.ts";
+
+const kpiRegistry = JSON.parse(readFileSync(new URL("../packages/kpi-registry/definitions/kpis.json", import.meta.url), "utf8"));
+const KPI_REGISTRY_COUNT = kpiRegistry.count;
+const kpiDefinitions = kpiRegistry.kpis;
 import { resolveTreeInstruments, collectTreeSymbols } from "../app/strategy/tree-instruments.ts";
 import { buildTreeAlertPreviews, buildTreeGttPreviews, buildTreeOrderPreviews } from "../app/strategy/tree-orders.ts";
 import { lookupKpiValue } from "../app/strategy/tree-evaluate.ts";
-import { buildTreeLivePreview } from "../app/strategy/tree-live.ts";
+import { buildTreeLivePreview, parseTreeLiveKpiSymbol } from "../app/strategy/tree-live.ts";
 
 function holding(symbol, extras = {}) {
   return {
@@ -108,6 +113,11 @@ test("yfinance OHLCV computes honest series and leaves short lookbacks blank", (
   const wmap = computed.find((item) => item.kpiId === "weighted_ma_price");
   assert.ok(wmap);
   assert.match(wmap.label, /Weighted MA of price/);
+  const registryRows = computed.filter((item) => kpiDefinitions.some((kpi) => kpi.id === item.kpiId));
+  assert.equal(registryRows.length, KPI_REGISTRY_COUNT);
+  assert.equal(computed.find((item) => item.kpiId === "advance_decline")?.reason, "needs universe");
+  assert.equal(computed.find((item) => item.kpiId === "pe_ttm")?.reason, "yfinance .info field missing");
+  assert.equal(computed.find((item) => item.kpiId === "beta_60")?.reason, "needs RELIANCE benchmark history");
 });
 
 test("missing KPI stays null and unavailable — no fabricate", () => {
@@ -121,57 +131,92 @@ test("order / GTT / alert payloads are built from tree params without a broker c
   const tree = createSeedTree(new Date("2026-08-16T00:00:00+05:30"));
   tree.children[0].children[2].node.children[0].params.right = { type: "number", value: 250 };
   const instruments = resolveTreeInstruments([
-    holding("LIQUIDBEES", { qty: 40 }),
-    holding("NIFTYBEES", { price: 291.4, qty: 12 }),
+    holding("ITC", { qty: 40 }),
+    holding("RELIANCE", { price: 1405, qty: 12 }),
   ], {
     status: "unavailable",
     message: "Unavailable",
     instruments: [],
   });
   const orders = buildTreeOrderPreviews(tree, instruments);
-  const liquid = orders.find((item) => item.symbol === "LIQUIDBEES");
-  assert.ok(liquid);
-  assert.equal(liquid.side, "BUY");
-  assert.equal(liquid.product, "CNC");
-  assert.equal(liquid.orderType, "MARKET");
-  assert.equal(liquid.confirmation, `BUY ${liquid.quantity} LIQUIDBEES`);
+  const itc = orders.find((item) => item.symbol === "ITC");
+  assert.ok(itc);
+  assert.equal(itc.side, "BUY");
+  assert.equal(itc.product, "CNC");
+  assert.equal(itc.orderType, "MARKET");
+  assert.equal(itc.confirmation, `BUY ${itc.quantity} ITC`);
   const gtts = buildTreeGttPreviews(tree, instruments);
   assert.equal(gtts[0].triggerPrice, 250);
-  assert.equal(gtts[0].symbol, "NIFTYBEES");
-  assert.equal(gtts[0].lastPrice, 291.4);
-  assert.match(gtts[0].confirmation, /NIFTYBEES/);
+  assert.equal(gtts[0].symbol, "RELIANCE");
+  assert.equal(gtts[0].lastPrice, 1405);
+  assert.match(gtts[0].confirmation, /RELIANCE/);
   const alerts = buildTreeAlertPreviews(tree, instruments);
   assert.equal(alerts[0].direction, "above");
   assert.equal(alerts[0].triggerPrice, 250);
-  assert.equal(alerts[0].confirmation, "ALERT ABOVE NIFTYBEES 250");
+  assert.equal(alerts[0].confirmation, "ALERT ABOVE RELIANCE 250");
 });
 
 test("live preview prefers Kite last price and yfinance secondaries without inventing quotes", () => {
   const tree = createSeedTree(new Date("2026-08-16T00:00:00+05:30"));
   const preview = buildTreeLivePreview(tree, {
-    kite: kiteSnapshot("live", [holding("NIFTYBEES", { price: 291.4, qty: 12, pnl: 18 })]),
+    kite: kiteSnapshot("live", [holding("RELIANCE", { price: 1405, qty: 12, pnl: 18 })]),
     watchlist: { status: "unavailable", message: "Unavailable: no watchlist tool.", instruments: [] },
     yfinance: [{
-      symbol: "NIFTYBEES",
+      symbol: "RELIANCE",
       asOf: "2026-08-14",
       source: "yfinance",
       ohlcv: Array.from({ length: 20 }, (_, index) => ({
         date: `2026-07-${String(index + 1).padStart(2, "0")}`,
-        open: 280,
-        high: 285,
-        low: 275,
-        close: 282,
+        open: 1390,
+        high: 1410,
+        low: 1380,
+        close: 1400,
         volume: 1000,
       })),
       fundamentals: {},
     }],
   });
   assert.equal(preview.status, "live");
-  assert.equal(preview.kpis["close:NIFTYBEES"].value, 291.4);
-  assert.equal(preview.kpis["close:NIFTYBEES"].source, "kite");
-  assert.equal(preview.kpis["sma_200:NIFTYBEES"].value, null);
-  assert.equal(preview.kpis["sma_200:NIFTYBEES"].status, "unavailable");
-  assert.equal(preview.nodes["asset-niftybees"].instrument.lastPrice, 291.4);
+  assert.equal(preview.kpis["close:RELIANCE"].value, 1405);
+  assert.equal(preview.kpis["close:RELIANCE"].source, "kite");
+  assert.equal(preview.kpis["sma_200:RELIANCE"].value, null);
+  assert.equal(preview.kpis["sma_200:RELIANCE"].status, "unavailable");
+  assert.equal(preview.nodes["asset-reliance"].instrument.lastPrice, 1405);
   assert.match(preview.watchlist.message, /Unavailable/);
-  assert.ok(collectTreeSymbols(tree).includes("GOLDBEES"));
+  assert.ok(collectTreeSymbols(tree).includes("HDFCBANK"));
+  assert.ok(!collectTreeSymbols(tree).some((symbol) => symbol.endsWith("BEES")));
+  const relianceKpis = Object.keys(preview.kpis).filter((key) => key.endsWith(":RELIANCE"));
+  assert.equal(relianceKpis.length, KPI_REGISTRY_COUNT);
+  assert.equal(preview.kpis["advance_decline:RELIANCE"].status, "unavailable");
+  assert.equal(preview.kpis["advance_decline:RELIANCE"].reason, "needs universe");
+});
+
+test("live preview evaluates an extra KPI-panel symbol without inventing values", () => {
+  const tree = createSeedTree(new Date("2026-08-16T00:00:00+05:30"));
+  assert.equal(parseTreeLiveKpiSymbol({ tree, kpiSymbol: "  reliance " }), "RELIANCE");
+  assert.equal(parseTreeLiveKpiSymbol({ tree }), "");
+  const preview = buildTreeLivePreview(tree, {
+    kite: kiteSnapshot("live", [holding("NIFTYBEES", { price: 291.4, qty: 12 })]),
+    watchlist: { status: "unavailable", message: "Unavailable: no watchlist tool.", instruments: [] },
+    yfinance: [{
+      symbol: "RELIANCE",
+      asOf: "2026-08-14",
+      source: "yfinance",
+      ohlcv: Array.from({ length: 5 }, (_, index) => ({
+        date: `2026-07-${String(index + 1).padStart(2, "0")}`,
+        open: 1400,
+        high: 1410,
+        low: 1390,
+        close: 1405,
+        volume: 1000,
+      })),
+      fundamentals: {},
+    }],
+  }, ["RELIANCE"]);
+  assert.equal(preview.kpis["close:RELIANCE"].value, 1405);
+  assert.equal(preview.kpis["sma_200:RELIANCE"].value, null);
+  assert.equal(preview.kpis["sma_200:RELIANCE"].status, "unavailable");
+  assert.equal(preview.kpis["pe_ttm:RELIANCE"].value, null);
+  const relianceKpis = Object.keys(preview.kpis).filter((key) => key.endsWith(":RELIANCE"));
+  assert.equal(relianceKpis.length, KPI_REGISTRY_COUNT);
 });

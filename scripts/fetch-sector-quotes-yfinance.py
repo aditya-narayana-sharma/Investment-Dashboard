@@ -30,8 +30,16 @@ def percent(current: float | None, previous: float | None) -> float | None:
     return round((current / previous - 1) * 100, 2)
 
 
+# NSE/Yahoo aliases: reconstruction sleeve names that are not Yahoo tickers.
+# GILTBEES is the library name for Nippon India ETF Nifty 8-13 yr G-Sec (LTGILTBEES).
+YAHOO_ALIASES = {
+    "GILTBEES": "LTGILTBEES",
+}
+
+
 def yahoo_symbol(symbol: str) -> str:
-    return f"{symbol}.NS"
+    mapped = YAHOO_ALIASES.get(symbol.upper(), symbol)
+    return f"{mapped}.NS"
 
 
 def closes_from_series(series) -> list[float]:
@@ -77,8 +85,10 @@ def ohlcv_from_frame(frame) -> list[dict[str, Any]]:
         low_px = number_or_null(row.get("Low"))
         close_px = number_or_null(row.get("Close"))
         volume = number_or_null(row.get("Volume"))
-        if None in (open_px, high_px, low_px, close_px, volume):
+        if None in (open_px, high_px, low_px, close_px):
             continue
+        if volume is None:
+            volume = 0.0
         date = ""
         try:
             date = index.strftime("%Y-%m-%d")
@@ -105,6 +115,27 @@ def fundamentals_from_ticker(ticker: str) -> dict[str, Any]:
     except Exception:
         return {}
 
+    pe_ttm = number_or_null(info.get("trailingPE"))
+    pb = number_or_null(info.get("priceToBook"))
+    fcf = number_or_null(info.get("freeCashflow"))
+    market_cap = number_or_null(info.get("marketCap"))
+    ebit = number_or_null(info.get("ebit"))
+    enterprise_value = number_or_null(info.get("enterpriseValue"))
+    earnings_yield = number_or_null(info.get("earningsYield"))
+    if earnings_yield is None and pe_ttm not in (None, 0):
+        earnings_yield = 1 / pe_ttm
+    fcf_yield = None
+    if fcf is not None and market_cap not in (None, 0):
+        fcf_yield = fcf / market_cap
+    price_to_fcf = None
+    if fcf not in (None, 0) and market_cap is not None:
+        price_to_fcf = market_cap / fcf
+    book_yield = None
+    if pb not in (None, 0):
+        book_yield = 1 / pb
+    ev_ebit = number_or_null(info.get("enterpriseToEbit"))
+    if ev_ebit is None and ebit not in (None, 0) and enterprise_value is not None:
+        ev_ebit = enterprise_value / ebit
     mapped = {
         "revenue": number_or_null(info.get("totalRevenue")),
         "sales": number_or_null(info.get("totalRevenue") if info.get("totalRevenue") is not None else info.get("revenue")),
@@ -113,13 +144,28 @@ def fundamentals_from_ticker(ticker: str) -> dict[str, Any]:
         "pat": number_or_null(info.get("netIncomeToCommon")),
         "ebitda": number_or_null(info.get("ebitda")),
         "salesGrowthYoy": number_or_null(info.get("revenueGrowth")),
-        "peTtm": number_or_null(info.get("trailingPE")),
+        "peTtm": pe_ttm,
+        "peFwd": number_or_null(info.get("forwardPE")),
+        "pb": pb,
+        "psTtm": number_or_null(info.get("priceToSalesTrailing12Months")),
         "evEbitda": number_or_null(info.get("enterpriseToEbitda")),
+        "evSales": number_or_null(info.get("enterpriseToRevenue")),
+        "dividendYield": number_or_null(info.get("dividendYield")),
+        "earningsYield": earnings_yield,
+        "fcfYield": fcf_yield,
+        "roe": number_or_null(info.get("returnOnEquity")),
+        "roce": number_or_null(info.get("returnOnCapital") if info.get("returnOnCapital") is not None else info.get("returnOnAssets")),
+        "peg": number_or_null(info.get("pegRatio")),
+        "priceToFcf": price_to_fcf,
+        "bookYield": book_yield,
+        "evEbit": ev_ebit,
+        "freeCashflow": fcf,
+        "marketCap": market_cap,
     }
     return {key: value for key, value in mapped.items() if value is not None}
 
 
-def fetch_strategy_kpis(symbols: list[str]) -> list[dict[str, Any]]:
+def fetch_strategy_kpis(symbols: list[str], ohlcv_only: bool = False) -> list[dict[str, Any]]:
     companies: list[dict[str, Any]] = []
     for symbol in symbols:
         ticker = yahoo_symbol(symbol)
@@ -136,7 +182,7 @@ def fetch_strategy_kpis(symbols: list[str]) -> list[dict[str, Any]]:
             "symbol": symbol,
             "asOf": as_of,
             "ohlcv": ohlcv,
-            "fundamentals": fundamentals_from_ticker(ticker),
+            "fundamentals": {} if ohlcv_only else fundamentals_from_ticker(ticker),
         })
     return companies
 
@@ -199,7 +245,8 @@ def main() -> int:
 
     if mode == "strategy_kpis":
         try:
-            companies = fetch_strategy_kpis(cleaned)
+            ohlcv_only = bool(payload.get("ohlcvOnly")) if isinstance(payload, dict) else False
+            companies = fetch_strategy_kpis(cleaned, ohlcv_only=ohlcv_only)
         except Exception as exc:
             print(json.dumps({"error": f"yfinance strategy KPI download failed: {exc}"}), file=sys.stderr)
             return 1

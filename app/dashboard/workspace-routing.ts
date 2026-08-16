@@ -114,6 +114,25 @@ export function strategiesSectionNumber(section: StrategiesSection): "Y-1" | "Y-
   }
 }
 
+function firstQueryValue(value: string | string[] | null | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/** First-render workspace from RSC searchParams and/or `window.location.search`. */
+export function workspaceFromPageSearch(
+  searchParams?: { view?: string | string[] } | null,
+  locationSearch?: string | null,
+): WorkspaceKey {
+  const fromProps = firstQueryValue(searchParams?.view);
+  if (fromProps) return parseWorkspaceView(fromProps);
+  if (locationSearch) {
+    const query = locationSearch.startsWith("?") ? locationSearch.slice(1) : locationSearch;
+    return parseWorkspaceView(new URLSearchParams(query).get("view"));
+  }
+  return "investment";
+}
+
 export function applyCanonicalWorkspaceUrl(url: URL): { view: WorkspaceKey; rewritten: boolean } {
   const raw = url.searchParams.get("view");
   const view = parseWorkspaceView(raw);

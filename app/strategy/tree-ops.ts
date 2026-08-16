@@ -58,9 +58,9 @@ export function createTreeNode(kind: TreeBlockKind, existingIds: Iterable<string
         kind,
         label,
         params: {
-          left: { type: "kpi", kpiId: "close", symbol: "NIFTYBEES" },
+          left: { type: "kpi", kpiId: "close", symbol: "RELIANCE" },
           op: ">",
-          right: { type: "kpi", kpiId: "sma_200", symbol: "NIFTYBEES" },
+          right: { type: "kpi", kpiId: "sma_200", symbol: "RELIANCE" },
         },
         then: [],
         else: [],

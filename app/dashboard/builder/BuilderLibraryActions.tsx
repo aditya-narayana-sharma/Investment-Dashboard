@@ -104,7 +104,7 @@ export function BuilderLibraryActions({
       }
       setBacktestStatus("configured");
       setBacktestMessage(
-        `Configured ${result.request?.benchmark ?? "NIFTYBEES"} · cash ${result.request?.initialCash ?? 100000}. Configure only — no run.`,
+        `Configured ${result.request?.benchmark ?? "RELIANCE"} · cash ${result.request?.initialCash ?? 100000}. Configure only — no run.`,
       );
     } catch (error) {
       setBacktestStatus("error");

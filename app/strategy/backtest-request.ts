@@ -12,7 +12,7 @@ export const BACKTEST_DEFAULTS = {
   initialCash: 100_000,
   slippageBps: 5,
   costPreset: "zerodha_equity_v1",
-  benchmark: "NIFTYBEES",
+  benchmark: "RELIANCE",
 } as const;
 
 export type BacktestCostPreset = typeof BACKTEST_DEFAULTS.costPreset;
