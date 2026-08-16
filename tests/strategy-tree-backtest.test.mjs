@@ -50,6 +50,19 @@ test("runTreeBacktest returns ran=true and a curve for complete OHLCV", () => {
   assert.equal(typeof result.endingEquity, "number");
   assert.ok(result.endingEquity > 0);
   assert.equal(typeof result.totalReturnPct, "number");
+  assert.ok(result.sharpe === null || typeof result.sharpe === "number");
+  assert.equal(typeof result.annualizedReturnPct, "number");
+  assert.equal(typeof result.maxDrawdownPct, "number");
+});
+
+test("runTreeBacktest Sharpe is finite when daily returns vary", () => {
+  const result = runTreeBacktest(twoAssetTree(), {
+    AAA: bars("AAA", [100, 110, 90, 130, 120, 150]),
+    BBB: bars("BBB", [100, 101, 99, 102, 98, 100]),
+  });
+  assert.equal(result.ran, true);
+  assert.equal(typeof result.sharpe, "number");
+  assert.ok(Number.isFinite(result.sharpe));
 });
 
 test("runTreeBacktest does not set ran=true when a required series is missing", () => {
@@ -61,4 +74,59 @@ test("runTreeBacktest does not set ran=true when a required series is missing", 
   assert.deepEqual(result.curve, []);
   assert.deepEqual(result.missingSymbols, ["BBB"]);
   assert.match(result.message, /BBB/);
+  assert.equal(result.sharpe, null);
+});
+
+test("runTreeBacktest requires KPI operand symbols, not only asset sleeves", () => {
+  const tree = {
+    treeVersion: "1",
+    id: "bt-kpi-gate",
+    name: "KPI gate",
+    interval: "day",
+    children: [
+      {
+        id: "gate",
+        kind: "if_else",
+        params: {
+          left: { type: "kpi", kpiId: "close", symbol: "CCC" },
+          op: ">",
+          right: { type: "number", value: 10 },
+        },
+        then: [{ id: "a", kind: "asset", params: { symbol: "AAA" }, children: [] }],
+        else: [{ id: "b", kind: "asset", params: { symbol: "BBB" }, children: [] }],
+      },
+    ],
+  };
+  const result = runTreeBacktest(tree, {
+    AAA: bars("AAA", [100, 110, 121]),
+    BBB: bars("BBB", [100, 100, 100]),
+  });
+  assert.equal(result.ran, false);
+  assert.deepEqual(result.missingSymbols, ["CCC"]);
+});
+
+test("runTreeBacktest equal-weights group baskets to 100% instead of stacking 1x each child", () => {
+  const tree = {
+    treeVersion: "1",
+    id: "bt-group",
+    name: "Group basket",
+    interval: "day",
+    children: [
+      {
+        id: "basket",
+        kind: "group",
+        params: {},
+        children: [
+          { id: "a", kind: "asset", params: { symbol: "AAA" }, children: [] },
+          { id: "b", kind: "asset", params: { symbol: "BBB" }, children: [] },
+        ],
+      },
+    ],
+  };
+  const result = runTreeBacktest(tree, {
+    AAA: bars("AAA", [100, 200]),
+    BBB: bars("BBB", [100, 100]),
+  });
+  assert.equal(result.ran, true);
+  assert.ok(result.totalReturnPct !== null && result.totalReturnPct < 60);
 });

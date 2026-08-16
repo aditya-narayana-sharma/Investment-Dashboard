@@ -1,6 +1,5 @@
 import type { ComparatorOp } from "../../packages/contracts/src/strategy.ts";
 import {
-  walkTreeNodes,
   type StrategyTreeV1,
   type TreeNode,
   type TreeOperand,
@@ -24,6 +23,7 @@ export type TreeBacktestResult = {
   curve: BacktestCurvePoint[];
   totalReturnPct: number | null;
   annualizedReturnPct: number | null;
+  sharpe: number | null;
   maxDrawdownPct: number | null;
   initialCash: number;
   endingEquity: number | null;
@@ -108,8 +108,12 @@ function collectAssets(node: TreeNode, kpis: Map<string, number | null>, warning
     }
     case "group":
     case "filter":
-    case "any_all":
-      return node.children.flatMap((child) => collectAssets(child, kpis, warnings));
+    case "any_all": {
+      const nested = node.children.flatMap((child) => collectAssets(child, kpis, warnings));
+      const total = nested.reduce((sum, item) => sum + item.weight, 0);
+      if (!total) return [];
+      return nested.map((item) => ({ symbol: item.symbol, weight: item.weight / total }));
+    }
     case "weight": {
       if (node.params.method === "inverse_volatility") {
         warnings.push(`Inverse Volatility on ${node.label ?? node.id} is stored but not executable — sleeve skipped.`);
@@ -160,15 +164,26 @@ function annualized(totalReturn: number, firstDate: string, lastDate: string): n
   return ((1 + totalReturn) ** (1 / years) - 1) * 100;
 }
 
+function sharpeFromEquities(equities: number[]): number | null {
+  if (equities.length < 3) return null;
+  const returns: number[] = [];
+  for (let index = 1; index < equities.length; index += 1) {
+    const previous = equities[index - 1]!;
+    const current = equities[index]!;
+    if (previous <= 0 || !Number.isFinite(previous) || !Number.isFinite(current)) continue;
+    returns.push(current / previous - 1);
+  }
+  if (returns.length < 2) return null;
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance = returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1);
+  const stdev = Math.sqrt(variance);
+  if (!Number.isFinite(stdev) || stdev === 0) return null;
+  return (mean / stdev) * Math.sqrt(252);
+}
+
 /** Walk a tree on provided OHLCV. Missing required series → ran=false, no curve. */
 export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktestBars): TreeBacktestResult {
-  const required = collectTreeSymbols(tree).filter((symbol) => {
-    let needed = false;
-    walkTreeNodes(tree.children, (node) => {
-      if (node.kind === "asset" && node.params.symbol.trim().toUpperCase() === symbol) needed = true;
-    });
-    return needed;
-  });
+  const required = collectTreeSymbols(tree);
   const missingSymbols = required.filter((symbol) => !barsBySymbol[symbol]?.length);
   const warnings: string[] = [];
   if (missingSymbols.length) {
@@ -181,6 +196,7 @@ export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktest
       curve: [],
       totalReturnPct: null,
       annualizedReturnPct: null,
+      sharpe: null,
       maxDrawdownPct: null,
       initialCash: BACKTEST_DEFAULTS.initialCash,
       endingEquity: null,
@@ -202,6 +218,7 @@ export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktest
       curve: [],
       totalReturnPct: null,
       annualizedReturnPct: null,
+      sharpe: null,
       maxDrawdownPct: null,
       initialCash: BACKTEST_DEFAULTS.initialCash,
       endingEquity: null,
@@ -214,7 +231,7 @@ export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktest
   const positions = new Map<string, number>();
   let lastRebalance: string | null = null;
   const curve: BacktestCurvePoint[] = [];
-  const benchmarkBars = barsBySymbol.NIFTYBEES ?? [];
+  const benchmarkBars = barsBySymbol.RELIANCE ?? [];
   const benchStart = closeOn(benchmarkBars, dates[0]!);
 
   for (const date of dates) {
@@ -252,6 +269,7 @@ export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktest
 
   const ending = curve[curve.length - 1]?.equity ?? null;
   const totalReturn = ending === null ? null : (ending - initialCash) / initialCash;
+  const equities = curve.map((point) => point.equity);
   return {
     status: "ran",
     ran: true,
@@ -261,7 +279,8 @@ export function runTreeBacktest(tree: StrategyTreeV1, barsBySymbol: TreeBacktest
     curve,
     totalReturnPct: totalReturn === null ? null : totalReturn * 100,
     annualizedReturnPct: totalReturn === null ? null : annualized(totalReturn, dates[0]!, dates[dates.length - 1]!),
-    maxDrawdownPct: maxDrawdown(curve.map((point) => point.equity)),
+    sharpe: sharpeFromEquities(equities),
+    maxDrawdownPct: maxDrawdown(equities),
     initialCash,
     endingEquity: ending,
   };

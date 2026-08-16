@@ -5,6 +5,8 @@
   --vo-map: #0d9488;
   --vo-news: #a855f7;
   --vo-body: #f43f5e;
+  --vo-canvas: #d97706;
+  --vo-strategies: #65a30d;
   --vo-pulse-live: #22c55e;
   --vo-pulse-cached: #eab308;
   --vo-pulse-fail: #ef4444;
@@ -161,6 +163,8 @@
 .workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
 .workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
 .workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
 .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
   background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
 }
@@ -172,6 +176,12 @@
 }
 .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
   background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
+  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
+  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
 }
 .workspace-tabs button .mode-silhouette {
   width: 22px;
@@ -1397,11 +1407,10 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   line-height: 1.45;
 }
 .health-direction-grid.quadrant-vitals-stage {
-  gap: 12px;
+  gap: 0;
 }
-.health-direction-grid.quadrant-vitals-stage .health-direction-column {
+.health-direction-grid.quadrant-vitals-stage .health-direction-row {
   position: relative;
-  min-height: 160px;
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile {
   position: relative;
@@ -1858,6 +1867,32 @@ html[data-appearance="sepia"] .workspace-tabs button.active,
 html[data-appearance="sepia"] .workspace-tabs button.active small,
 html[data-appearance="sepia"] .workspace-tabs button.active em {
   color: var(--btn-fg) !important;
+}
+
+/* Cream tiles keep unique workspace top accents + active frames. */
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="investment"] { border-top-color: var(--vo-desk); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
+  background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="sectors"] {
+  background: #134e4a; border-color: var(--vo-map); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #2dd4bf;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="intelligence"] {
+  background: #3b0764; border-color: var(--vo-news); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #c084fc;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
+  background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
+  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
+  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
 }
 
 /* Investment visualisation legends and macro evidence are paper surfaces. */

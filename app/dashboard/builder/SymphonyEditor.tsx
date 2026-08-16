@@ -33,6 +33,7 @@ import type { TreeLivePreview } from "../../strategy/tree-live";
 import { AlgorithmBuilder } from "./AlgorithmBuilder";
 import { BuilderLibraryActions } from "./BuilderLibraryActions";
 import { TreeBrokerConfirm, type TreeBrokerDraft } from "./TreeBrokerConfirm";
+import { KpiRegistryPanel } from "./KpiRegistryPanel";
 import { TreeCanvas } from "./TreeCanvas";
 import "./algorithm-builder.css";
 
@@ -42,7 +43,7 @@ const INTERVALS: CandleInterval[] = ["day", "week", "month"];
 const TREE_TUTORIAL_STEPS = [
   {
     title: "This is a nested tree",
-    body: "Blocks nest under parents. There are no wires. Weight percents sit on the stems. Start from the Indian Core-Satellite seed or add your own blocks.",
+    body: "Blocks nest top to bottom under parents. There are no wires. Weight percents sit on the stems. Start from the Indian Core-Satellite seed or add your own blocks.",
   },
   {
     title: "Add a Block",
@@ -72,7 +73,7 @@ export type SymphonyEditorProps = {
 };
 
 function brokerDisabledReason(live: TreeLivePreview | null, kind: "order" | "gtt" | "alert"): string | null {
-  if (!live) return "Live preview has not run yet.";
+  if (!live) return null;
   if (live.status === "auth_required") return "Kite session missing — authenticate first.";
   if (live.status === "unavailable") return live.message || "Kite is unavailable.";
   const count = kind === "order" ? live.orders.length : kind === "gtt" ? live.gtts.length : live.alerts.length;
@@ -133,6 +134,8 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
   const [alertPick, setAlertPick] = useState(0);
   const [run, setRun] = useState<BacktestRunResponse | null>(null);
   const [running, setRunning] = useState(false);
+  const [kpiSymbol, setKpiSymbol] = useState("");
+  const [kpiName, setKpiName] = useState("");
   const graph = useMemo(() => compileTreeToGraph(tree), [tree]);
   const treeValidation = useMemo(() => validateTree(tree), [tree]);
   const graphValidation = useMemo(() => validateStrategyGraph(graph), [graph]);
@@ -156,7 +159,7 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
       void fetch(STRATEGIES_LIVE_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tree }),
+        body: JSON.stringify({ tree, kpiSymbol }),
       }).then(async (response) => {
         const payload = await response.json() as TreeLivePreview & { message?: string };
         if (cancelled) return;
@@ -180,7 +183,7 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [tree]);
+  }, [kpiSymbol, tree]);
 
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_QUERY);
@@ -330,8 +333,8 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
     >
       <header className="builder-chrome">
         <div>
-          <p className="builder-eyebrow">ALGORITHM CANVAS</p>
-          <h2>Algorithm Builder</h2>
+          <p className="builder-eyebrow">EDITOR · TREE</p>
+          <h2>{tree.name || "Untitled tree"}</h2>
         </div>
         <div className="builder-toolbar" role="toolbar" aria-label="Tree tools">
           <button type="button" disabled={readOnly || !historyFlags.undo} onClick={undo}>Undo</button>
@@ -373,47 +376,142 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
       </header>
       {readOnly && <p className="builder-readonly-banner" role="status">Read-only monitor — editing requires desktop width.</p>}
       {hint && <p className="builder-connect-hint" role="status">{hint}</p>}
-      <div className="builder-zones symphony-zones" data-canvas-mode="tree">
-        <aside className="symphony-details" aria-label="Strategy details">
-          <h3>Details</h3>
-          <label>
-            Name
-            <input
-              value={tree.name}
+      <div className="builder-zones symphony-zones" data-canvas-mode="tree" data-layout="details-backtest-above-tree">
+        <div className="symphony-top">
+          <aside className="symphony-details" aria-label="Strategy details">
+            <h3>Details</h3>
+            <label>
+              Name
+              <input
+                value={tree.name}
+                disabled={readOnly}
+                onChange={(event) => commit({ ...tree, name: event.target.value })}
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                value={tree.description ?? ""}
+                disabled={readOnly}
+                onChange={(event) => commit({ ...tree, description: event.target.value })}
+              />
+            </label>
+            <label>
+              Frequency
+              <select
+                value={tree.interval}
+                disabled={readOnly}
+                onChange={(event) => commit({ ...tree, interval: event.target.value as CandleInterval })}
+              >
+                {INTERVALS.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <div className="symphony-selected">
+              {selected ? (
+                <>
+                  <h4>Selected · {selected.kind.replaceAll("_", " ")}</h4>
+                  <p>{selected.label ?? selected.id}</p>
+                  <button type="button" className="builder-delete" disabled={readOnly} onClick={deleteSelected}>Delete</button>
+                </>
+              ) : (
+                <p>Select a block to inspect or delete it.</p>
+              )}
+            </div>
+          </aside>
+          <aside className="builder-preview" aria-label="Backtest overview">
+            <h3>Backtest overview</h3>
+            <p>Results pane for this tree. Run backtest walks historical OHLCV and sets ran=true only after a real engine pass. No curve until then.</p>
+            <p className="builder-preview-meta">{tree.name} · {tree.interval}</p>
+            <dl className="symphony-backtest-stats" aria-label="Backtest performance">
+              <div><small>Return</small><b>{run?.ran ? `${run.totalReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+              <div><small>Ann.</small><b>{run?.ran ? `${run.annualizedReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+              <div><small>Max DD</small><b>{run?.ran ? `${run.maxDrawdownPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+            </dl>
+            <button type="button" disabled={running} onClick={() => void runBacktest()}>
+              {running ? "Running" : "Run backtest"}
+            </button>
+            {run?.ran && run.curve && run.curve.length > 1 ? (
+              <EquityCurve curve={run.curve} />
+            ) : (
+              <p className="symphony-disabled-reason">{run?.message ?? "Not run yet."}</p>
+            )}
+            <p className="symphony-live-status" data-status={live?.status ?? "unavailable"}>{liveHint}</p>
+            {live?.watchlist.status === "unavailable" && live.watchlist.message !== liveHint && (
+              <p className="symphony-live-status" data-status="unavailable">{live.watchlist.message}</p>
+            )}
+            {live?.authUrl && (
+              <p><a href={live.authUrl} target="_blank" rel="noreferrer">Authenticate Kite</a></p>
+            )}
+            <div className="symphony-preview-list">
+              {live && live.orders.length > 1 && (
+                <label>
+                  Order
+                  <select value={orderPick} onChange={(event) => setOrderPick(Number(event.target.value))}>
+                    {live.orders.map((item, index) => (
+                      <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {live && live.gtts.length > 1 && (
+                <label>
+                  GTT
+                  <select value={gttPick} onChange={(event) => setGttPick(Number(event.target.value))}>
+                    {live.gtts.map((item, index) => (
+                      <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {live && live.alerts.length > 1 && (
+                <label>
+                  Alert
+                  <select value={alertPick} onChange={(event) => setAlertPick(Number(event.target.value))}>
+                    {live.alerts.map((item, index) => (
+                      <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            <div className="symphony-live-actions">
+              <button
+                type="button"
+                disabled={!order || Boolean(orderReason)}
+                onClick={() => order && setBrokerDraft({ kind: "order", preview: order })}
+              >Place Kite order</button>
+              <button
+                type="button"
+                disabled={!gtt || Boolean(gttReason) || !gtt.lastPrice}
+                onClick={() => gtt && setBrokerDraft({ kind: "gtt", preview: gtt })}
+              >Create GTT</button>
+              <button
+                type="button"
+                disabled={!alert || Boolean(alertReason)}
+                onClick={() => alert && setBrokerDraft({ kind: "alert", preview: alert })}
+              >Create alert</button>
+            </div>
+            {orderReason && orderReason !== liveHint && <p className="symphony-disabled-reason">{orderReason}</p>}
+            {gttReason && gttReason !== liveHint && gttReason !== orderReason && (
+              <p className="symphony-disabled-reason">{gttReason}</p>
+            )}
+            {alertReason && alertReason !== liveHint && alertReason !== orderReason && alertReason !== gttReason && (
+              <p className="symphony-disabled-reason">{alertReason}</p>
+            )}
+            <KpiRegistryPanel
+              symbol={kpiSymbol}
+              name={kpiName}
+              live={live ?? undefined}
               disabled={readOnly}
-              onChange={(event) => commit({ ...tree, name: event.target.value })}
+              onSymbolChange={(next) => {
+                setKpiSymbol(next.symbol.trim().toUpperCase());
+                setKpiName(next.name.trim());
+              }}
             />
-          </label>
-          <label>
-            Description
-            <textarea
-              value={tree.description ?? ""}
-              disabled={readOnly}
-              onChange={(event) => commit({ ...tree, description: event.target.value })}
-            />
-          </label>
-          <label>
-            Frequency
-            <select
-              value={tree.interval}
-              disabled={readOnly}
-              onChange={(event) => commit({ ...tree, interval: event.target.value as CandleInterval })}
-            >
-              {INTERVALS.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          {selected ? (
-            <>
-              <h4>Selected · {selected.kind.replaceAll("_", " ")}</h4>
-              <p>{selected.label ?? selected.id}</p>
-              <button type="button" className="builder-delete" disabled={readOnly} onClick={deleteSelected}>Delete</button>
-            </>
-          ) : (
-            <p>Select a block to inspect or delete it.</p>
-          )}
-        </aside>
+          </aside>
+        </div>
         <TreeCanvas
           name={tree.name}
           nodes={tree.children}
@@ -429,85 +527,6 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
             setSelectedId(null);
           }}
         />
-        <aside className="builder-preview" aria-label="Backtest preview">
-          <h3>Backtest preview</h3>
-          <p>Configure only — no run. No equity curve is drawn until an engine can set ran=true.</p>
-          <p className="builder-preview-meta">{tree.name} · {tree.interval}</p>
-          <button type="button" disabled={running} onClick={() => void runBacktest()}>
-            {running ? "Running" : "Run backtest"}
-          </button>
-          {run?.ran && run.curve && run.curve.length > 1 ? (
-            <>
-              <EquityCurve curve={run.curve} />
-              <p>
-                Return {run.totalReturnPct?.toFixed(2) ?? "—"}%
-                {" · "}ann. {run.annualizedReturnPct?.toFixed(2) ?? "—"}%
-                {" · "}max DD {run.maxDrawdownPct?.toFixed(2) ?? "—"}%
-              </p>
-            </>
-          ) : (
-            <p className="symphony-disabled-reason">{run?.message ?? "Not run yet."}</p>
-          )}
-          <p className="symphony-live-status" data-status={live?.status ?? "unavailable"}>{liveHint}</p>
-          {live?.watchlist.status === "unavailable" && (
-            <p className="symphony-live-status" data-status="unavailable">{live.watchlist.message}</p>
-          )}
-          {live?.authUrl && (
-            <p><a href={live.authUrl} target="_blank" rel="noreferrer">Authenticate Kite</a></p>
-          )}
-          <div className="symphony-preview-list">
-            {live && live.orders.length > 1 && (
-              <label>
-                Order
-                <select value={orderPick} onChange={(event) => setOrderPick(Number(event.target.value))}>
-                  {live.orders.map((item, index) => (
-                    <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {live && live.gtts.length > 1 && (
-              <label>
-                GTT
-                <select value={gttPick} onChange={(event) => setGttPick(Number(event.target.value))}>
-                  {live.gtts.map((item, index) => (
-                    <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {live && live.alerts.length > 1 && (
-              <label>
-                Alert
-                <select value={alertPick} onChange={(event) => setAlertPick(Number(event.target.value))}>
-                  {live.alerts.map((item, index) => (
-                    <option key={`${item.nodeId}-${index}`} value={index}>{item.confirmation}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-          <div className="symphony-live-actions">
-            <button
-              type="button"
-              disabled={!order || Boolean(orderReason)}
-              onClick={() => order && setBrokerDraft({ kind: "order", preview: order })}
-            >Place Kite order</button>
-            <button
-              type="button"
-              disabled={!gtt || Boolean(gttReason) || !gtt.lastPrice}
-              onClick={() => gtt && setBrokerDraft({ kind: "gtt", preview: gtt })}
-            >Create GTT</button>
-            <button
-              type="button"
-              disabled={!alert || Boolean(alertReason)}
-              onClick={() => alert && setBrokerDraft({ kind: "alert", preview: alert })}
-            >Create alert</button>
-          </div>
-          {orderReason && <p className="symphony-disabled-reason">{orderReason}</p>}
-          {gttReason && <p className="symphony-disabled-reason">{gttReason}</p>}
-          {alertReason && <p className="symphony-disabled-reason">{alertReason}</p>}
-        </aside>
       </div>
       {advancedGraph && (
         <details className="symphony-advanced-graph" open>

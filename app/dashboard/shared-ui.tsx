@@ -152,6 +152,9 @@ function healthMetricUnit(value: string): string | undefined {
 export function HealthMasonryGrid({ categories, compact = false }: { categories: HealthLiveSnapshot["categories"]; compact?: boolean }) {
   const [averagePeriod, setAveragePeriod] = useState<HealthAveragePeriod>("weekly");
   const [averagePeriodHydrated, setAveragePeriodHydrated] = useState(false);
+  const [collapsedDirections, setCollapsedDirections] = useState<Set<string>>(
+    () => (compact ? new Set() : new Set(["moderate", "bad"])),
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -168,18 +171,26 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
 
   const directionColumns = groupHealthMetricsByDirection(categories, averagePeriod);
   const unavailableCount = directionColumns.unavailable.length;
+  const toggleDirection = (id: string) => {
+    setCollapsedDirections((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return <>
     <section className={`health-average-toolbar${compact ? " compact" : ""}`} aria-label="Health metric average comparison controls">
-      <div><b>Vital cadence</b><span>Weekly or month-to-date rhythm · columns are comparison direction; tile colour is Health category</span></div>
+      <div><b>Vital cadence</b><span>Weekly or month-to-date rhythm · rows are comparison direction; tile colour is Health category</span></div>
       <div className="segmented health-average-toggle" role="group" aria-label="Compare health metrics with weekly or monthly average">
         <button type="button" className={`vo-pop${averagePeriod === "weekly" ? " active" : ""}`} aria-pressed={averagePeriod === "weekly"} onClick={() => setAveragePeriod("weekly")}>Weekly</button>
         <button type="button" className={`vo-pop${averagePeriod === "monthly" ? " active" : ""}`} aria-pressed={averagePeriod === "monthly"} onClick={() => setAveragePeriod("monthly")}>Monthly (MTD)</button>
       </div>
       <p>
-        <span className="trend-good-key">Green column · favourable direction</span>
-        <span className="trend-moderate-key">Gold column · context dependent</span>
-        <span className="trend-bad-key">Red column · unfavourable direction</span>
+        <span className="trend-good-key">Green row · favourable direction</span>
+        <span className="trend-moderate-key">Gold row · context dependent</span>
+        <span className="trend-bad-key">Red row · unfavourable direction</span>
         {unavailableCount > 0
           ? <span className="health-unavailable-inline-note">{unavailableCount} without {averagePeriod === "weekly" ? "7-day" : "MTD"} avg · shown under Context dependent</span>
           : null}
@@ -192,12 +203,23 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
         const entries = column.id === "moderate"
           ? [...directionColumns.moderate, ...directionColumns.unavailable]
           : directionColumns[column.id];
-        return <article className={`panel health-direction-column ${column.className}`} key={column.id}>
-          <header className="health-direction-title">
-            <h3 id={`vital-direction-${column.id}`}>{column.title}</h3>
-            <em aria-label={`${entries.length} metrics`}>{entries.length}</em>
-          </header>
-          <div className="health-kpi-grid" role="group" aria-labelledby={`vital-direction-${column.id}`}>
+        const isCollapsed = collapsedDirections.has(column.id);
+        const groupControlId = `vital-direction-${column.id}`;
+        return <div className={`health-direction-row ${column.className}${isCollapsed ? " collapsed" : ""}`} key={column.id}>
+          <button
+            type="button"
+            className={`health-direction-header ${column.className}`}
+            aria-expanded={!isCollapsed}
+            aria-controls={groupControlId}
+            onClick={() => toggleDirection(column.id)}
+          >
+            <span className="health-direction-title-group">
+              <ChevronDown size={15} aria-hidden="true"/>
+              <b id={`vital-direction-label-${column.id}`}>{column.title}</b>
+            </span>
+            <span>{entries.length} metric{entries.length === 1 ? "" : "s"}</span>
+          </button>
+          <div className="health-kpi-grid" id={groupControlId} role="group" aria-labelledby={`vital-direction-label-${column.id}`} hidden={isCollapsed}>
             {entries.length === 0
               ? <p className="health-direction-empty">No metrics in this direction for the selected cadence.</p>
               : entries.map((entry) => {
@@ -221,7 +243,7 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
                 </div>
               );})}
           </div>
-        </article>;
+        </div>;
       })}
     </section>
   </>;

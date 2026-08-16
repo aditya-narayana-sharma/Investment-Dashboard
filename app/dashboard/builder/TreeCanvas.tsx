@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { kpiById, searchKpis } from "../../../packages/kpi-registry";
+import { KPI_BUCKETS, KPI_REGISTRY_COUNT, kpiById, searchKpis, type KpiBucketId } from "../../../packages/kpi-registry";
 import { ASSET_CLASSES, type AssetClass } from "../../strategy/asset-classes";
 import type { ComparatorOp, TreeBlockKind, TreeNode, TreeOperand, WeightChild } from "../../strategy/graph-types";
 import type { TreeLivePreview } from "../../strategy/tree-live";
 import type { TreeInsertSlot } from "../../strategy/tree-ops";
+import { AssetInstrumentPicker } from "./AssetInstrumentPicker";
 
 export const ADD_BLOCK_ITEMS: Array<{ kind: TreeBlockKind; label: string; detail: string; tone: string }> = [
   { kind: "asset", label: "Asset", detail: "Symbol leaf", tone: "slate" },
@@ -166,18 +167,19 @@ function OperandPicker({
   disabled,
   allowNumber,
   ariaLabel,
-  symbols,
+  live,
   onChange,
 }: {
   operand: TreeOperand;
   disabled: boolean;
   allowNumber: boolean;
   ariaLabel: string;
-  symbols: string[];
+  live?: TreeLivePreview;
   onChange: (next: TreeOperand) => void;
 }) {
   const [query, setQuery] = useState("");
-  const matches = useMemo(() => searchKpis(query).slice(0, 12), [query]);
+  const [bucket, setBucket] = useState<KpiBucketId | "all">("all");
+  const matches = useMemo(() => searchKpis(query, bucket), [query, bucket]);
   const mode = operand.type;
 
   return (
@@ -190,7 +192,7 @@ function OperandPicker({
           onChange={(event) => {
             const next = event.target.value;
             if (next === "number") onChange({ type: "number", value: 0 });
-            else onChange({ type: "kpi", kpiId: "close", symbol: operand.type === "kpi" ? operand.symbol : "NIFTYBEES" });
+            else onChange({ type: "kpi", kpiId: "close", symbol: operand.type === "kpi" ? operand.symbol : "" });
           }}
         >
           <option value="kpi">KPI</option>
@@ -209,43 +211,49 @@ function OperandPicker({
         <>
           <input
             type="search"
-            value={query || (kpiById(operand.kpiId)?.label ?? operand.kpiId)}
+            value={query}
             disabled={disabled}
-            placeholder="Search KPI registry"
+            placeholder={kpiById(operand.kpiId)?.label ?? "Search KPIs"}
             aria-label={`${ariaLabel} KPI`}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <input
-            value={operand.symbol}
+          <AssetInstrumentPicker
+            symbol={operand.symbol}
             disabled={disabled}
-            placeholder="Symbol"
-            aria-label={`${ariaLabel} symbol`}
-            list="tree-live-symbols"
-            onChange={(event) => onChange({ ...operand, symbol: event.target.value.toUpperCase() })}
+            live={live}
+            ariaLabel={`${ariaLabel} symbol`}
+            onChange={(next) => onChange({ ...operand, symbol: next.symbol })}
           />
-          <datalist id="tree-live-symbols">
-            {symbols.map((symbol) => (
-              <option key={symbol} value={symbol} />
+          <div className="symphony-kpi-buckets" role="group" aria-label="KPI buckets">
+            <button type="button" className={bucket === "all" ? "active" : ""} disabled={disabled} onClick={() => setBucket("all")}>ALL · {KPI_REGISTRY_COUNT}</button>
+            {KPI_BUCKETS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={bucket === item.id ? "active" : ""}
+                disabled={disabled}
+                onClick={() => setBucket(item.id)}
+              >{item.label}</button>
             ))}
-          </datalist>
-          {query && (
-            <ul className="symphony-kpi-hits">
-              {matches.map((kpi) => (
-                <li key={kpi.id}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      onChange({ type: "kpi", kpiId: kpi.id, symbol: operand.symbol });
-                      setQuery("");
-                    }}
-                  >
-                    {kpi.label} <small>{kpi.id}</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          </div>
+          <ul className="symphony-kpi-hits" data-testid="symphony-kpi-picker">
+            {matches.map((kpi) => (
+              <li key={kpi.id}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  data-kpi-id={kpi.id}
+                  className={kpi.id === operand.kpiId ? "active" : ""}
+                  onClick={() => {
+                    onChange({ type: "kpi", kpiId: kpi.id, symbol: operand.symbol });
+                    setQuery("");
+                  }}
+                >
+                  {kpi.label} <small>{kpi.id}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </div>
@@ -263,6 +271,7 @@ function TreeChildren({
   onSelect,
   onChange,
   onAdd,
+  onDelete,
   onToggleMenu,
 }: {
   nodes: TreeNode[];
@@ -280,7 +289,7 @@ function TreeChildren({
 }) {
   const menuKey = `${parentId ?? "root"}:${slot}`;
   return (
-    <div className="symphony-children">
+    <div className="symphony-children" data-orientation="vertical">
       {nodes.map((child) => (
         <TreeBlockView
           key={child.id}
@@ -333,7 +342,7 @@ function WeightBranches({
 }) {
   const menuKey = `${parent.id}:children`;
   return (
-    <div className="symphony-children symphony-weight-children" data-stem-count={parent.children.length}>
+    <div className="symphony-children symphony-weight-children" data-stem-count={parent.children.length} data-orientation="vertical">
       {parent.children.map((child: WeightChild) => (
         <div key={child.node.id} className="symphony-branch">
           {parent.params.method === "specified" && (
@@ -383,6 +392,7 @@ function TreeBlockView({
   onSelect,
   onChange,
   onAdd,
+  onDelete,
   onToggleMenu,
 }: {
   node: TreeNode;
@@ -399,7 +409,6 @@ function TreeBlockView({
   const selected = selectedId === node.id;
   const tone = blockTone(node.kind);
   const liveNode = live?.nodes[node.id];
-  const symbols = live?.instruments.map((item) => item.symbol) ?? [];
 
   const header = (
     <header className="symphony-block-head">
@@ -443,36 +452,30 @@ function TreeBlockView({
   switch (node.kind) {
     case "asset":
       body = (
-        <div className="symphony-fields">
-          <input
-            value={node.params.symbol}
+        <div className="symphony-fields" onClick={(event) => event.stopPropagation()}>
+          <AssetInstrumentPicker
+            symbol={node.params.symbol}
+            label={node.label}
             disabled={disabled}
-            placeholder="SYMBOL"
-            aria-label="Asset symbol"
-            list="tree-live-symbols"
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onChange({ ...node, params: { symbol: event.target.value.toUpperCase() } })}
-          />
-          <input
-            value={node.label ?? ""}
-            disabled={disabled}
-            placeholder="Display name"
-            aria-label="Asset label"
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onChange({ ...node, label: event.target.value })}
+            live={live}
+            onChange={(next) => onChange({
+              ...node,
+              label: next.name || "Asset",
+              params: { symbol: next.symbol },
+            })}
           />
           {liveNode?.instrument && (
             <p className="symphony-live-badge" data-status={live?.kiteStatus ?? "unavailable"}>
-              {liveNode.instrument.tradingsymbol}
-              {liveNode.instrument.exchange ? ` · ${liveNode.instrument.exchange}` : ""}
-              {liveNode.instrument.lastPrice !== undefined ? ` · last ${formatLiveNumber(liveNode.instrument.lastPrice)}` : ""}
+              {formatLiveNumber(liveNode.instrument.lastPrice) !== "—" ? `last ${formatLiveNumber(liveNode.instrument.lastPrice)}` : live?.kiteStatus ?? "unavailable"}
               {liveNode.instrument.qty !== undefined ? ` · qty ${formatLiveNumber(liveNode.instrument.qty)}` : ""}
-              {liveNode.instrument.pnl !== undefined ? ` · PnL ${formatLiveNumber(liveNode.instrument.pnl)}` : ""}
-              {` · ${live?.kiteStatus ?? "unavailable"}`}
             </p>
           )}
           {node.params.symbol && !liveNode?.instrument && live && (
-            <p className="symphony-live-badge" data-status="unavailable">Not in live holdings{live.watchlist.status === "unavailable" ? " · watchlist unavailable" : " or watchlist"}</p>
+            <p className="symphony-live-badge" data-status={live.status === "live" ? "unavailable" : live.status}>
+              {live.status === "live"
+                ? `Not in live holdings${live.watchlist.status === "unavailable" ? " · watchlist unavailable" : " or watchlist"}`
+                : "Not in last known holdings/watchlist"}
+            </p>
           )}
         </div>
       );
@@ -548,7 +551,7 @@ function TreeBlockView({
               disabled={disabled}
               allowNumber={false}
               ariaLabel="If left operand"
-              symbols={symbols}
+              live={live}
               onChange={(left) => onChange({ ...node, params: { ...node.params, left } })}
             />
             <select
@@ -566,11 +569,11 @@ function TreeBlockView({
               disabled={disabled}
               allowNumber
               ariaLabel="If right operand"
-              symbols={symbols}
+              live={live}
               onChange={(right) => onChange({ ...node, params: { ...node.params, right } })}
             />
           </div>
-          <div className="symphony-if-wells">
+          <div className="symphony-if-wells" data-orientation="vertical">
             <section className="symphony-well" aria-label="Then">
               <h4>THEN</h4>
               <TreeChildren
@@ -730,6 +733,7 @@ export function TreeCanvas({
       className="builder-canvas symphony-tree"
       data-testid="algorithm-tree-workarea"
       data-canvas-mode="tree"
+      data-tree-orientation="vertical"
       onClick={() => {
         onSelect(null);
         setOpenMenuKey(null);

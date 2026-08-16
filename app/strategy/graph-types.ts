@@ -91,7 +91,7 @@ export {
   type WeightNode,
 } from "../../packages/contracts/src/strategy-tree.ts";
 
-export { validateStrategyGraph } from "./validate";
+export { validateStrategyGraph } from "./validate.ts";
 
 export const SNAP_PX = 20;
 export const UNDO_DEPTH = 50;

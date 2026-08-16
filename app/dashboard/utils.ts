@@ -1,4 +1,4 @@
-import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Newspaper } from "lucide-react";
+import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Library, Newspaper } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
 import {
   healthActions,
@@ -573,9 +573,9 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "builder-else", title: "Fill or accept an empty ELSE", detail: "If/Else THEN can hold assets; empty ELSE is allowed and warned. Do not draw wires.", numericAdvantage: "THEN / ELSE wells", strategicAdvantage: "Completes the condition without a flowchart", lane: "monitor", tone: "red" },
   ],
   strategies: [
-    { id: "strat-review", title: "Review featured Composer reconstructions", detail: "Read the highest published OOS annualized and cumulative trees before opening one in Algorithm Canvas.", numericAdvantage: "9 public trees", strategicAdvantage: "Keeps research scoped to reconstructable pages", lane: "today", tone: "blue" },
-    { id: "strat-stats", title: "Check as-of dates on published OOS stats", detail: "Treat listing and page figures as Composer-published snapshots dated on the card, not as live alpha.", numericAdvantage: "As-of on every card", strategicAdvantage: "Prevents fabricated performance", lane: "today", tone: "green" },
-    { id: "strat-market", title: "Keep US Composer trees off the Indian seed", detail: "These cards use SPY/TQQQ-family symbols as Composer published them. Indian Core-Satellite stays on Algorithm Canvas.", numericAdvantage: "US symbols labeled", strategicAdvantage: "Avoids mixing market universes", lane: "monitor", tone: "amber" },
+    { id: "strat-review", title: "Review the nine NSE library trees", detail: "Open a card to read the full vertical tree before sending it to Algorithm Canvas.", numericAdvantage: "9 NSE ETF trees", strategicAdvantage: "Keeps research scoped to Indian-listed sleeves", lane: "today", tone: "blue" },
+    { id: "strat-stats", title: "Do not treat empty OOS tiles as live alpha", detail: "Library KPIs stay em dash until an Indian-market engine run exists. Composer US figures are not copied.", numericAdvantage: "— until ran", strategicAdvantage: "Prevents fabricated performance", lane: "today", tone: "green" },
+    { id: "strat-market", title: "Confirm every leaf is a Nifty 500 name", detail: "Sleeves use RELIANCE, TCS, HDFCBANK, INFY, ITC and other official NSE constituent names. No SPY/TQQQ/SOXL.", numericAdvantage: "NSE only", strategicAdvantage: "Keeps Stratji on Indian markets", lane: "monitor", tone: "amber" },
     { id: "strat-open", title: "Open one tree in Algorithm Canvas", detail: "Deep-link a reconstruction into the tree editor when you want to edit. The library stays read-only.", numericAdvantage: "?view=builder&section=canvas&tree=", strategicAdvantage: "Edits stay on the canvas, not in Health or Sectors", lane: "monitor", tone: "red" },
   ],
 };
@@ -586,7 +586,7 @@ export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string;
   { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
   { key: "builder", label: "Algorithm Canvas", note: "Nested tree and JSON", icon: GitBranch },
-  { key: "strategies", label: "Strategies", note: "Public Composer trees", icon: GitBranch },
+  { key: "strategies", label: "Strategies", note: "NSE strategy library", icon: Library },
 ];
 
 export function number(value: number | string | undefined) {
@@ -618,10 +618,10 @@ export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" |
   return "moderate";
 }
 
-/** Direction-column bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
+/** Direction-row bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
 export type HealthDirectionBucket = "good" | "moderate" | "bad" | "unavailable";
 
-/** Visible H-3 columns only — unavailable averages render inside Context dependent, not a fourth column. */
+/** Visible H-3 rows only — unavailable averages render inside Context dependent, not a fourth group. */
 export const HEALTH_DIRECTION_COLUMNS: Array<{
   id: Exclude<HealthDirectionBucket, "unavailable">;
   title: string;
@@ -642,7 +642,7 @@ export function healthMetricDirectionBucket(
   return healthTrendTone(metric, average.direction);
 }
 
-/** Stable Health category order for deterministic column packing (Body Measurements / Hearing excluded). */
+/** Stable Health category order for deterministic row packing (Body Measurements / Hearing excluded). */
 export const HEALTH_CATEGORY_ORDER = [
   "Activity",
   "Sleep",
@@ -683,7 +683,7 @@ export type HealthDirectionMetricEntry = {
   metricIndex: number;
 };
 
-/** Flatten enabled Health categories into direction columns with stable category→metric order. */
+/** Flatten enabled Health categories into direction rows with stable category→metric order. */
 export function groupHealthMetricsByDirection(
   categories: Array<{ name: string; metrics: HealthMetric[] }>,
   averagePeriod: HealthAveragePeriod,
@@ -702,9 +702,13 @@ export function groupHealthMetricsByDirection(
     })
     .sort((left, right) => left.categoryIndex - right.categoryIndex || left.category.name.localeCompare(right.category.name));
 
+  const seen = new Set<string>();
   for (const { category, categoryIndex } of ranked) {
     const accent = healthCategoryAccentClass(category.name);
     category.metrics.forEach((metric, metricIndex) => {
+      const identity = `${category.name}::${metric.label.trim().toLowerCase()}`;
+      if (seen.has(identity)) return;
+      seen.add(identity);
       const bucket = healthMetricDirectionBucket(metric, averagePeriod);
       columns[bucket].push({
         categoryName: category.name,

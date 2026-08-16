@@ -19,6 +19,7 @@ export type TreeKpiLiveValue = {
   source: "kite" | "yfinance" | "computed";
   status: LiveValueStatus;
   label?: string;
+  reason?: string;
 };
 
 export type TreeNodeLive = {
@@ -59,8 +60,38 @@ function fundamentalForKpi(kpiId: string, fundamentals: YfinanceFundamentals): n
       return fundamentals.salesGrowthYoy ?? null;
     case "pe_ttm":
       return fundamentals.peTtm ?? null;
+    case "pe_fwd":
+      return fundamentals.peFwd ?? null;
+    case "pb":
+      return fundamentals.pb ?? null;
+    case "ps_ttm":
+      return fundamentals.psTtm ?? null;
     case "ev_ebitda":
       return fundamentals.evEbitda ?? null;
+    case "ev_sales":
+      return fundamentals.evSales ?? null;
+    case "dividend_yield":
+      return fundamentals.dividendYield ?? null;
+    case "earnings_yield":
+      return fundamentals.earningsYield ?? (fundamentals.peTtm ? 1 / fundamentals.peTtm : null);
+    case "fcf_yield":
+      return fundamentals.fcfYield ?? (fundamentals.freeCashflow !== undefined && fundamentals.marketCap
+        ? fundamentals.freeCashflow / fundamentals.marketCap
+        : null);
+    case "roe":
+      return fundamentals.roe ?? null;
+    case "roce":
+      return fundamentals.roce ?? null;
+    case "peg":
+      return fundamentals.peg ?? null;
+    case "price_to_fcf":
+      return fundamentals.priceToFcf ?? (fundamentals.freeCashflow && fundamentals.marketCap
+        ? fundamentals.marketCap / fundamentals.freeCashflow
+        : null);
+    case "book_yield":
+      return fundamentals.bookYield ?? (fundamentals.pb ? 1 / fundamentals.pb : null);
+    case "ev_ebit":
+      return fundamentals.evEbit ?? null;
     default:
       return null;
   }
@@ -88,14 +119,14 @@ export function lookupKpiValue(
     };
   }
   const computedHit = computed.find((item) => item.kpiId === kpiId);
-  if (computedHit) {
+  if (computedHit && computedHit.value !== null) {
     return {
       kpiId,
       symbol,
       value: computedHit.value,
       asOf,
-      source: "computed",
-      status: computedHit.value === null ? "unavailable" : "live",
+      source: computedHit.source === "yfinance" ? "yfinance" : "computed",
+      status: "live",
       label: computedHit.label ?? label,
     };
   }
@@ -116,9 +147,10 @@ export function lookupKpiValue(
     symbol,
     value: null,
     asOf,
-    source: "yfinance",
+    source: computedHit?.source === "computed" ? "computed" : "yfinance",
     status: "unavailable",
     label,
+    reason: computedHit?.reason,
   };
 }
 

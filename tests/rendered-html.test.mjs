@@ -337,8 +337,8 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
     readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(sharedUi, /portfolio-section-v2-\$\{number\}-open/);
-  assert.match(sharedUi, /const \[open, setOpen\] = useState\(false\)/);
-  assert.match(sharedUi, /getItem\(storageKey\) === "true"/);
+  assert.match(sharedUi, /const \[open, setOpen\] = useState\(defaultOpen\)/);
+  assert.match(sharedUi, /stored === "true"/);
   assert.match(sharedUi, /dashboard-expand-section/);
   assert.match(sharedUi, /export function expandDashboardSection/);
   assert.match(sharedUi, /export function dashboardSectionNumberFromNavId/);
@@ -1056,7 +1056,8 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.match(globalCss, /\.health-direction-grid/);
     assert.match(globalCss, /\.health-cat-heart/);
     assert.match(globalCss, /\.health-direction-grid\.compact/);
-    assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+    assert.match(globalCss, /\.health-direction-row/);
+    assert.match(globalCss, /grid-template-columns:repeat\(auto-fill,minmax\(168px,1fr\)\)/);
     assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
     assert.doesNotMatch(globalCss, /\.direction-unavailable/);
     const utilsSource = await readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8");
@@ -1345,6 +1346,22 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.axis-risk-stack/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-workbench\.scenario-weather \.macro-event-tabs button\.active/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.lifecycle-panel\.evolution-river \.chart-wrap/);
+  assert.match(visualCss, /--vo-desk:\s*#1d4ed8/);
+  assert.match(visualCss, /--vo-map:\s*#0d9488/);
+  assert.match(visualCss, /--vo-news:\s*#a855f7/);
+  assert.match(visualCss, /--vo-body:\s*#f43f5e/);
+  assert.match(visualCss, /--vo-canvas:\s*#d97706/);
+  assert.match(visualCss, /--vo-strategies:\s*#65a30d/);
+  assert.match(visualCss, /button\[data-mode="investment"\]/);
+  assert.match(visualCss, /button\[data-mode="sectors"\]/);
+  assert.match(visualCss, /button\[data-mode="intelligence"\]/);
+  assert.match(visualCss, /button\[data-mode="health"\]/);
+  assert.match(visualCss, /button\[data-mode="builder"\]/);
+  assert.match(visualCss, /button\[data-mode="strategies"\]/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="builder"\][\s\S]*--vo-canvas/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="strategies"\][\s\S]*--vo-strategies/);
+  assert.match(globalCss, /button\.active\[data-mode="builder"\]/);
+  assert.match(globalCss, /button\.active\[data-mode="strategies"\]/);
 });
 
 test("source freshness details reserve layout space above the sticky workspace navigation", async () => {
@@ -1387,4 +1404,14 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
   assert.match(workspace.text, /(?:label|title|id):\s*"canvas"|["']Canvas["']|>CANVAS</);
   assert.match(workspace.text, /(?:label|title|id):\s*"json"|["']JSON["']|>JSON</i);
   assert.match(workspace.text, /<DailyKanbanBoard workspace="builder"\s*\/>/);
+});
+
+test("builder and strategies query strings SSR their workspace chrome", async () => {
+  const builder = await (await render("/?view=builder&section=canvas")).text();
+  assert.match(builder, /Algorithm Builder/);
+  assert.match(builder, /data-workspace="builder"/);
+  assert.match(builder, /kpi-registry-panel|KPI registry/);
+  const strategies = await (await render("/?view=strategies&section=y2")).text();
+  assert.match(strategies, /data-workspace="strategies"/);
+  assert.match(strategies, /strategy-card|simons-kmlm|NSE ETF/);
 });
