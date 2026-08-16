@@ -11,6 +11,13 @@ import {
   type WeightChild,
   type WeightNode,
 } from "../../packages/contracts/src/strategy-tree.ts";
+import {
+  DEFAULT_ASSET_CLASSES,
+  DEFAULT_INTERVAL,
+  type StrategyEdge,
+  type StrategyGraphV2,
+  type StrategyNode,
+} from "./graph-types";
 
 const KPI_IDS = new Set((kpiRegistry.kpis as Array<{ id: string; label: string }>).map((kpi) => kpi.id));
 const KPI_LABELS = new Map((kpiRegistry.kpis as Array<{ id: string; label: string }>).map((kpi) => [kpi.id, kpi.label]));
@@ -22,13 +29,6 @@ function knownKpi(id: string): boolean {
 function kpiLabel(id: string): string {
   return KPI_LABELS.get(id) ?? id;
 }
-import {
-  DEFAULT_ASSET_CLASSES,
-  DEFAULT_INTERVAL,
-  type StrategyEdge,
-  type StrategyGraphV2,
-  type StrategyNode,
-} from "./graph-types";
 
 const PERCENT_TOLERANCE = 0.51;
 
@@ -168,7 +168,7 @@ function emitCondition(
   const right = node.params.right;
   const leftKpi = left.type === "kpi"
     ? emitKpi(ctx, left, universeId)
-    : emitKpi(ctx, { type: "kpi", kpiId: "close", symbol: "NIFTYBEES" }, universeId);
+    : emitKpi(ctx, { type: "kpi", kpiId: "close", symbol: "RELIANCE" }, universeId);
   if (right.type === "kpi") emitKpi(ctx, right, universeId);
   const comparator = pushNode(ctx, {
     id: nextCompileId("cmp", ctx.usedIds),

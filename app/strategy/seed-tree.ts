@@ -1,8 +1,27 @@
 import type { StrategyTreeV1 } from "../../packages/contracts/src/strategy-tree.ts";
+import { nifty500Name } from "./builder-universe";
 import { compileTreeToGraph } from "./tree-compile";
 import type { StrategyGraphV2 } from "./graph-types";
 
 export const SEED_TREE_ID = "seed-core-satellite-in";
+
+const SEED_RELIANCE = "RELIANCE";
+const SEED_TCS = "TCS";
+const SEED_HDFCBANK = "HDFCBANK";
+const SEED_INFY = "INFY";
+const SEED_ICICIBANK = "ICICIBANK";
+const SEED_BHARTI = "BHARTIARTL";
+const SEED_ITC = "ITC";
+
+function seedAsset(id: string, symbol: string) {
+  return {
+    id,
+    kind: "asset" as const,
+    label: nifty500Name(symbol) ?? symbol,
+    params: { symbol },
+    children: [] as const,
+  };
+}
 
 export function createSeedTree(now = new Date()): StrategyTreeV1 {
   const stamp = now.toISOString();
@@ -10,7 +29,7 @@ export function createSeedTree(now = new Date()): StrategyTreeV1 {
     treeVersion: "1",
     id: SEED_TREE_ID,
     name: "Core Satellite",
-    description: "Indian core-satellite: gold sleeve, Nifty-family equity ETFs, and a NIFTYBEES trend gate for the liquid sleeve.",
+    description: "Indian core-satellite on Nifty 500 equities: quality bank sleeve, large-cap core, and a Reliance trend gate into ITC.",
     interval: "month",
     createdAt: stamp,
     updatedAt: stamp,
@@ -24,25 +43,19 @@ export function createSeedTree(now = new Date()): StrategyTreeV1 {
           {
             percent: 15,
             node: {
-              id: "group-gold",
+              id: "group-quality",
               kind: "group",
-              label: "Satellite-Gold",
+              label: "Satellite-Quality",
               params: {},
               children: [
                 {
-                  id: "weight-gold",
+                  id: "weight-quality",
                   kind: "weight",
-                  label: "Gold sleeve",
+                  label: "Quality sleeve",
                   params: { method: "inverse_volatility", lookbackDays: 30 },
                   children: [
                     {
-                      node: {
-                        id: "asset-goldbees",
-                        kind: "asset",
-                        label: "Nippon India ETF Gold BeES",
-                        params: { symbol: "GOLDBEES" },
-                        children: [],
-                      },
+                      node: seedAsset("asset-hdfcbank", SEED_HDFCBANK),
                     },
                   ],
                 },
@@ -57,69 +70,33 @@ export function createSeedTree(now = new Date()): StrategyTreeV1 {
               label: "Core-Equity",
               params: {},
               children: [
-                {
-                  id: "asset-niftybees",
-                  kind: "asset",
-                  label: "Nippon India ETF Nifty BeES",
-                  params: { symbol: "NIFTYBEES" },
-                  children: [],
-                },
-                {
-                  id: "asset-juniorbees",
-                  kind: "asset",
-                  label: "Nippon India ETF Junior BeES",
-                  params: { symbol: "JUNIORBEES" },
-                  children: [],
-                },
-                {
-                  id: "asset-bankbees",
-                  kind: "asset",
-                  label: "Nippon India ETF Bank BeES",
-                  params: { symbol: "BANKBEES" },
-                  children: [],
-                },
-                {
-                  id: "asset-itbees",
-                  kind: "asset",
-                  label: "Nippon India ETF IT BeES",
-                  params: { symbol: "ITBEES" },
-                  children: [],
-                },
-                {
-                  id: "asset-setfnif50",
-                  kind: "asset",
-                  label: "SBI ETF Nifty 50",
-                  params: { symbol: "SETFNIF50" },
-                  children: [],
-                },
+                seedAsset("asset-reliance", SEED_RELIANCE),
+                seedAsset("asset-tcs", SEED_TCS),
+                seedAsset("asset-infy", SEED_INFY),
+                seedAsset("asset-icicibank", SEED_ICICIBANK),
+                seedAsset("asset-bharti", SEED_BHARTI),
               ],
             },
           },
           {
             percent: 55,
             node: {
-              id: "group-bond",
+              id: "group-defensive",
               kind: "group",
-              label: "Satellite-Bond",
+              label: "Satellite-Defensive",
               params: {},
               children: [
                 {
                   id: "if-trend",
                   kind: "if_else",
-                  label: "NIFTYBEES trend gate",
+                  label: "RELIANCE trend gate",
                   params: {
-                    left: { type: "kpi", kpiId: "close", symbol: "NIFTYBEES" },
+                    left: { type: "kpi", kpiId: "close", symbol: SEED_RELIANCE },
                     op: ">",
-                    right: { type: "kpi", kpiId: "sma_200", symbol: "NIFTYBEES" },
+                    right: { type: "kpi", kpiId: "sma_200", symbol: SEED_RELIANCE },
                   },
                   then: [
-                    {
-                      id: "asset-liquidbees",
-                      kind: "asset",
-                      label: "Nippon India ETF Liquid BeES",
-                      params: { symbol: "LIQUIDBEES" },
-                      children: [],
-                    },
+                    seedAsset("asset-itc", SEED_ITC),
                   ],
                   else: [],
                 },

@@ -14,6 +14,7 @@ import {
   type StrategyNode,
 } from "./graph-types";
 import { compileTreeToGraph } from "./tree-compile";
+import type { LibraryNseStatsCache } from "./library-nse-stats";
 
 export const STRATEGIES_UPSERT_PATH = "/strategies";
 export const STRATEGIES_UPSERT_ALIAS = "/api/strategies";
@@ -24,6 +25,7 @@ export const BACKTESTS_RUN_PATH = "/api/backtests/run";
 export const STRATEGIES_LIST_PATH = "/api/strategies";
 export const STRATEGIES_PREVIEW_PATH = "/api/strategies/preview";
 export const STRATEGIES_LIVE_PATH = "/api/strategies/live";
+export const LIBRARY_NSE_STATS_PATH = "/api/strategies/library-stats";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 export type BacktestConfigureStatus = "idle" | "configuring" | "configured" | "error";
@@ -363,6 +365,7 @@ export type BacktestRunResponse = {
   curve?: Array<{ date: string; equity: number; benchmark?: number }>;
   totalReturnPct?: number | null;
   annualizedReturnPct?: number | null;
+  sharpe?: number | null;
   maxDrawdownPct?: number | null;
   endingEquity?: number | null;
 };
@@ -392,4 +395,14 @@ export async function runTreeBacktestOnServer(tree: StrategyTreeV1): Promise<Bac
     missingSymbols: Array.isArray(payload.missingSymbols) ? payload.missingSymbols as string[] : [],
     warnings: Array.isArray(payload.warnings) ? payload.warnings as string[] : [],
   };
+}
+
+export async function loadLibraryNseStats(refresh = false): Promise<LibraryNseStatsCache> {
+  const url = refresh ? `${LIBRARY_NSE_STATS_PATH}?refresh=1` : LIBRARY_NSE_STATS_PATH;
+  const response = await fetch(url, { cache: "no-store" });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(failureMessage(payload, `Library NSE stats failed (${response.status})`));
+  }
+  return payload as unknown as LibraryNseStatsCache;
 }

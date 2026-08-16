@@ -294,7 +294,7 @@ export function selectedInstrumentTypes(assetClasses: readonly string[]): Instru
 
 const KNOWN_ETF_SYMBOLS = new Set([
   "NIFTYBEES", "JUNIORBEES", "BANKBEES", "GOLDBEES", "SILVERBEES", "LIQUIDBEES",
-  "ITBEES", "PHARMABEES", "PSUBNKBEES", "INFRABEES", "SETFNIF50", "SETFNN50",
+  "ITBEES", "PHARMABEES", "PSUBNKBEES", "INFRABEES", "SETFNIF50", "SETFNN50", "GILTBEES",
 ]);
 
 export function inferAssetClassForSymbol(symbol: string): AssetClass {
