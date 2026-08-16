@@ -3,6 +3,7 @@
  * Client helpers and the validator live in `app/strategy/graph-types.ts` + `validate.ts`.
  * Do not bump schemaVersion; extend fields in a backward-compatible way.
  */
+import type { StrategyTreeV1 } from "./strategy-tree.ts";
 
 export const STRATEGY_SCHEMA_VERSION = "2" as const;
 
@@ -133,6 +134,8 @@ export type StrategyGraphV2 = {
   pinnedAlgorithmVersions: Record<string, string>;
   createdAt?: string;
   updatedAt?: string;
+  /** Nested-block source of truth. Omitted on graph-only library rows. */
+  tree?: StrategyTreeV1;
 };
 
 export type ValidationSeverity = "error" | "warning";

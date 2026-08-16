@@ -6,7 +6,7 @@ import type { HealthAveragePeriod, HealthMetric } from "../health-data";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { LiveHolding } from "../live-types";
 import type { DonutLabelProps, KanbanWorkspace, WorkspaceKey } from "./types";
-import { builderSectionNumber, isBuilderSection } from "./workspace-routing";
+import { builderSectionNumber, isBuilderSection, isStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
 import {
   HEALTH_DIRECTION_COLUMNS,
   groupHealthMetricsByDirection,
@@ -260,7 +260,9 @@ function workspaceOrbitalBadge(
         }
       }
     case "builder":
-      return "GRAPH";
+      return "TREE";
+    case "strategies":
+      return "OOS";
     default: {
       const _exhaustive: never = workspace;
       return _exhaustive;
@@ -320,7 +322,8 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
 /** Map workspace nav ids (i1, s2, m3, h1, board) to CollapsibleSection numbers (I-1, S-2, B-1, …). */
 export function dashboardSectionNumberFromNavId(id: string): string {
   if (isBuilderSection(id)) return builderSectionNumber(id);
-  const match = /^([ismh])(\d+)$/i.exec(id.trim());
+  if (isStrategiesSection(id)) return strategiesSectionNumber(id);
+  const match = /^([ismhy])(\d+)$/i.exec(id.trim());
   if (!match) return id.toUpperCase();
   return `${match[1]!.toUpperCase()}-${match[2]}`;
 }
@@ -331,20 +334,27 @@ export function expandDashboardSection(number: string) {
   window.dispatchEvent(new CustomEvent("dashboard-expand-section", { detail: { number } }));
 }
 
-export function CollapsibleSection({ number, title, note, children, headerAction }: { number: string; title: string; note: string; children: ReactNode; headerAction?: ReactNode }) {
-  // v2 keys default missing → collapsed; ignore legacy portfolio-section-*-open expands.
+export function CollapsibleSection({ number, title, note, children, headerAction, defaultOpen = false }: { number: string; title: string; note: string; children: ReactNode; headerAction?: ReactNode; defaultOpen?: boolean }) {
+  // v2 keys default missing → collapsed unless defaultOpen; ignore legacy portfolio-section-*-open expands.
   const storageKey = `portfolio-section-v2-${number}-open`;
-  const [open, setOpen] = useState(false);
+  const expandRequestedRef = useRef(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [openStateHydrated, setOpenStateHydrated] = useState(false);
   const contentId = `dashboard-section-${number}`;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setOpen(window.localStorage.getItem(storageKey) === "true");
+      const stored = window.localStorage.getItem(storageKey);
+      setOpen((current) => {
+        if (expandRequestedRef.current) return true;
+        if (stored === "true") return true;
+        if (stored === "false") return false;
+        return defaultOpen || current;
+      });
       setOpenStateHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [storageKey]);
+  }, [defaultOpen, storageKey]);
 
   useEffect(() => {
     if (!openStateHydrated) return;
@@ -354,7 +364,9 @@ export function CollapsibleSection({ number, title, note, children, headerAction
   useEffect(() => {
     const onExpand = (event: Event) => {
       const detail = (event as CustomEvent<{ number?: string }>).detail;
-      if (detail?.number === number) setOpen(true);
+      if (detail?.number !== number) return;
+      expandRequestedRef.current = true;
+      setOpen(true);
     };
     window.addEventListener("dashboard-expand-section", onExpand);
     return () => window.removeEventListener("dashboard-expand-section", onExpand);

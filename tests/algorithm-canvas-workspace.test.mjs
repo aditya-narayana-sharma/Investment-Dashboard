@@ -30,7 +30,9 @@ test("app routing resolves builder and algorithm-canvas without breaking existin
   assert.match(page, /workspace === "sectors"/);
   assert.match(page, /workspace === "intelligence"/);
   assert.match(page, /workspace === "health"/);
+  assert.match(page, /workspace === "strategies"/);
   assert.match(page, /value === "market-intelligence"/);
+  assert.match(page, /value === "strategy-library"/);
   softMatch(types, /type WorkspaceKey =[\s\S]*"builder"/, "WorkspaceKey includes builder");
   softMatch(routing, /algorithm-canvas/, "?view=algorithm-canvas alias");
   softMatch(workspaceRouting, /export function parseWorkspaceView/, "parseWorkspaceView");

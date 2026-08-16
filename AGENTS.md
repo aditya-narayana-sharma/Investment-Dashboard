@@ -61,14 +61,15 @@ valid Health snapshot with a failed extraction.
 
 ## Workspace and industry-filter invariants
 
-- Keep the five top-level workspaces separate: Investment, Sectoral Analytics,
-  Market Intelligence, Health & Wellness, and Algorithm Canvas. Preserve each
-  workspace's collapsible state and URL selection
-  (`?view=investment|sectors|intelligence|health|builder`). Alias
+- Keep the six top-level workspaces separate: Investment, Sectoral Analytics,
+  Market Intelligence, Health & Wellness, Algorithm Canvas, and Strategies.
+  Preserve each workspace's collapsible state and URL selection
+  (`?view=investment|sectors|intelligence|health|builder|strategies`). Alias
   `?view=market-intelligence` resolves to Market Intelligence. Alias
   `?view=algorithm-canvas` resolves to Algorithm Canvas (`builder`) and the
-  canvas section (`?view=builder&section=canvas`).
-- Use `DailyKanbanBoard` as the only action-board implementation across all five
+  canvas section (`?view=builder&section=canvas`). Alias
+  `?view=strategy-library` resolves to Strategies (`?view=strategies`).
+- Use `DailyKanbanBoard` as the only action-board implementation across all six
   workspaces. The Investment I-1 three-lane layout is canonical: summary header,
   `To Do Today`, `Monitor`, and `Completed Today` lanes, full action cards,
   compact completed rows, and compact empty lanes must remain visually
@@ -83,6 +84,13 @@ valid Health snapshot with a failed extraction.
   workspace is Algorithm Builder. Tabs are Action Board, Canvas, and JSON.
   Action Board uses the shared `DailyKanbanBoard` only. Do not add industry
   filters, sector-dimming, earnings, or the Market Intelligence digest here.
+- **Strategies** (`?view=strategies`, sections `y1` | `y2`, alias
+  `?view=strategy-library`) is a sixth workspace. Nav label and chrome title
+  are Strategies. Tabs are Action Board and Library. Action Board uses the
+  shared `DailyKanbanBoard` only. The library shows Composer-public
+  `StrategyTreeV1` reconstructions (US symbols as published). Do not add
+  industry filters, sector-dimming, earnings, or the Market Intelligence
+  digest here. Do not put Composer trees into Health, Sectors, or Intelligence.
 - Keep Health & Wellness as a non-scrolling three-panel console with H-1
   Action Board, H-2 Daily Optimism, and H-3 Vital Metrics. Dense Health
   content belongs on explicit URL-backed sub-pages, never in a vertically

@@ -100,7 +100,7 @@ export function parseStrategyGraph(raw: unknown): StrategyGraphV2 {
   if (!value.pinnedAlgorithmVersions || typeof value.pinnedAlgorithmVersions !== "object") {
     throw new Error("pinnedAlgorithmVersions is required");
   }
-  return cloneGraph({
+  const restored = cloneGraph({
     schemaVersion: "2",
     id: value.id,
     name: value.name,
@@ -112,6 +112,8 @@ export function parseStrategyGraph(raw: unknown): StrategyGraphV2 {
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   });
+  if (value.tree) restored.tree = structuredClone(value.tree);
+  return restored;
 }
 
 export class GraphHistory {

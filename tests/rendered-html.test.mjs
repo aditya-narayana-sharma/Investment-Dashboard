@@ -328,12 +328,13 @@ test("server-renders the portfolio dashboard", async () => {
 });
 
 test("CollapsibleSection defaults to collapsed with v2 open-only persistence", async () => {
-  const [sharedUi, investment, sectors, intelligence, health] = await Promise.all([
+  const [sharedUi, investment, sectors, intelligence, health, strategies] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(sharedUi, /portfolio-section-v2-\$\{number\}-open/);
   assert.match(sharedUi, /const \[open, setOpen\] = useState\(false\)/);
@@ -343,7 +344,7 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
   assert.match(sharedUi, /export function dashboardSectionNumberFromNavId/);
   assert.doesNotMatch(sharedUi, /getItem\(storageKey\) !== "false"/);
   assert.match(intelligence, /function IntelligenceFeedSection[\s\S]*?const \[open, setOpen\] = useState\(false\)/);
-  for (const workspace of [investment, sectors, intelligence, health]) {
+  for (const workspace of [investment, sectors, intelligence, health, strategies]) {
     assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(/);
   }
 });
@@ -389,12 +390,13 @@ test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", 
 });
 
 test("all four workspaces share consistent cyan section navigation bars", async () => {
-  const [sharedUi, investment, sectors, intelligence, health, globalCss] = await Promise.all([
+  const [sharedUi, investment, sectors, intelligence, health, strategies, globalCss] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
@@ -431,6 +433,10 @@ test("all four workspaces share consistent cyan section navigation bars", async 
       ['h2', "Daily Optimism"],
       ['h3', "Vital Metrics"],
     ]],
+    [strategies, "Strategies sections", [
+      ['y1', "Action Board"],
+      ['y2', "Library"],
+    ]],
   ]) {
     assert.match(source, new RegExp(`<WorkspaceSectionNav[\\s\\S]*label="${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     for (const [id, title] of sections) {
@@ -447,6 +453,8 @@ test("all four workspaces share consistent cyan section navigation bars", async 
   assert.match(health, /id="health-h1"/);
   assert.match(health, /id="health-h2"/);
   assert.match(health, /id="health-h3"/);
+  assert.match(strategies, /id="strategies-y1"/);
+  assert.match(strategies, /id="strategies-y2"/);
   assert.match(health, /searchParams\.set\("focus"/);
   assert.doesNotMatch(health, /id="health-h4"|\{ id: "h4"|number="H-4"|Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
   assert.doesNotMatch(sectors, /S-4|s4|EarningsMonthCalendar|sector-intelligence-filter|sector-dimmed/);
@@ -484,6 +492,7 @@ test("server-renders the print report and keeps controls interactive", async () 
       readFile(new URL("../app/dashboard/AppleMonthlyCalendar.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
     ]).then((parts) => parts.join("\n")),
     readFile(new URL("../app/report/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/report/report.module.css", import.meta.url), "utf8"),
@@ -828,6 +837,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /<DailyKanbanBoard workspace="sectors"\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="intelligence"\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="health"\/>/);
+  assert.match(page, /<DailyKanbanBoard workspace="strategies"\/>/);
   assert.doesNotMatch(page, /<DailyKanbanBoard[^>]+(?:lane|compact)=/);
   assert.doesNotMatch(globalCss, /\.kanban-board\.compact/);
   assert.match(globalCss, /\.canonical-action-board\{height:auto!important/);
@@ -1220,7 +1230,7 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case intelligence[\s\S]*case health/);
+  assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case intelligence[\s\S]*case health[\s\S]*case builder[\s\S]*case strategies/);
   assert.match(configuration, /URLQueryItem\(name: "view", value: rawValue\)/);
   assert.match(browser, /private\(set\) lazy var webView/);
   assert.match(browser, /portfolio-native-refresh/);
@@ -1363,6 +1373,7 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
   assert.match(page, /workspace === "sectors"/);
   assert.match(page, /workspace === "intelligence"/);
   assert.match(page, /workspace === "health"/);
+  assert.match(page, /workspace === "strategies"/);
   assert.match(page, /value === "market-intelligence"/);
   assert.match(chrome, /Algorithm Builder/);
   assert.doesNotMatch(chrome, /BuilderKanbanBoard|AlgorithmKanbanBoard|compact-action-board/);

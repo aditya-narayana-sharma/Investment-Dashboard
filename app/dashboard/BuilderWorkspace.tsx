@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { StrategyGraphV2 } from "../strategy/graph-types";
-import { createSeedGraph } from "../strategy/seed-graph";
-import { AlgorithmBuilder } from "./builder/AlgorithmBuilder";
+import type { StrategyGraphV2, StrategyTreeV1 } from "../strategy/graph-types";
+import { composerStrategyById } from "../strategy/composer-strategies";
+import { loadStrategyFromLibrary } from "../strategy/persist";
+import { compileTreeToGraph } from "../strategy/tree-compile";
+import { createSeedTree } from "../strategy/seed-tree";
+import { SymphonyEditor } from "./builder/SymphonyEditor";
 import { BuilderJsonPanel } from "./builder/BuilderJsonPanel";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
 import type { BuilderSection } from "./types";
@@ -21,14 +24,42 @@ function builderSectionFromUrl(): BuilderSection {
 
 export function BuilderWorkspace() {
   const [activeSection, setActiveSection] = useState<BuilderSection>("canvas");
-  const [graph, setGraph] = useState<StrategyGraphV2>(() => createSeedGraph());
+  const [tree, setTree] = useState<StrategyTreeV1>(() => createSeedTree());
+  const [graph, setGraph] = useState<StrategyGraphV2>(() => compileTreeToGraph(tree));
   const [canvasKey, setCanvasKey] = useState(0);
 
   useEffect(() => {
-    const sync = () => setActiveSection(builderSectionFromUrl());
+    const sync = () => {
+      const section = builderSectionFromUrl();
+      setActiveSection(section);
+      expandDashboardSection(dashboardSectionNumberFromNavId(section));
+    };
     sync();
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  useEffect(() => {
+    const loadTreeFromUrl = () => {
+      const id = new URLSearchParams(window.location.search).get("tree");
+      if (!id) return;
+      const card = composerStrategyById(id);
+      if (card) {
+        setTree(card.tree);
+        setGraph(compileTreeToGraph(card.tree));
+        setCanvasKey((current) => current + 1);
+        return;
+      }
+      void loadStrategyFromLibrary(id).then((document) => {
+        if (!document.tree) return;
+        setTree(document.tree);
+        setGraph(document.graph);
+        setCanvasKey((current) => current + 1);
+      }).catch(() => undefined);
+    };
+    loadTreeFromUrl();
+    window.addEventListener("popstate", loadTreeFromUrl);
+    return () => window.removeEventListener("popstate", loadTreeFromUrl);
   }, []);
 
   const selectSection = useCallback((sectionId: string) => {
@@ -43,8 +74,9 @@ export function BuilderWorkspace() {
     document.getElementById(`builder-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  const applyJson = useCallback((next: StrategyGraphV2) => {
-    setGraph(next);
+  const applyDocument = useCallback((nextTree: StrategyTreeV1, nextGraph: StrategyGraphV2) => {
+    setTree(nextTree);
+    setGraph(nextGraph);
     setCanvasKey((current) => current + 1);
   }, []);
 
@@ -67,14 +99,26 @@ export function BuilderWorkspace() {
       </div>
 
       <div id="builder-canvas" className="workspace-section">
-        <CollapsibleSection number={builderSectionNumber("canvas")} title="Canvas" note="Typed StrategyGraphV2 node graph · 20px snap · desktop editing">
-          <AlgorithmBuilder key={canvasKey} initialGraph={graph} onGraphChange={setGraph} />
+        <CollapsibleSection
+          number={builderSectionNumber("canvas")}
+          title="Canvas"
+          note="Nested tree · Add a Block · compiles to StrategyGraphV2 · desktop editing"
+          defaultOpen
+        >
+          <SymphonyEditor
+            key={canvasKey}
+            initialTree={tree}
+            onDocumentChange={(document) => {
+              if (document.tree) setTree(document.tree);
+              setGraph(document.graph);
+            }}
+          />
         </CollapsibleSection>
       </div>
 
       <div id="builder-json" className="workspace-section">
-        <CollapsibleSection number={builderSectionNumber("json")} title="JSON" note="Lossless StrategyGraphV2 view and edit · ids, positions, params and pins">
-          <BuilderJsonPanel graph={graph} disabled={false} onApply={applyJson} />
+        <CollapsibleSection number={builderSectionNumber("json")} title="JSON" note="Lossless tree + compiled graph · ids, percents, If/Else, pins">
+          <BuilderJsonPanel tree={tree} graph={graph} disabled={false} onApply={applyDocument} />
         </CollapsibleSection>
       </div>
     </div>

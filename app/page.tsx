@@ -14,7 +14,7 @@ import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection } from "./dashboard/workspace-routing";
+import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseStrategiesSection } from "./dashboard/workspace-routing";
 import {
   analysisWindowLabel,
   buildExposureDrivers,
@@ -32,6 +32,7 @@ import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
 import { BuilderWorkspace } from "./dashboard/BuilderWorkspace";
+import { StrategiesWorkspace } from "./dashboard/StrategiesWorkspace";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
 
@@ -492,6 +493,10 @@ export default function Home() {
     if (next === "builder") {
       url.searchParams.set("section", parseBuilderSection(url.searchParams.get("section")));
       url.searchParams.delete("page");
+    } else if (next === "strategies") {
+      url.searchParams.set("section", parseStrategiesSection(url.searchParams.get("section")));
+      url.searchParams.delete("page");
+      url.searchParams.delete("tree");
     }
     window.history[historyMode === "push" ? "pushState" : "replaceState"]({ view: next }, "", url);
   }, []);
@@ -526,7 +531,7 @@ export default function Home() {
       const value = url.searchParams.get("view");
       const { view: next, rewritten } = applyCanonicalWorkspaceUrl(url);
       setWorkspace(next);
-      if (value === "market-intelligence" || value === "algorithm-canvas" || rewritten) {
+      if (value === "market-intelligence" || value === "algorithm-canvas" || value === "strategy-library" || rewritten) {
         window.history.replaceState({ view: next }, "", url);
       }
     };
@@ -690,6 +695,8 @@ export default function Home() {
       />}
 
       {workspace === "builder" && <BuilderWorkspace />}
+
+      {workspace === "strategies" && <StrategiesWorkspace />}
 
       </section>
 

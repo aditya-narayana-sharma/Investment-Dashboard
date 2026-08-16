@@ -1,3 +1,4 @@
+import { parseStrategyTree, type StrategyTreeV1 } from "../../packages/contracts/src/strategy-tree.ts";
 import { buildBacktestRequest, type BacktestRequest } from "./backtest-request";
 import { parseStrategyGraph } from "./graph-ops";
 import {
@@ -12,20 +13,29 @@ import {
   type StrategyGraphV2,
   type StrategyNode,
 } from "./graph-types";
+import { compileTreeToGraph } from "./tree-compile";
 
 export const STRATEGIES_UPSERT_PATH = "/strategies";
 export const STRATEGIES_UPSERT_ALIAS = "/api/strategies";
 export const STRATEGIES_VALIDATE_PATH = "/api/strategies/validate";
 export const STRATEGIES_VALIDATE_ALIAS = "/strategies/validate";
 export const BACKTESTS_CONFIGURE_PATH = "/api/backtests";
+export const BACKTESTS_RUN_PATH = "/api/backtests/run";
+export const STRATEGIES_LIST_PATH = "/api/strategies";
 export const STRATEGIES_PREVIEW_PATH = "/api/strategies/preview";
+export const STRATEGIES_LIVE_PATH = "/api/strategies/live";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 export type BacktestConfigureStatus = "idle" | "configuring" | "configured" | "error";
 
+export type StrategyDocument = {
+  tree?: StrategyTreeV1;
+  graph: StrategyGraphV2;
+};
+
 export type StrategySaveResponse = {
   status: "saved" | "invalid" | "failed";
-  store?: "sqlite";
+  store?: "sqlite" | "supabase";
   strategy?: { id: string; name: string; createdAt: string; updatedAt: string };
   graph?: StrategyGraphV2;
   message?: string;
@@ -128,6 +138,9 @@ export function exportStrategyGraphJson(graph: StrategyGraphV2): string {
 export function importStrategyGraphJson(raw: string | unknown): StrategyGraphV2 {
   const parsed = typeof raw === "string" ? JSON.parse(raw) as unknown : raw;
   const value = asRecord(parsed);
+  if (value.graph && typeof value.graph === "object" && !Array.isArray(value.graph) && !Array.isArray(value.nodes)) {
+    return importStrategyDocumentJson(value).graph;
+  }
   const nodesRaw = value.nodes;
   const edgesRaw = value.edges;
   if (!Array.isArray(nodesRaw) || !Array.isArray(edgesRaw)) throw new Error("nodes and edges are required");
@@ -143,6 +156,8 @@ export function importStrategyGraphJson(raw: string | unknown): StrategyGraphV2 
   if (typeof value.description === "string") restored.description = value.description;
   if (typeof value.createdAt === "string") restored.createdAt = value.createdAt;
   if (typeof value.updatedAt === "string") restored.updatedAt = value.updatedAt;
+  const embeddedTree = restoreEmbeddedTree(value.tree);
+  if (embeddedTree) restored.tree = embeddedTree;
   const graph = parseStrategyGraph(restored);
   for (let index = 0; index < graph.nodes.length; index += 1) {
     const node = graph.nodes[index];
@@ -153,7 +168,40 @@ export function importStrategyGraphJson(raw: string | unknown): StrategyGraphV2 
     if (source.label !== undefined) node.label = source.label;
   }
   graph.pinnedAlgorithmVersions = structuredClone(restored.pinnedAlgorithmVersions);
+  if (restored.tree) graph.tree = restored.tree;
   return graph;
+}
+
+function restoreEmbeddedTree(raw: unknown): StrategyTreeV1 | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  try {
+    return parseStrategyTree(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+export function exportStrategyDocumentJson(document: StrategyDocument): string {
+  const graph = cloneGraph(document.graph);
+  if (document.tree) graph.tree = structuredClone(document.tree);
+  return `${JSON.stringify({ tree: graph.tree ?? null, graph }, null, 2)}\n`;
+}
+
+export function importStrategyDocumentJson(raw: string | unknown): StrategyDocument {
+  const parsed = typeof raw === "string" ? JSON.parse(raw) as unknown : raw;
+  const value = asRecord(parsed);
+  if (value.graph && typeof value.graph === "object" && !Array.isArray(value.graph)) {
+    const graph = importStrategyGraphJson(value.graph);
+    const tree = restoreEmbeddedTree(value.tree) ?? graph.tree;
+    if (tree) graph.tree = tree;
+    return { tree, graph };
+  }
+  if (value.treeVersion === "1") {
+    const tree = parseStrategyTree(value);
+    return { tree, graph: compileTreeToGraph(tree) };
+  }
+  const graph = importStrategyGraphJson(value);
+  return { tree: graph.tree, graph };
 }
 
 export function triggerStrategyGraphDownload(graph: StrategyGraphV2, filename?: string) {
@@ -263,4 +311,85 @@ export async function configureBacktest(graph: StrategyGraphV2): Promise<Backtes
 
 export function localBacktestRequest(graph: StrategyGraphV2): BacktestRequest {
   return buildBacktestRequest(graph);
+}
+
+export type StrategyLibraryItem = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  hasTree: boolean;
+};
+
+export async function listStrategyLibrary(): Promise<StrategyLibraryItem[]> {
+  const response = await fetch(STRATEGIES_LIST_PATH, { cache: "no-store" });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(failureMessage(payload, `Library list failed (${response.status})`));
+  }
+  const strategies = Array.isArray(payload.strategies) ? payload.strategies : [];
+  return strategies.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    const graph = row.graph && typeof row.graph === "object" ? row.graph as Record<string, unknown> : {};
+    return [{
+      id: String(row.id ?? ""),
+      name: String(row.name ?? "Untitled"),
+      updatedAt: String(row.updatedAt ?? ""),
+      hasTree: Boolean(graph.tree),
+    }].filter((entry) => entry.id);
+  });
+}
+
+export async function loadStrategyFromLibrary(id: string): Promise<StrategyDocument> {
+  const response = await fetch(`${STRATEGIES_LIST_PATH}?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(failureMessage(payload, `Library load failed (${response.status})`));
+  }
+  const strategy = payload.strategy && typeof payload.strategy === "object"
+    ? payload.strategy as Record<string, unknown>
+    : payload;
+  const graphRaw = strategy.graph ?? payload.graph;
+  if (!graphRaw) throw new Error("Library row has no graph.");
+  return importStrategyDocumentJson({ graph: graphRaw, tree: (graphRaw as { tree?: unknown }).tree });
+}
+
+export type BacktestRunResponse = {
+  status: "ran" | "unavailable" | "failed";
+  ran: boolean;
+  message?: string;
+  warnings?: string[];
+  missingSymbols?: string[];
+  curve?: Array<{ date: string; equity: number; benchmark?: number }>;
+  totalReturnPct?: number | null;
+  annualizedReturnPct?: number | null;
+  maxDrawdownPct?: number | null;
+  endingEquity?: number | null;
+};
+
+export async function runTreeBacktestOnServer(tree: StrategyTreeV1): Promise<BacktestRunResponse> {
+  const response = await fetch(BACKTESTS_RUN_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tree }),
+    cache: "no-store",
+  });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    return {
+      status: "failed",
+      ran: false,
+      message: failureMessage(payload, `Backtest run failed (${response.status})`),
+    };
+  }
+  if (payload.ran === true && payload.status === "ran") {
+    return payload as BacktestRunResponse;
+  }
+  return {
+    status: payload.status === "unavailable" ? "unavailable" : "failed",
+    ran: false,
+    message: failureMessage(payload, "Backtest did not run."),
+    missingSymbols: Array.isArray(payload.missingSymbols) ? payload.missingSymbols as string[] : [],
+    warnings: Array.isArray(payload.warnings) ? payload.warnings as string[] : [],
+  };
 }

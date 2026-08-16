@@ -1,0 +1,101 @@
+.strategies-workspace-shell { display:block; min-height:0; overflow:visible; }
+.strategies-workspace-shell > .workspace-section + .workspace-section { margin-top:18px; }
+.strategies-workspace-chrome {
+  position:sticky;
+  top:0;
+  z-index:12;
+  display:grid;
+  gap:10px;
+  margin-bottom:12px;
+  padding-bottom:2px;
+  background:var(--bg-app);
+}
+.strategies-workspace-chrome h2 {
+  margin:0;
+  font-size:22px;
+  letter-spacing:-0.02em;
+}
+.strategies-workspace-chrome .workspace-section-nav { position:static; margin-bottom:0; }
+.strategies-library-toolbar {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  margin-bottom:12px;
+}
+.strategies-library-toolbar p {
+  margin:0;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+.strategies-sort {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.strategies-mine {
+  margin-bottom: 16px;
+}
+.strategies-mine h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.strategies-featured {
+  margin-bottom:14px;
+  padding:10px 12px;
+  border:2px solid #72aaff;
+  background:color-mix(in srgb, #182534 80%, transparent);
+}
+.strategies-featured p { margin:0 0 6px; font-size:12px; }
+.strategies-gallery {
+  display:grid;
+  gap:16px;
+}
+.strategy-card {
+  display:grid;
+  gap:10px;
+  padding:12px;
+  border:2px solid var(--line);
+  background:var(--bg-panel);
+}
+.strategy-card-head h3 { margin:0 0 4px; font-size:18px; }
+.strategy-card-head p { margin:0; color:var(--muted); font-size:13px; }
+.strategy-card-stats {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:8px;
+}
+.strategy-card-stats div {
+  display:grid;
+  gap:2px;
+}
+.strategy-card-stats small {
+  color:#72aaff;
+  font:800 10px/1 var(--font-mono);
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.strategy-card-stats b { font-size:14px; }
+.strategy-card-notes {
+  display:grid;
+  gap:6px;
+  margin:0;
+}
+.strategy-card-notes p { margin:0; font-size:12px; color:var(--muted); }
+.strategy-card-notes a { color:#93c5fd; }
+.strategy-card-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.strategy-unreconstructed {
+  margin-top:18px;
+  padding:10px 12px;
+  border:2px dashed var(--line);
+}
+.strategy-unreconstructed h3 { margin:0 0 8px; font-size:14px; }
+.strategy-unreconstructed li { margin:0 0 6px; font-size:12px; color:var(--muted); }
+.strategy-readonly-tree .symphony-add-wrap { display:none; }
+.strategy-readonly-tree .builder-canvas {
+  min-height:0;
+  max-height:640px;
+}
