@@ -19,7 +19,7 @@ import { KiteAlertTicket, type KiteAlertSelection } from "./KiteAlertTicket";
 import { KiteGttTicket, type KiteGttSelection } from "./KiteGttTicket";
 import { KiteOrderTicket, type KiteOrderSelection } from "./KiteOrderTicket";
 import { InstrumentGauge } from "./visual-components";
-import { analysisWindowLabel, exposureFactors, holdingOuterFill, inr, macroEvents } from "./utils";
+import { analysisWindowLabel, exposureFactors, holdingOuterFill, inr, macroEvents, type ExposureDriverBullet } from "./utils";
 
 type PortfolioMapDatum = Pick<LiveHolding, "symbol" | "name" | "qty" | "avg" | "price" | "value" | "pnl" | "pnlPct" | "dayPnl" | "dayPct" | "sector" | "subSector" | "risk"> & {
   weight: number;
@@ -594,8 +594,13 @@ export type InvestmentWorkspaceProps = {
     symbol: string;
     fullSymbol: string;
     total: number;
+    weight: number;
+    dayPct: number;
+    pnlPct: number;
     event: string;
     kpis: string;
+    eventBullets: ExposureDriverBullet[];
+    kpiBullets: ExposureDriverBullet[];
     oilWar?: number;
     fiiFlow?: number;
     valuation?: number;
@@ -952,19 +957,48 @@ export function InvestmentWorkspace({
             {hasPortfolio ? <>
               <div className="exposure-group-key"><span><i className="event"/>EVENTS · oil, geopolitics and flows</span><span><i className="kpi"/>KPIs · valuation, liquidity, volatility and leverage</span></div>
               <div className="exposure-factor-key">{exposureFactors.map((factor) => <span key={factor.key}><i style={{background:factor.color}}/><b>{factor.label}</b><small>{factor.group}</small></span>)}</div>
-              <ResponsiveContainer width="100%" height={286}>
-                <BarChart data={exposureComposition} layout="vertical" margin={{top:8,right:52,bottom:6,left:2}} barCategoryGap="27%">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={exposureComposition} layout="vertical" margin={{top:8,right:56,bottom:10,left:2}} barCategoryGap="14%">
                   <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                  <XAxis type="number" domain={[0,5]} ticks={[0,1,2,3,4,5]} tick={{fill:"var(--chart-tick)",fontSize:10}} label={{value:"COMPOSITE MONITORING INDEX",position:"insideBottom",offset:-3,fill:"var(--chart-tick)",fontSize:10}}/>
-                  <YAxis dataKey="symbol" type="category" width={58} tick={{fill:"var(--chart-label)",fontSize:10,fontWeight:800}}/>
+                  <XAxis type="number" domain={[0,5]} ticks={[0,1,2,3,4,5]} tick={{fill:"var(--chart-tick)",fontSize:12}} label={{value:"COMPOSITE MONITORING INDEX",position:"insideBottom",offset:-2,fill:"var(--chart-tick)",fontSize:12}}/>
+                  <YAxis dataKey="symbol" type="category" width={72} tick={{fill:"var(--chart-label)",fontSize:12,fontWeight:800}}/>
                   <Tooltip formatter={(value,name) => [`${(Number(value) * exposureFactors.length).toFixed(1)} / 5 raw · ${Number(value).toFixed(2)} points`, String(name)]} labelFormatter={(label) => `${label} · equal-weighted composition`}/>
                   {exposureFactors.map((factor,index) => <Bar key={factor.key} dataKey={factor.key} name={factor.label} stackId="exposure" fill={factor.color} radius={index === exposureFactors.length - 1 ? [0,3,3,0] : 0} isAnimationActive={false}>
                     {index === exposureFactors.length - 1 && <LabelList dataKey="total" position="right" className="exposure-total-label" formatter={(value) => `${Number(value).toFixed(1)}/5`}/>}
                   </Bar>)}
                 </BarChart>
               </ResponsiveContainer>
-              <div className="exposure-driver-map"><div className="exposure-driver-head"><span>Holding</span><span>Event transmission</span><span>KPI watch</span></div>{exposureComposition.map(item => <div className="exposure-driver-row" key={item.fullSymbol}><b>{item.symbol}<small>{item.total.toFixed(1)}/5 composite</small></b><span>{item.event}</span><span>{item.kpis}</span></div>)}</div>
-              <p className="exposure-method">Method: six 1-5 monitoring inputs contribute equally. Segment width = raw score ÷ 6; the full bar = their average. This is a prioritisation aid, not probability of loss.</p>
+              <div className="exposure-driver-map">
+                <div className="exposure-driver-head"><span>Holding</span><span>Event transmission</span><span>KPI watch</span></div>
+                {exposureComposition.map((item) => (
+                  <div className="exposure-driver-row" key={item.fullSymbol}>
+                    <b>
+                      {item.symbol}
+                      <small>{item.total.toFixed(1)}/5 composite</small>
+                      <small className="exposure-driver-meta">{item.weight.toFixed(1)}% wt · day {item.dayPct >= 0 ? "+" : ""}{item.dayPct.toFixed(1)}% · P&L {item.pnlPct >= 0 ? "+" : ""}{item.pnlPct.toFixed(1)}%</small>
+                    </b>
+                    <ul className="exposure-driver-list" aria-label={`${item.symbol} event transmission`}>
+                      {item.eventBullets.map((bullet) => (
+                        <li key={bullet.key} data-tone={bullet.tone}>
+                          <span className="exposure-driver-kpi">{bullet.label}</span>
+                          <strong>{bullet.value}</strong>
+                          <span className="exposure-driver-detail">{bullet.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <ul className="exposure-driver-list" aria-label={`${item.symbol} KPI watch`}>
+                      {item.kpiBullets.map((bullet) => (
+                        <li key={bullet.key} data-tone={bullet.tone}>
+                          <span className="exposure-driver-kpi">{bullet.label}</span>
+                          <strong>{bullet.value}</strong>
+                          <span className="exposure-driver-detail">{bullet.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="exposure-method">Method: six 1-5 monitoring inputs contribute equally. Segment width = raw score ÷ 6; the full bar = their average. Bullet scores: ≤2 supportive (green), 3 watch (amber), ≥4 elevated (red). This is a prioritisation aid, not probability of loss.</p>
             </> : <div className="live-empty compact"><ShieldAlert size={24}/><b>Risk composition waits for live positions</b><p>No stored price snapshot is displayed.</p></div>}
           </section>
           <article className="panel risk-panel threat-flower holdings-stack"><div className="panel-title"><div><h3>Portfolio / holdings risk</h3><p>{livePortfolioRiskProfiles.length} current Kite holdings · selectable against live-portfolio average</p></div><ScanSearch size={18}/></div><RiskRadar profiles={livePortfolioRiskProfiles} selected={portfolioRisk} onSelect={setPortfolioRisk} averageLabel="Current portfolio average" idPrefix="portfolio-holdings-risk" explainSelected evidenceContext={{ holdings, asOf: snapshot.asOf, classification }} emptyLabel="No live holding risk profiles" /></article>

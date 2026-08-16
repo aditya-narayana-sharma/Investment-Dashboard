@@ -14,16 +14,16 @@ import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
+import { applyCanonicalWorkspaceUrl, parseBuilderSection } from "./dashboard/workspace-routing";
 import {
   analysisWindowLabel,
-  exposureContext,
+  buildExposureDrivers,
   exposureFactors,
   fallbackContent,
   fallbackEarnings,
   fallbackHealth,
   latestCompletedHealthDateKey,
   missingHealthDateKeys,
-  workspaces,
 } from "./dashboard/utils";
 import { AppearanceToggle, DashboardTabs, HealthIncognitoToggle, type DashboardAppearance } from "./dashboard/shared-ui";
 import { PulseConstellation } from "./dashboard/visual-components";
@@ -31,6 +31,7 @@ import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
+import { BuilderWorkspace } from "./dashboard/BuilderWorkspace";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
 
@@ -248,16 +249,20 @@ export default function Home() {
         Object.entries(rawScores).map(([key, score]) => [key, Number((score / exposureFactors.length).toFixed(3))]),
       );
       const total = Object.values(rawScores).reduce((sum, score) => sum + score, 0) / exposureFactors.length;
+      const drivers = buildExposureDrivers(holding.symbol, rawScores);
       return {
         symbol: holding.symbol.replace("ICICIBANK", "ICICI").replace("BHARTIARTL", "AIRTEL").replace("JSWENERGY", "JSW").replace("MAXHEALTHCARE", "MAX"),
         fullSymbol: holding.symbol,
         total: Number(total.toFixed(1)),
+        weight: holding.weight,
+        dayPct: holding.dayPct,
+        pnlPct: holding.pnlPct,
         rawScores,
         ...contributions,
-        ...(exposureContext[holding.symbol] ?? { event: "Company and macro events", kpis: "Earnings, valuation and balance-sheet KPIs" }),
+        ...drivers,
       };
     });
-  }, [snapshot.holdings]);
+  }, [portfolioRiskProfiles, snapshot.holdings]);
 
   const applyHealthSnapshot = useCallback((data: HealthLiveSnapshot) => {
     setHealthSnapshot(data);
@@ -484,6 +489,10 @@ export default function Home() {
     setWorkspace(next);
     const url = new URL(window.location.href);
     url.searchParams.set("view", next);
+    if (next === "builder") {
+      url.searchParams.set("section", parseBuilderSection(url.searchParams.get("section")));
+      url.searchParams.delete("page");
+    }
     window.history[historyMode === "push" ? "pushState" : "replaceState"]({ view: next }, "", url);
   }, []);
 
@@ -513,14 +522,11 @@ export default function Home() {
 
   useEffect(() => {
     const fromUrl = () => {
-      const value = new URL(window.location.href).searchParams.get("view");
-      const next = value === "market-intelligence"
-        ? "intelligence"
-        : workspaces.some((item) => item.key === value) ? value as WorkspaceKey : "investment";
+      const url = new URL(window.location.href);
+      const value = url.searchParams.get("view");
+      const { view: next, rewritten } = applyCanonicalWorkspaceUrl(url);
       setWorkspace(next);
-      if (value !== next) {
-        const url = new URL(window.location.href);
-        url.searchParams.set("view", next);
+      if (value === "market-intelligence" || value === "algorithm-canvas" || rewritten) {
         window.history.replaceState({ view: next }, "", url);
       }
     };
@@ -682,6 +688,8 @@ export default function Home() {
         healthNote={content.healthNote}
         healthNoteSource={content.sources.healthNote}
       />}
+
+      {workspace === "builder" && <BuilderWorkspace />}
 
       </section>
 

@@ -61,12 +61,14 @@ valid Health snapshot with a failed extraction.
 
 ## Workspace and industry-filter invariants
 
-- Keep the four top-level workspaces separate: Investment, Sectoral Analytics,
-  Market Intelligence, and Health & Wellness. Preserve each workspace's
-  collapsible state and URL selection
-  (`?view=investment|sectors|intelligence|health`). Alias
-  `?view=market-intelligence` resolves to Market Intelligence.
-- Use `DailyKanbanBoard` as the only action-board implementation across all four
+- Keep the five top-level workspaces separate: Investment, Sectoral Analytics,
+  Market Intelligence, Health & Wellness, and Algorithm Canvas. Preserve each
+  workspace's collapsible state and URL selection
+  (`?view=investment|sectors|intelligence|health|builder`). Alias
+  `?view=market-intelligence` resolves to Market Intelligence. Alias
+  `?view=algorithm-canvas` resolves to Algorithm Canvas (`builder`) and the
+  canvas section (`?view=builder&section=canvas`).
+- Use `DailyKanbanBoard` as the only action-board implementation across all five
   workspaces. The Investment I-1 three-lane layout is canonical: summary header,
   `To Do Today`, `Monitor`, and `Completed Today` lanes, full action cards,
   compact completed rows, and compact empty lanes must remain visually
@@ -76,6 +78,11 @@ valid Health snapshot with a failed extraction.
   pages or replace them with oversized Kanban variants. Clicking an action
   moves it to Completed Today with strike-through styling; retain that state
   through the local day and clear completed items at local midnight.
+- **Algorithm Canvas** (`?view=builder`, sections `board` | `canvas` | `json`)
+  is a fifth workspace. Nav label is Algorithm Canvas; chrome title inside the
+  workspace is Algorithm Builder. Tabs are Action Board, Canvas, and JSON.
+  Action Board uses the shared `DailyKanbanBoard` only. Do not add industry
+  filters, sector-dimming, earnings, or the Market Intelligence digest here.
 - Keep Health & Wellness as a non-scrolling three-panel console with H-1
   Action Board, H-2 Daily Optimism, and H-3 Vital Metrics. Dense Health
   content belongs on explicit URL-backed sub-pages, never in a vertically

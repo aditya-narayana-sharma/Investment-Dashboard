@@ -1,4 +1,4 @@
-import { CircleDollarSign, HeartPulse, Layers3, Newspaper } from "lucide-react";
+import { CircleDollarSign, HeartPulse, Layers3, Newspaper, Spline } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
 import {
   healthActions,
@@ -328,16 +328,168 @@ export const exposureFactors = [
   { key: "leverage", label: "Leverage / execution", group: "KPI", color: "#3fa36c" },
 ] as const;
 
-export const exposureContext: Record<string, { event: string; kpis: string }> = {
-  ICICIBANK: { event: "Oil inflation, INR, yields and FII selling", kpis: "NIM, deposits, credit costs, asset quality" },
-  ETERNAL: { event: "Fuel/logistics costs, index flows and risk-off", kpis: "Quick-commerce margin, order growth, valuation" },
-  BHARTIARTL: { event: "Tariff cycle and institutional risk appetite", kpis: "ARPU, subscriber mix, capex and leverage" },
-  AETHER: { event: "Crude feedstock, freight, FX and geopolitical supply", kpis: "Gross margin, utilisation and working capital" },
-  JSWENERGY: { event: "Rates, power demand and project commissioning", kpis: "Net debt, capacity additions and interest cost" },
-  ADANIGREEN: { event: "Rates, grid demand and renewable policy execution", kpis: "Net debt, commissioning, CUF and cash conversion" },
-  AXISBANK: { event: "Oil inflation, INR, yields and FII selling", kpis: "NIM, deposits, credit costs, asset quality" },
-  LTF: { event: "Rates, credit cycle and retail AUM growth", kpis: "NIM + fees, RoE, credit cost and disbursements" },
+export type ExposureFactorKey = (typeof exposureFactors)[number]["key"];
+export type ExposureDriverTone = "positive" | "neutral" | "negative";
+
+export type ExposureDriverBullet = {
+  key: ExposureFactorKey;
+  label: string;
+  detail: string;
+  score: number;
+  value: string;
+  tone: ExposureDriverTone;
 };
+
+type ExposureContextSpec = {
+  events: Array<{ key: "oilWar" | "fiiFlow"; label: string; detail: string }>;
+  kpis: Array<{ key: "valuation" | "liquidity" | "volatility" | "leverage"; label: string; detail: string }>;
+};
+
+/** Higher monitoring score = more pressure to watch (negative); lower = supportive. */
+export function exposureDriverTone(score: number): ExposureDriverTone {
+  if (score <= 2) return "positive";
+  if (score >= 4) return "negative";
+  return "neutral";
+}
+
+export const exposureContext: Record<string, ExposureContextSpec> = {
+  ICICIBANK: {
+    events: [
+      { key: "oilWar", label: "Oil / inflation", detail: "INR, imported inflation and yield spillover" },
+      { key: "fiiFlow", label: "FII selling", detail: "Foreign selling into liquid private banks" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM", detail: "Net interest margin vs deposit cost" },
+      { key: "liquidity", label: "Deposits", detail: "CASA mix and franchise stickiness" },
+      { key: "volatility", label: "Credit cost", detail: "Provisions and slippage risk" },
+      { key: "leverage", label: "Asset quality", detail: "GNPA / restructured book" },
+    ],
+  },
+  ETERNAL: {
+    events: [
+      { key: "oilWar", label: "Fuel / logistics", detail: "Delivery cost and discretionary demand" },
+      { key: "fiiFlow", label: "Index / risk-off", detail: "Growth multiple under foreign selling" },
+    ],
+    kpis: [
+      { key: "valuation", label: "QC margin", detail: "Quick-commerce unit economics" },
+      { key: "liquidity", label: "Order growth", detail: "Order frequency and AOV" },
+      { key: "volatility", label: "Valuation", detail: "Duration multiple vs cash burn" },
+      { key: "leverage", label: "Cash runway", detail: "Working capital and burn" },
+    ],
+  },
+  BHARTIARTL: {
+    events: [
+      { key: "oilWar", label: "Tariff cycle", detail: "ARPU resets and competitive intensity" },
+      { key: "fiiFlow", label: "Institutional appetite", detail: "Foreign ownership and index weight" },
+    ],
+    kpis: [
+      { key: "valuation", label: "ARPU", detail: "Blended ARPU trajectory" },
+      { key: "liquidity", label: "Subscribers", detail: "Postpaid mix and churn" },
+      { key: "volatility", label: "Capex", detail: "Spectrum and 5G spend cadence" },
+      { key: "leverage", label: "Net debt", detail: "Leverage vs cash conversion" },
+    ],
+  },
+  AETHER: {
+    events: [
+      { key: "oilWar", label: "Crude feedstock", detail: "Input cost and freight shock" },
+      { key: "fiiFlow", label: "FX / geopolitics", detail: "Export demand and supply-chain risk" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Gross margin", detail: "Pass-through of feedstock costs" },
+      { key: "liquidity", label: "Utilisation", detail: "Plant load and order book" },
+      { key: "volatility", label: "Working capital", detail: "Inventory and receivable days" },
+      { key: "leverage", label: "Balance sheet", detail: "Debt service under margin squeeze" },
+    ],
+  },
+  JSWENERGY: {
+    events: [
+      { key: "oilWar", label: "Rates / power demand", detail: "Discount rate and merchant tariffs" },
+      { key: "fiiFlow", label: "Project flow", detail: "Institutional risk appetite for capex" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Net debt", detail: "Project leverage vs contracted cash" },
+      { key: "liquidity", label: "Capacity adds", detail: "Commissioning and COD milestones" },
+      { key: "volatility", label: "Interest cost", detail: "Rate sensitivity of project debt" },
+      { key: "leverage", label: "Execution", detail: "Build-out vs guidance" },
+    ],
+  },
+  ADANIGREEN: {
+    events: [
+      { key: "oilWar", label: "Rates / grid demand", detail: "Funding cost and offtake policy" },
+      { key: "fiiFlow", label: "Policy execution", detail: "Renewable allocation and FII risk tone" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Net debt", detail: "Project gearing vs cash conversion" },
+      { key: "liquidity", label: "Commissioning", detail: "MW COD vs guidance" },
+      { key: "volatility", label: "CUF", detail: "Plant load factor delivery" },
+      { key: "leverage", label: "Cash conversion", detail: "Collections and interest cover" },
+    ],
+  },
+  AXISBANK: {
+    events: [
+      { key: "oilWar", label: "Oil / inflation", detail: "INR, imported inflation and yield spillover" },
+      { key: "fiiFlow", label: "FII selling", detail: "Foreign selling into liquid private banks" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM", detail: "Net interest margin vs deposit cost" },
+      { key: "liquidity", label: "Deposits", detail: "CASA mix and franchise stickiness" },
+      { key: "volatility", label: "Credit cost", detail: "Provisions and slippage risk" },
+      { key: "leverage", label: "Asset quality", detail: "GNPA / restructured book" },
+    ],
+  },
+  LTF: {
+    events: [
+      { key: "oilWar", label: "Rates / credit cycle", detail: "Funding cost and retail credit demand" },
+      { key: "fiiFlow", label: "AUM growth", detail: "Retail AUM under flow / risk-off" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM + fees", detail: "Spread and fee income mix" },
+      { key: "liquidity", label: "RoE", detail: "Return on equity vs leverage" },
+      { key: "volatility", label: "Credit cost", detail: "Stage-2/3 and write-offs" },
+      { key: "leverage", label: "Disbursements", detail: "Origination vs collection quality" },
+    ],
+  },
+};
+
+const defaultExposureContext: ExposureContextSpec = {
+  events: [
+    { key: "oilWar", label: "Oil / war", detail: "Company and macro event transmission" },
+    { key: "fiiFlow", label: "FII / flow", detail: "Institutional flow and risk appetite" },
+  ],
+  kpis: [
+    { key: "valuation", label: "Valuation", detail: "Earnings multiple and durability" },
+    { key: "liquidity", label: "Liquidity", detail: "Trading depth and balance-sheet liquidity" },
+    { key: "volatility", label: "Volatility", detail: "Price and earnings volatility" },
+    { key: "leverage", label: "Leverage", detail: "Balance-sheet and execution risk" },
+  ],
+};
+
+function toExposureBullet(
+  spec: { key: ExposureFactorKey; label: string; detail: string },
+  rawScores: Record<string, number>,
+): ExposureDriverBullet {
+  const score = Math.max(1, Math.min(5, Number(rawScores[spec.key] ?? 3)));
+  return {
+    key: spec.key,
+    label: spec.label,
+    detail: spec.detail,
+    score,
+    value: `${score.toFixed(0)}/5`,
+    tone: exposureDriverTone(score),
+  };
+}
+
+export function buildExposureDrivers(symbol: string, rawScores: Record<string, number>) {
+  const spec = exposureContext[symbol] ?? defaultExposureContext;
+  const eventBullets = spec.events.map((item) => toExposureBullet(item, rawScores));
+  const kpiBullets = spec.kpis.map((item) => toExposureBullet(item, rawScores));
+  return {
+    event: eventBullets.map((item) => item.detail).join("; "),
+    kpis: kpiBullets.map((item) => item.label).join(", "),
+    eventBullets,
+    kpiBullets,
+  };
+}
 
 export const macroEvents: Record<MacroEventKey, {
   label: string;
@@ -414,6 +566,12 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "health-sleep", title: "Resolve cross-app sleep variance", detail: "Keep Apple Health primary and retain Guava as a separate comparison.", numericAdvantage: "2-source reconciliation", strategicAdvantage: "Prevents incompatible totals being merged", lane: "monitor", tone: "amber" },
     { id: "health-diary", title: "Complete nutrition diary", detail: "Treat logged intake as incomplete until all meals and portions are entered.", numericAdvantage: "100% meal coverage target", strategicAdvantage: "Improves nutrition signal quality", lane: "monitor", tone: "red" },
   ],
+  builder: [
+    { id: "builder-validate", title: "Validate the strategy graph", detail: "Confirm entry and exit triggers, typed edges and pinned algorithm versions before paper or broker preview.", numericAdvantage: "0 invalid graphs", strategicAdvantage: "Blocks broken logic from leaving the canvas", lane: "today", tone: "blue" },
+    { id: "builder-asset", title: "Confirm universe asset classes", detail: "Keep Equity and ETF selected unless the sleeve is intentionally cash-only.", numericAdvantage: "Default Equity + ETF", strategicAdvantage: "Keeps the backtest universe explicit", lane: "today", tone: "green" },
+    { id: "builder-export", title: "Export lossless StrategyGraphV2 JSON", detail: "Preserve ids, positions, params and pinned versions before switching machines or sessions.", numericAdvantage: "Round-trip identical graph", strategicAdvantage: "Protects canvas work from session loss", lane: "monitor", tone: "amber" },
+    { id: "builder-exit", title: "Wire the demo exit trigger", detail: "The seed RSI entry is connected; connect the exit path before treating validation as clean.", numericAdvantage: "1 entry + 1 exit", strategicAdvantage: "Completes the required trigger pair", lane: "monitor", tone: "red" },
+  ],
 };
 
 export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string; icon: typeof CircleDollarSign }> = [
@@ -421,6 +579,7 @@ export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string;
   { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
   { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
+  { key: "builder", label: "Algorithm Canvas", note: "Strategy graph and JSON", icon: Spline },
 ];
 
 export function number(value: number | string | undefined) {

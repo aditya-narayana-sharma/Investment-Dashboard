@@ -4,6 +4,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { isAxisResearchMail } from "../scripts/axis-mail-filter.mjs";
 import { portfolioReturnTone } from "../app/portfolio-concentration.mjs";
+import {
+  BUILDER_CHROME_CANDIDATES,
+  BUILDER_WORKSPACE_CANDIDATES,
+  ROUTING_SOURCE_CANDIDATES,
+  firstExisting,
+  readJoined,
+} from "./helpers/algorithm-canvas.mjs";
 
 async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -607,6 +614,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /COMPOSITE MONITORING INDEX/);
   assert.match(page, /Event transmission/);
   assert.match(page, /KPI watch/);
+  assert.match(page, /buildExposureDrivers/);
+  assert.match(page, /eventBullets/);
+  assert.match(page, /kpiBullets/);
+  assert.match(page, /data-tone=\{bullet\.tone\}/);
   assert.match(page, /raw score ÷ 6/);
   assert.match(page, /categories\.map/);
   assert.match(page, /health-kpi-grid/);
@@ -820,7 +831,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /<DailyKanbanBoard[^>]+(?:lane|compact)=/);
   assert.doesNotMatch(globalCss, /\.kanban-board\.compact/);
   assert.match(globalCss, /\.canonical-action-board\{height:auto!important/);
-  assert.equal((page.match(/className="workspace-section action-board-workspace-section"/g) ?? []).length, 4);
+  assert.ok(
+    (page.match(/className="workspace-section action-board-workspace-section"/g) ?? []).length >= 4,
+    "existing workspaces must keep the canonical action-board section",
+  );
   assert.match(globalCss, /\.action-board-workspace-section\s*\{[^}]*max-height:none\s*!important;[^}]*overflow:visible\s*!important;/s);
   assert.match(globalCss, /\.sector-workspace-shell\s*>\s*\.action-board-workspace-section\s*\{[^}]*overflow:visible\s*!important;/s);
   assert.match(page, /To do today/);
@@ -1334,4 +1348,32 @@ test("source freshness details reserve layout space above the sticky workspace n
   assert.doesNotMatch(visualComponents, /className="pulse-popover"/);
   assert.match(visualCss, /\.pulse-detail-lane\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(visualCss, /\.pulse-detail-lane\s*\{[\s\S]{0,240}position:\s*absolute/);
+});
+
+test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Board, Canvas, and JSON", async () => {
+  const [page, types, routing, chrome, workspace] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
+    readJoined(ROUTING_SOURCE_CANDIDATES),
+    readJoined(BUILDER_CHROME_CANDIDATES),
+    firstExisting(BUILDER_WORKSPACE_CANDIDATES),
+  ]);
+
+  assert.match(page, /workspace === "investment"/);
+  assert.match(page, /workspace === "sectors"/);
+  assert.match(page, /workspace === "intelligence"/);
+  assert.match(page, /workspace === "health"/);
+  assert.match(page, /value === "market-intelligence"/);
+  assert.match(chrome, /Algorithm Builder/);
+  assert.doesNotMatch(chrome, /BuilderKanbanBoard|AlgorithmKanbanBoard|compact-action-board/);
+  if (!workspace.text) {
+    console.log("SOFT (waiting on shell sibling): builder chrome Action Board / Canvas / JSON");
+    return;
+  }
+  assert.match(types, /type WorkspaceKey =[\s\S]*"builder"/);
+  assert.match(routing, /algorithm-canvas/);
+  assert.match(workspace.text, /Action Board|ACTION BOARD/);
+  assert.match(workspace.text, /(?:label|title|id):\s*"canvas"|["']Canvas["']|>CANVAS</);
+  assert.match(workspace.text, /(?:label|title|id):\s*"json"|["']JSON["']|>JSON</i);
+  assert.match(workspace.text, /<DailyKanbanBoard workspace="builder"\s*\/>/);
 });

@@ -6,6 +6,7 @@ import type { HealthAveragePeriod, HealthMetric } from "../health-data";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { LiveHolding } from "../live-types";
 import type { DonutLabelProps, KanbanWorkspace, WorkspaceKey } from "./types";
+import { builderSectionNumber, isBuilderSection } from "./workspace-routing";
 import {
   HEALTH_DIRECTION_COLUMNS,
   groupHealthMetricsByDirection,
@@ -226,6 +227,47 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
   </>;
 }
 
+function workspaceOrbitalBadge(
+  workspace: WorkspaceKey,
+  kiteLive: boolean,
+  contentLive: boolean,
+  healthIncognito: boolean,
+  healthStatus: HealthLiveSnapshot["status"],
+): string {
+  switch (workspace) {
+    case "investment":
+      return kiteLive ? "LIVE" : "KITE";
+    case "sectors":
+      return "S-2";
+    case "intelligence":
+      return contentLive ? "FRESH" : "SYNC";
+    case "health":
+      if (healthIncognito) return "INCOGNITO";
+      switch (healthStatus) {
+        case "live":
+          return "SYNCED";
+        case "cached":
+          return "CACHED";
+        case "partial":
+          return "PARTIAL";
+        case "stale":
+          return "STALE";
+        case "unavailable":
+          return "UNAVAILABLE";
+        default: {
+          const _exhaustive: never = healthStatus;
+          return _exhaustive;
+        }
+      }
+    case "builder":
+      return "GRAPH";
+    default: {
+      const _exhaustive: never = workspace;
+      return _exhaustive;
+    }
+  }
+}
+
 export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthIncognito, healthStatus }: { active: WorkspaceKey; onChange: (workspace: WorkspaceKey) => void; kiteLive: boolean; contentLive: boolean; healthIncognito: boolean; healthStatus: HealthLiveSnapshot["status"] }) {
   const tabsRef = useRef<Array<HTMLButtonElement | null>>([]);
   const selectByIndex = (index: number) => {
@@ -248,23 +290,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     <div className="workspace-tabs" role="tablist" aria-orientation="horizontal">
       {workspaces.map((workspace, index) => {
         const Icon = workspace.icon;
-        const badge = workspace.key === "investment"
-          ? (kiteLive ? "LIVE" : "KITE")
-          : workspace.key === "sectors"
-            ? "S-2"
-            : workspace.key === "intelligence"
-              ? (contentLive ? "FRESH" : "SYNC")
-              : healthIncognito
-                ? "INCOGNITO"
-                : healthStatus === "live"
-                  ? "SYNCED"
-                  : healthStatus === "cached"
-                    ? "CACHED"
-                    : healthStatus === "partial"
-                      ? "PARTIAL"
-                      : healthStatus === "stale"
-                        ? "STALE"
-                        : "UNAVAILABLE";
+        const badge = workspaceOrbitalBadge(workspace.key, kiteLive, contentLive, healthIncognito, healthStatus);
         return <button
           ref={(node) => { tabsRef.current[index] = node; }}
           id={`workspace-tab-${workspace.key}`}
@@ -291,8 +317,9 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
   </nav>;
 }
 
-/** Map workspace nav ids (i1, s2, m3, h1) to CollapsibleSection numbers (I-1, S-2, …). */
+/** Map workspace nav ids (i1, s2, m3, h1, board) to CollapsibleSection numbers (I-1, S-2, B-1, …). */
 export function dashboardSectionNumberFromNavId(id: string): string {
+  if (isBuilderSection(id)) return builderSectionNumber(id);
   const match = /^([ismh])(\d+)$/i.exec(id.trim());
   if (!match) return id.toUpperCase();
   return `${match[1]!.toUpperCase()}-${match[2]}`;
