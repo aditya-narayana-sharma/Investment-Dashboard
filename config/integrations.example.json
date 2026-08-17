@@ -1,0 +1,51 @@
+{
+  "broker": {
+    "id": "kite",
+    "mcpUrl": "http://127.0.0.1:8080/mcp"
+  },
+  "newsletters": [
+    {
+      "account": "iCloud",
+      "mailbox": "Newsletters"
+    }
+  ],
+  "research": [
+    {
+      "id": "axis",
+      "label": "Axis Research",
+      "account": "iCloud",
+      "mailbox": "Axis Research",
+      "pdfDir": "~/Downloads/Axis Research",
+      "enabled": true
+    }
+  ],
+  "calendars": {
+    "earningsName": "Earnings",
+    "include": ["*"]
+  },
+  "reminders": {
+    "lists": ["Job 🔍", "Earnings"]
+  },
+  "notes": {
+    "apple": [],
+    "obsidianVault": null,
+    "notion": null,
+    "onenote": null
+  },
+  "sectors": [
+    "pharma",
+    "power",
+    "infrastructure",
+    "auto",
+    "telecom",
+    "banking",
+    "nbfc",
+    "fmcg",
+    "consumer",
+    "energy",
+    "defence"
+  ],
+  "googleTasks": {
+    "enabled": false
+  }
+}

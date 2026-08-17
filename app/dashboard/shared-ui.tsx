@@ -285,6 +285,8 @@ function workspaceOrbitalBadge(
       return "TREE";
     case "strategies":
       return "OOS";
+    case "integrations":
+      return "CFG";
     default: {
       const _exhaustive: never = workspace;
       return _exhaustive;

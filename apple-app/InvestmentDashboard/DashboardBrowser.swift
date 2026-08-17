@@ -74,6 +74,10 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45))
     }
 
+    func openIntegrations(baseURL: URL) {
+        load(baseURL: baseURL, workspace: .integrations, force: true)
+    }
+
     private func updateNavigationState() {
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward

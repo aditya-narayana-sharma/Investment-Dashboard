@@ -38,10 +38,11 @@ export function calendarSchedulingMetadata(item: AppleCalendarItem) {
 }
 
 /** Exact-source selection plus stable-ID/date dedupe for Apple scheduling rows. */
-export function exactEarningsCalendarItems(items: AppleCalendarItem[]) {
+export function exactEarningsCalendarItems(items: AppleCalendarItem[], calendarName = "Earnings") {
+  const expected = normalizeCalendarName(calendarName);
   const deduplicated = new Map<string, AppleCalendarItem>();
   for (const item of items) {
-    if (normalizeCalendarName(item.calendar) !== "earnings") continue;
+    if (normalizeCalendarName(item.calendar) !== expected) continue;
     const dateKey = calendarEventDateKey(item);
     if (!dateKey) continue;
     const stableKey = `${item.id}|${dateKey}`;

@@ -34,6 +34,9 @@ struct ContentView: View {
                 if workspaceRawValue == "strategy-library" {
                     return .strategies
                 }
+                if workspaceRawValue == "settings" {
+                    return .integrations
+                }
                 return DashboardWorkspace(rawValue: workspaceRawValue) ?? .investment
             },
             set: { workspaceRawValue = $0.rawValue }
@@ -68,7 +71,8 @@ struct ContentView: View {
             DashboardSettingsView(
                 serverAddress: $serverAddress,
                 statusModel: statusModel,
-                pairing: pairing
+                pairing: pairing,
+                onOpenIntegrations: openIntegrations
             )
         }
         .sheet(isPresented: $showingOnboarding) {
@@ -93,6 +97,15 @@ struct ContentView: View {
 #endif
         .onChange(of: workspaceRawValue) { _, _ in
             loadSelectedWorkspace()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .portfolioNativeRefresh)) { _ in
+            refreshAll()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .portfolioOpenReport)) { _ in
+            openReport()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .portfolioOpenIntegrations)) { _ in
+            openIntegrations()
         }
         .onChange(of: serverAddress) { _, _ in
             startSession()
@@ -128,7 +141,8 @@ struct ContentView: View {
             healthSync: healthSync,
             refresh: refreshAll,
             report: openReport,
-            settings: { showingSettings = true }
+            settings: { showingSettings = true },
+            integrations: openIntegrations
         )
 #else
         NativeDashboardHeader(
@@ -136,7 +150,8 @@ struct ContentView: View {
             statusModel: statusModel,
             refresh: refreshAll,
             report: openReport,
-            settings: { showingSettings = true }
+            settings: { showingSettings = true },
+            integrations: openIntegrations
         )
 #endif
     }
@@ -175,6 +190,11 @@ struct ContentView: View {
     private func openReport() {
         guard let serverURL else { return }
         browser.openReport(baseURL: serverURL)
+    }
+
+    private func openIntegrations() {
+        workspace.wrappedValue = .integrations
+        loadSelectedWorkspace()
     }
 
 #if os(iOS)

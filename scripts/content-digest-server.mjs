@@ -38,6 +38,7 @@ import {
   summarizePodcastTranscript,
 } from "./podcast-summarizer.mjs";
 import { formatIstDateLabel } from "./nse-trading-day.mjs";
+import { expandUserPath, loadIntegrationsConfig, mailSourceSelectors } from "./integrations-config.mjs";
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.CONTENT_DIGEST_PORT ?? 3003);
@@ -47,7 +48,9 @@ const PODCAST_DB = `${process.env.HOME}/Library/Group Containers/243LU875E5.grou
 const PODCAST_TTML_ROOT = `${process.env.HOME}/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache/Assets/TTML`;
 const REMINDERS_STORE_DIR = `${process.env.HOME}/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores`;
 const CALENDAR_DB = `${process.env.HOME}/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb`;
-const EARNINGS_CALENDAR_NAME = process.env.APPLE_EARNINGS_CALENDAR_NAME ?? "Earnings";
+const INTEGRATIONS = loadIntegrationsConfig();
+const MAIL_SOURCES = mailSourceSelectors(INTEGRATIONS);
+const EARNINGS_CALENDAR_NAME = process.env.APPLE_EARNINGS_CALENDAR_NAME ?? MAIL_SOURCES.earningsCalendarName;
 const CORE_DATA_EPOCH = 978307200;
 const MAIL_CONTENT_CHARS = 4500;
 /** Enough body text to support ≥5 summary bullets per newsletter item. */
@@ -75,6 +78,7 @@ const CALENDAR_WINDOW_END = (() => {
 const AXIS_LOOKBACK_DAYS = 3;
 const AXIS_DIGEST_LIMIT = 500;
 const AXIS_PDF_ARCHIVE_PATH = process.env.AXIS_PDF_ARCHIVE_PATH
+  ?? expandUserPath(MAIL_SOURCES.axisPdfDir)
   ?? join(process.env.HOME ?? "", "Downloads", "Axis Research");
 
 /** Shared JXA helpers for Message-ID → message:// links and PDF attachment names. */
@@ -141,9 +145,9 @@ function exactMailbox(account, name) {
   if (!mailbox) throw new Error('Mailbox "' + name + '" was not found under iCloud');
   return mailbox;
 }
-const account = exactAccount("iCloud");
+const account = exactAccount(${JSON.stringify(MAIL_SOURCES.newsletterAccount)});
 function newsletterWindowMessages(limit) {
-  const mailbox = exactMailbox(account, "Newsletters");
+  const mailbox = exactMailbox(account, ${JSON.stringify(MAIL_SOURCES.newsletterMailbox)});
   const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
   const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
   end.setDate(end.getDate() + 1);
@@ -232,11 +236,11 @@ function exactMailbox(account, name) {
   return mailbox;
 }
 ${mailLinkHelpers}
-const account = exactAccount("iCloud");
+const account = exactAccount(${JSON.stringify(MAIL_SOURCES.axisAccount)});
 const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
 const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
 end.setDate(end.getDate() + 1);
-const mailbox = exactMailbox(account, "Axis Research");
+const mailbox = exactMailbox(account, ${JSON.stringify(MAIL_SOURCES.axisMailbox)});
 const recent = mailbox.messages.whose({ _and: [
   { dateReceived: { _greaterThan: cutoff } },
   { dateReceived: { _lessThan: end } },
@@ -322,7 +326,10 @@ function isExcludedReminderList(list = "") {
 }
 
 function isPriorityReminderList(list = "") {
-  return /^(?:job|earnings)$/.test(reminderListTextName(list));
+  const text = reminderListTextName(list).toLowerCase();
+  const configured = MAIL_SOURCES.reminderLists.map((item) => reminderListTextName(item).toLowerCase());
+  if (configured.includes(text)) return true;
+  return /^(?:job|earnings)$/.test(text);
 }
 
 /** REMCDRecurrenceRule rows live in ZREMCDOBJECT (Z_ENT=34); ZREMINDER4 → reminder PK. */
@@ -1338,6 +1345,7 @@ async function refresh() {
     reminders: reminderValue,
     calendar: calendarValue,
     healthNote: healthNoteValue,
+    earningsCalendarName: EARNINGS_CALENDAR_NAME,
     marketCalendar: marketCalendarValue,
     investment: await buildInvestmentIntelligence(newsletterValue.items, axisValue.items, axisValue.fetchedAt, {
       axisTargetItems: axisValue.targetItems,

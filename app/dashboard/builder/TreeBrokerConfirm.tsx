@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { brokerWritePath } from "../../integrations/broker/types";
+import { useActiveBroker } from "../../integrations/broker/use-active";
 import type { TreeAlertPreview, TreeGttPreview, TreeOrderPreview } from "../../strategy/tree-orders";
 
 export type TreeBrokerKind = "order" | "gtt" | "alert";
@@ -9,21 +11,6 @@ export type TreeBrokerDraft =
   | { kind: "order"; preview: TreeOrderPreview }
   | { kind: "gtt"; preview: TreeGttPreview }
   | { kind: "alert"; preview: TreeAlertPreview };
-
-function endpoint(kind: TreeBrokerKind): string {
-  switch (kind) {
-    case "order":
-      return "/api/kite/order";
-    case "gtt":
-      return "/api/kite/gtt";
-    case "alert":
-      return "/api/kite/alert";
-    default: {
-      const _never: never = kind;
-      return _never;
-    }
-  }
-}
 
 function payload(draft: TreeBrokerDraft, confirmation: string): Record<string, unknown> {
   switch (draft.kind) {
@@ -91,15 +78,18 @@ export function TreeBrokerConfirm({
   const [confirmation, setConfirmation] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const broker = useActiveBroker();
   const expected = draft.preview.confirmation;
   const ready = reviewed && confirmation.trim().toUpperCase() === expected.toUpperCase();
+  const path = brokerWritePath(broker, draft.kind);
 
   async function submit() {
     if (!ready || submitting) return;
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch(endpoint(draft.kind), {
+      if (!path) throw new Error(broker.notes || "The active broker cannot submit live writes.");
+      const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload(draft, confirmation)),

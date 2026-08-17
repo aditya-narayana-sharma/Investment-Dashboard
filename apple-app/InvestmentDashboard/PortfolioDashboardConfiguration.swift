@@ -36,17 +36,19 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
     case health
     case builder
     case strategies
+    case integrations
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .investment: "Investment"
+        case .investment: "Portfolio Overview"
         case .sectors: "Sectoral"
         case .intelligence: "Market Intel"
         case .health: "Health"
         case .builder: "Algorithm Canvas"
         case .strategies: "Strategies"
+        case .integrations: "Integrations"
         }
     }
 
@@ -58,6 +60,7 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         case .health: "heart.text.square.fill"
         case .builder: "point.3.connected.trianglepath.dotted"
         case .strategies: "arrow.triangle.branch"
+        case .integrations: "cable.connector"
         }
     }
 
@@ -93,6 +96,15 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         if value == "strategy-library" {
             return .strategies
         }
+        if value == "settings" {
+            return .integrations
+        }
         return DashboardWorkspace(rawValue: value)
     }
+}
+
+extension Notification.Name {
+    static let portfolioNativeRefresh = Notification.Name("portfolioNativeRefresh")
+    static let portfolioOpenReport = Notification.Name("portfolioOpenReport")
+    static let portfolioOpenIntegrations = Notification.Name("portfolioOpenIntegrations")
 }

@@ -17,8 +17,9 @@ final class InvestmentDashboardUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Portfolio Intelligence"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Refresh dashboard"].exists)
         XCTAssertTrue(app.buttons["Connection and Health settings"].exists)
-        XCTAssertTrue(app.buttons["Investment"].exists)
+        XCTAssertTrue(app.buttons["Portfolio Overview"].exists)
         XCTAssertTrue(app.buttons["Sectoral"].exists)
         XCTAssertTrue(app.buttons["Health"].exists)
+        XCTAssertTrue(app.buttons["Integrations"].exists)
     }
 }

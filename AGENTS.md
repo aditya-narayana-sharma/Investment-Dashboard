@@ -9,8 +9,10 @@ The audit must validate payload semantics, not only HTTP success: Kite and secto
 Treat the dashboard as current only after independently checking all of these sources:
 
 - Kite: holdings, positions, orders, GTTs, margins, quotes, P&L, and classifications.
-- Apple Mail: only `iCloud -> Newsletters` for the newsletter digest and only `iCloud -> Axis Research` for Axis research.
-- Apple Reminders: read every item in the exact `Job 🔍` and `Earnings` lists. Preserve incomplete items as actionable; completed items are evidence only and must not be silently restored.
+- Apple Mail: configured newsletter and research mailboxes (defaults remain
+  `iCloud -> Newsletters` and `iCloud -> Axis Research`).
+- Apple Reminders: read every item in the configured lists (defaults remain
+  the exact `Job 🔍` and `Earnings` lists). Preserve incomplete items as actionable; completed items are evidence only and must not be silently restored.
 - Apple Calendar: read earnings and all other events through D-1, then group the dashboard summary by topic. Calendar entries are scheduling evidence, not proof that a result was published.
 - Health reconciliation: use the **"Health" Apple Shortcut** and its **Health Stats** export as the daily reconciliation source, imported via `scripts/import_health_shortcut.py` into `artifacts/private/health-overrides.json` (the file `scripts/import_apple_health.py --overrides` already consumes). Run the Shortcut for historical data; if a date is missing, run it again for that date. The Apple Notes Health Daily and Health Daily v2 notes are **deprecated** and must not be run, displayed, or referenced. HealthKit `export.xml` remains the primary detailed source for Sleep, Heart, and Respiratory.
 - iPhone Mirroring: verify Apple Health, Lifesum, and Guava through the Health operational target. Cover Activity, Sleep, Heart, Respiratory, Mobility, and Nutrition for each missing date, plus 7-day and 30-day comparisons. Body Measurements and Hearing remain excluded.
@@ -61,24 +63,34 @@ valid Health snapshot with a failed extraction.
 
 ## Workspace and industry-filter invariants
 
-- Keep the six top-level workspaces separate: Investment, Sectoral Analytics,
-  Market Intelligence, Health & Wellness, Algorithm Canvas, and Strategies.
+- Keep the seven top-level workspaces separate: Portfolio Overview, Sectoral Analytics,
+  Market Intelligence, Health & Wellness, Algorithm Canvas, Strategies, and Integrations.
   Preserve each workspace's collapsible state and URL selection
-  (`?view=investment|sectors|intelligence|health|builder|strategies`). Alias
+  (`?view=investment|sectors|intelligence|health|builder|strategies|integrations`). Alias
   `?view=market-intelligence` resolves to Market Intelligence. Alias
   `?view=algorithm-canvas` resolves to Algorithm Canvas (`builder`) and the
   canvas section (`?view=builder&section=canvas`). Alias
-  `?view=strategy-library` resolves to Strategies (`?view=strategies`).
-- Use `DailyKanbanBoard` as the only action-board implementation across all six
-  workspaces. The Investment I-1 three-lane layout is canonical: summary header,
+  `?view=strategy-library` resolves to Strategies (`?view=strategies`). Alias
+  `?view=settings` resolves to Integrations. Do not change `?view=investment`.
+- Use `DailyKanbanBoard` as the only action-board implementation across Portfolio Overview,
+  Sectoral Analytics, Market Intelligence, Health, Algorithm Canvas, and Strategies.
+  The Portfolio Overview I-1 three-lane layout is canonical: summary header,
   `To Do Today`, `Monitor`, and `Completed Today` lanes, full action cards,
   compact completed rows, and compact empty lanes must remain visually
   identical. Do not add compact, single-lane, or workspace-specific variants.
-- Every workspace must expose the same complete three-lane Daily Action Board:
+- Every kanban workspace must expose the same complete three-lane Daily Action Board:
   `To Do Today`, `Monitor`, and `Completed Today`. Do not split lanes across
   pages or replace them with oversized Kanban variants. Clicking an action
   moves it to Completed Today with strike-through styling; retain that state
   through the local day and clear completed items at local midnight.
+  **Integrations** (`?view=integrations`, alias `settings`) is the only workspace
+  without `DailyKanbanBoard`. It owns pipeline cards and setup guides only:
+  no earnings, no S-2 industry filter, and no sector-dimming.
+- Apple Mail, Reminders, and the earnings calendar name are read from
+  `artifacts/private/integrations.json` (defaults match `iCloud → Newsletters`,
+  `iCloud → Axis Research`, `Job 🔍` / `Earnings`, calendar `Earnings`).
+  Invalid mailboxes keep the last validated snapshot and surface `unavailable`
+  or `permission_required`.
 - **Algorithm Canvas** (`?view=builder`, sections `board` | `canvas` | `json`)
   is a fifth workspace. Nav label is Algorithm Canvas; chrome title inside the
   workspace is Algorithm Builder. Tabs are Action Board, Canvas, and JSON.
@@ -97,7 +109,7 @@ valid Health snapshot with a failed extraction.
   scrolling workspace. Incognito must gate thumbnail values, drill-down values,
   source/archive metadata, actions, recommendations, and accessibility text.
   H-3 Vital Metrics groups KPIs into three comparison-direction collapsible
-  rows (favourable / context dependent / unfavourable), matching the Investment
+  rows (favourable / context dependent / unfavourable), matching the Portfolio Overview
   BUY / HOLD group pattern, while retaining original
   Health category colour accents on each tile. Metrics without a selected-period
   average remain visible under Context dependent (no dedicated unavailable

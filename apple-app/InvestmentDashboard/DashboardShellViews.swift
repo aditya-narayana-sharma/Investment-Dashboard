@@ -13,6 +13,7 @@ struct NativeDashboardHeader: View {
     let refresh: () -> Void
     let report: () -> Void
     let settings: () -> Void
+    var integrations: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 8) {
@@ -43,6 +44,9 @@ struct NativeDashboardHeader: View {
 
                 HeaderAction(title: "Refresh dashboard", systemImage: "arrow.clockwise", action: refresh)
                 HeaderAction(title: "Prepare report", systemImage: "square.and.arrow.up", action: report)
+                if let integrations {
+                    HeaderAction(title: "Integrations", systemImage: "cable.connector", action: integrations)
+                }
                 HeaderAction(title: "Connection and Health settings", systemImage: "gearshape", action: settings)
             }
 
@@ -221,6 +225,7 @@ struct DashboardSettingsView: View {
     @Binding var serverAddress: String
     @ObservedObject var statusModel: DashboardStatusModel
     @ObservedObject var pairing: HealthPairingModel
+    var onOpenIntegrations: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var draftAddress: String
     @State private var pairingCode = ""
@@ -267,6 +272,10 @@ struct DashboardSettingsView: View {
                     Label("Keep the Mac awake with Portfolio Intelligence running.", systemImage: "desktopcomputer")
                     Label("Use the same Tailscale account on this iPhone and Mac.", systemImage: "lock.shield")
                     Label("Tailscale HTTPS is preferred; LAN is a fallback.", systemImage: "network")
+                    Button("Open Integrations workspace") {
+                        onOpenIntegrations?()
+                        dismiss()
+                    }
                 }
 
 #if os(iOS)

@@ -1,6 +1,6 @@
 import type { BuilderSection, StrategiesSection, WorkspaceKey } from "./types";
 
-export const WORKSPACE_VIEW_VALUES = ["investment", "sectors", "intelligence", "health", "builder", "strategies"] as const;
+export const WORKSPACE_VIEW_VALUES = ["investment", "sectors", "intelligence", "health", "builder", "strategies", "integrations"] as const;
 export const BUILDER_SECTIONS = ["board", "canvas", "json"] as const;
 export const STRATEGIES_SECTIONS = ["y1", "y2"] as const;
 
@@ -12,6 +12,7 @@ export function isWorkspaceKey(value: string | null | undefined): value is Works
     case "health":
     case "builder":
     case "strategies":
+    case "integrations":
       return true;
     default:
       return false;
@@ -39,7 +40,7 @@ export function isStrategiesSection(value: string | null | undefined): value is 
   }
 }
 
-/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder, strategy-library → strategies. */
+/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder, strategy-library → strategies, settings → integrations. */
 export function parseWorkspaceView(value: string | null | undefined): WorkspaceKey {
   switch (value) {
     case "investment":
@@ -48,6 +49,7 @@ export function parseWorkspaceView(value: string | null | undefined): WorkspaceK
     case "health":
     case "builder":
     case "strategies":
+    case "integrations":
       return value;
     case "market-intelligence":
       return "intelligence";
@@ -55,6 +57,8 @@ export function parseWorkspaceView(value: string | null | undefined): WorkspaceK
       return "builder";
     case "strategy-library":
       return "strategies";
+    case "settings":
+      return "integrations";
     default:
       return "investment";
   }

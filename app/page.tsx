@@ -35,6 +35,7 @@ import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
 import { BuilderWorkspace } from "./dashboard/BuilderWorkspace";
 import { StrategiesWorkspace } from "./dashboard/StrategiesWorkspace";
+import { IntegrationsWorkspace } from "./dashboard/IntegrationsWorkspace";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
 
@@ -375,7 +376,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     } catch (error) {
       const message = error instanceof Error ? error.message : "Earnings refresh failed.";
       setEarningsError(message);
-      setEarningsSnapshot((current) => ({ ...current, status: "stale", message: `${current.message} Latest refresh failed: ${message}` }));
+      setEarningsSnapshot((current) => ({ ...current, status: "stale", message: `Latest refresh failed: ${message}` }));
     }
   }, []);
 
@@ -443,7 +444,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
           return {
             ...current,
             status: current.status === "unavailable" ? "partial" : current.status,
-            message: `${current.message} Latest refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+            message: `Latest refresh failed: ${error instanceof Error ? error.message : String(error)}`,
           };
         }
         return {
@@ -574,7 +575,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       const value = url.searchParams.get("view");
       const { view: next, rewritten } = applyCanonicalWorkspaceUrl(url);
       setWorkspace(next);
-      if (value === "market-intelligence" || value === "algorithm-canvas" || value === "strategy-library" || rewritten) {
+      if (value === "market-intelligence" || value === "algorithm-canvas" || value === "strategy-library" || value === "settings" || rewritten) {
         window.history.replaceState({ view: next }, "", url);
       }
     };
@@ -740,6 +741,8 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       {workspace === "builder" && <WorkspaceRenderGuard label="Algorithm Builder"><BuilderWorkspace /></WorkspaceRenderGuard>}
 
       {workspace === "strategies" && <WorkspaceRenderGuard label="Strategies"><StrategiesWorkspace /></WorkspaceRenderGuard>}
+
+      {workspace === "integrations" && <WorkspaceRenderGuard label="Integrations"><IntegrationsWorkspace /></WorkspaceRenderGuard>}
 
       </section>
 

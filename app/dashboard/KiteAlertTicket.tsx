@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
+import { useActiveBroker } from "../integrations/broker/use-active";
 
 export type AlertDirection = "above" | "below";
 export type AlertExchange = "NSE" | "BSE";
@@ -50,6 +51,7 @@ export function KiteAlertTicket({
   const normalizedSymbol = symbol.trim().toUpperCase();
   const matchedHolding = holdings.find((holding) => holding.symbol.toUpperCase() === normalizedSymbol);
   const lookup = useKiteInstrumentLookup(normalizedSymbol, exchange);
+  const broker = useActiveBroker();
   const trigger = Number(triggerPrice);
   const triggerText = trigger > 0 ? String(trigger) : "";
   const expected = useMemo(
@@ -81,7 +83,8 @@ export function KiteAlertTicket({
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch("/api/kite/alert", {
+      if (!broker.alertPath) throw new Error(broker.notes || "This broker cannot create live alerts.");
+      const response = await fetch(broker.alertPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

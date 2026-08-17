@@ -247,3 +247,16 @@ test("Health snapshot loads before the bundled dashboard refresh completes", asy
   assert.match(page, /const healthEarly = loadHealth\(\);/);
   assert.match(page, /Promise\.allSettled\(\[kiteEarly, healthEarly,/);
 });
+
+test("Integrations and Algorithm Canvas stay free of S-2 dimming", async () => {
+  const [integrations, builder, strategies] = await Promise.all([
+    readFile(new URL("../app/dashboard/IntegrationsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/BuilderWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+  for (const source of [integrations, builder, strategies]) {
+    assert.doesNotMatch(source, /sector-dimmed|sector-intelligence-filter|selectedSectorId/);
+  }
+  assert.doesNotMatch(integrations, /DailyKanbanBoard/);
+  assert.doesNotMatch(integrations, /EarningsMonthCalendar/);
+});

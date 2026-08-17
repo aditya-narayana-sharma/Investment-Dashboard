@@ -1,4 +1,4 @@
-import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Library, Newspaper } from "lucide-react";
+import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Library, Newspaper, Plug } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
 import {
   healthActions,
@@ -201,7 +201,7 @@ export function earningsEventMonthLabel(dateLabel: string) {
 /** Convert every row from the exact Earnings calendar into pending scheduling evidence. */
 export function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
   const events: EarningsEvent[] = [];
-  for (const item of exactEarningsCalendarItems(content.calendar)) {
+  for (const item of exactEarningsCalendarItems(content.calendar, content.earningsCalendarName)) {
     const identity = resolveEarningsIdentity(item.title, existing);
     const schedule = calendarSchedulingMetadata(item);
     const dateKey = schedule.dateKey;
@@ -581,12 +581,13 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
 };
 
 export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string; icon: typeof CircleDollarSign }> = [
-  { key: "investment", label: "Investment", note: "Portfolio, macro and research", icon: CircleDollarSign },
+  { key: "investment", label: "Portfolio Overview", note: "Portfolio, macro and research", icon: CircleDollarSign },
   { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
   { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
   { key: "builder", label: "Algorithm Canvas", note: "Nested tree and JSON", icon: GitBranch },
   { key: "strategies", label: "Strategies", note: "NSE strategy library", icon: Library },
+  { key: "integrations", label: "Integrations", note: "Pipelines you own", icon: Plug },
 ];
 
 export function number(value: number | string | undefined) {

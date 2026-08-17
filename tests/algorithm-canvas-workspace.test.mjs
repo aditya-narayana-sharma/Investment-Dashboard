@@ -71,7 +71,7 @@ test("Algorithm Canvas action board is DailyKanbanBoard, not a compact builder b
   assert.match(sharedUi, /export function DailyKanbanBoard/);
   assert.doesNotMatch(builderSources, /BuilderKanbanBoard|AlgorithmKanbanBoard|CompactKanban|compact-action-board/);
   assert.doesNotMatch(builderSources, /<DailyKanbanBoard[^>]+(?:lane|compact)=/);
-  softMatch(types, /type KanbanWorkspace = WorkspaceKey|type KanbanWorkspace =[\s\S]*"builder"/, "KanbanWorkspace includes builder");
+  softMatch(types, /type KanbanWorkspace = Exclude<WorkspaceKey, "integrations">|type KanbanWorkspace = WorkspaceKey|type KanbanWorkspace =[\s\S]*"builder"/, "KanbanWorkspace includes builder");
   softMatch(utils, /kanbanItems[\s\S]*\bbuilder\s*:/, "kanbanItems.builder");
   if (!workspace.text) {
     console.log("SOFT (waiting on shell sibling): DailyKanbanBoard workspace=\"builder\"");

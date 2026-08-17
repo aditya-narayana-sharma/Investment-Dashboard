@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
+import { useActiveBroker } from "../integrations/broker/use-active";
 
 type GttSide = "BUY" | "SELL";
 type Product = "CNC" | "MIS" | "NRML" | "MTF";
@@ -57,6 +58,7 @@ export function KiteGttTicket({
   const normalizedSymbol = symbol.trim().toUpperCase();
   const matchedHolding = holdings.find((holding) => holding.symbol.toUpperCase() === normalizedSymbol);
   const lookup = useKiteInstrumentLookup(normalizedSymbol, "NSE");
+  const broker = useActiveBroker();
   const expected = useMemo(
     () => (normalizedSymbol ? `${label} ${side} ${quantity} ${normalizedSymbol}` : ""),
     [label, side, quantity, normalizedSymbol],
@@ -99,7 +101,8 @@ export function KiteGttTicket({
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch("/api/kite/gtt", {
+      if (!broker.gttPath) throw new Error(broker.notes || "This broker cannot create live GTTs.");
+      const response = await fetch(broker.gttPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -268,7 +268,9 @@ test("Phase 3 Market Intelligence automation remains wired to local source paths
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../config/scheduler/content-refresh.cron", import.meta.url), "utf8"),
   ]);
-  assert.match(contentServer, /exactMailbox\(account, "Axis Research"\)/);
+  assert.match(contentServer, /loadIntegrationsConfig/);
+  assert.match(contentServer, /mailSourceSelectors/);
+  assert.match(contentServer, /exactMailbox\(account, \$\{JSON\.stringify\(MAIL_SOURCES\.axisMailbox\)\}\)/);
   assert.match(contentServer, /classifyAxisTags/);
   assert.match(contentServer, /classifyNewsletterSentiment/);
   assert.match(contentServer, /keyTakeaways: contentBullets/);
@@ -313,11 +315,11 @@ test("server-renders the portfolio dashboard", async () => {
   assert.match(html, />Sepia</);
   // Sections start collapsed: headings + Expand controls remain, body content stays unmounted.
   assert.match(html, /collapsible-section collapsed/);
-  assert.match(html, /Investment action board/);
-  assert.match(html, /Expand Investment action board/);
+  assert.match(html, /Portfolio Overview action board/);
+  assert.match(html, /Expand Portfolio Overview action board/);
   assert.match(html, /Expand Portfolio/);
   assert.match(html, /Expand Risk/);
-  assert.match(html, /Expand Axis picks/);
+  assert.match(html, /Expand Research picks/);
   assert.doesNotMatch(html, /Collapse Portfolio/);
   assert.doesNotMatch(html, /Top-two concentration/);
   assert.doesNotMatch(html, /Nested portfolio allocation/);
@@ -411,11 +413,11 @@ test("all four workspaces share consistent cyan section navigation bars", async 
   assert.match(globalCss, /\.workspace-section-nav button:focus-visible/);
 
   for (const [source, label, sections] of [
-    [investment, "Investment sections", [
+    [investment, "Portfolio Overview sections", [
       ['i1', "Action Board"],
       ['i2', "Portfolio"],
       ['i3', "Risk"],
-      ['i4', "Axis picks"],
+      ['i4', "Research picks"],
     ]],
     [sectors, "Sectoral Analytics sections", [
       ['s1', "Action Board"],
@@ -745,16 +747,16 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /s3: \{ number: "S-3", title: "Benchmarks & Decision Lab"/);
   assert.doesNotMatch(page, /s4: \{ number: "S-4"/);
   assert.match(page, /number="S-1" title="Sectoral action board"/);
-  assert.match(page, /number="I-1" title="Investment action board"/);
+  assert.match(page, /number="I-1" title="Portfolio Overview action board"/);
   assert.match(page, /number="I-2" title="Portfolio"/);
   assert.match(page, /number="I-3" title="Risk"/);
-  assert.match(page, /number="I-4" title="Axis picks"/);
+  assert.match(page, /number="I-4" title="Research picks"/);
   assert.match(page, /Macro scenario lab/);
   assert.match(page, /macro-scenario-panel/);
   assert.match(page, /holdingOuterFill/);
-  assert.ok(page.indexOf('number="I-1" title="Investment action board"') < page.indexOf('number="I-2" title="Portfolio"'));
+  assert.ok(page.indexOf('number="I-1" title="Portfolio Overview action board"') < page.indexOf('number="I-2" title="Portfolio"'));
   assert.ok(page.indexOf('number="I-2" title="Portfolio"') < page.indexOf('number="I-3" title="Risk"'));
-  assert.ok(page.indexOf('number="I-3" title="Risk"') < page.indexOf('number="I-4" title="Axis picks"'));
+  assert.ok(page.indexOf('number="I-3" title="Risk"') < page.indexOf('number="I-4" title="Research picks"'));
   assert.ok(page.indexOf('number="I-3" title="Risk"') < page.indexOf("Macro scenario lab"));
   assert.doesNotMatch(page, /number="I-2" title="Investment desk"/);
   assert.doesNotMatch(page, /number="I-3" title="Macro scenario lab"/);
@@ -914,13 +916,13 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(reportDownloadServer, /homedir\(\),\s*"Downloads"/);
   assert.match(contentRoute, /127\.0\.0\.1:3003\/refresh/);
   assert.match(contentServer, /newsletterWindowMessages\(/);
-  assert.match(contentServer, /exactMailbox\(account, "Newsletters"\)/);
+  assert.match(contentServer, /exactMailbox\(account, \$\{JSON\.stringify\(MAIL_SOURCES\.newsletterMailbox\)\}\)/);
   assert.match(contentServer, /function refreshOnce\(\)/);
   assert.match(contentServer, /if \(refreshInFlight\) return refreshInFlight/);
   assert.match(contentServer, /ANALYSIS_DATE.*istDateKey\(0\)/);
   assert.match(contentServer, /ANALYSIS_WINDOW_START.*istDateKey\(3\)/);
-  assert.match(contentServer, /exactAccount\("iCloud"\)/);
-  assert.match(contentServer, /exactMailbox\(account, "Axis Research"\)/);
+  assert.match(contentServer, /exactAccount\(\$\{JSON\.stringify\(MAIL_SOURCES\.newsletterAccount\)\}\)/);
+  assert.match(contentServer, /exactMailbox\(account, \$\{JSON\.stringify\(MAIL_SOURCES\.axisMailbox\)\}\)/);
   assert.match(contentServer, /mailbox\.messages\.whose/);
   assert.match(contentServer, /group\.com\.apple\.calendar\/Calendar\.sqlitedb/);
   assert.match(contentServer, /FROM CalendarItem i/);
@@ -1080,7 +1082,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /kite\/snapshot\?refresh=/);
   assert.match(page, /sanitizeKiteStatusNote/);
   assert.doesNotMatch(page, /Latest refresh failed; retaining the last validated values/);
-  assert.doesNotMatch(page, /`\$\{current\.message\} Latest refresh failed/);
+  assert.doesNotMatch(page, /`\$\{current\.message\} Latest refresh failed; retaining the last validated values/);
   assert.match(liveServer, /callKiteTool\("get_holdings"\)/);
   assert.match(liveServer, /callKiteTool\("get_positions"\)/);
   assert.match(liveServer, /netPositionsFromKitePayload\(positionsRaw\)/);
@@ -1235,7 +1237,7 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case intelligence[\s\S]*case health[\s\S]*case builder[\s\S]*case strategies/);
+  assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case intelligence[\s\S]*case health[\s\S]*case builder[\s\S]*case strategies[\s\S]*case integrations/);
   assert.match(configuration, /URLQueryItem\(name: "view", value: rawValue\)/);
   assert.match(browser, /private\(set\) lazy var webView/);
   assert.match(browser, /portfolio-native-refresh/);
@@ -1395,6 +1397,7 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
   assert.match(page, /workspace === "intelligence"/);
   assert.match(page, /workspace === "health"/);
   assert.match(page, /workspace === "strategies"/);
+  assert.match(page, /workspace === "integrations"/);
   assert.match(page, /value === "market-intelligence"/);
   assert.match(chrome, /Algorithm Builder/);
   assert.doesNotMatch(chrome, /BuilderKanbanBoard|AlgorithmKanbanBoard|compact-action-board/);
@@ -1403,6 +1406,7 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
     return;
   }
   assert.match(types, /type WorkspaceKey =[\s\S]*"builder"/);
+  assert.match(types, /type WorkspaceKey =[\s\S]*"integrations"/);
   assert.match(routing, /algorithm-canvas/);
   assert.match(workspace.text, /Action Board|ACTION BOARD/);
   assert.match(workspace.text, /(?:label|title|id):\s*"canvas"|["']Canvas["']|>CANVAS</);
@@ -1418,4 +1422,9 @@ test("builder and strategies query strings SSR their workspace chrome", async ()
   const strategies = await (await render("/?view=strategies&section=y2")).text();
   assert.match(strategies, /data-workspace="strategies"/);
   assert.match(strategies, /strategy-card|simons-kmlm|NSE ETF/);
+  const integrations = await (await render("/?view=integrations")).text();
+  assert.match(integrations, /data-workspace="integrations"/);
+  assert.match(integrations, /PIPELINE OWNERSHIP|Integrations/);
+  const settingsAlias = await (await render("/?view=settings")).text();
+  assert.match(settingsAlias, /data-workspace="integrations"/);
 });

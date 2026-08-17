@@ -2,9 +2,9 @@
 
 The Xcode project is the primary iPhone client for the private Portfolio Intelligence dashboard. It is an enhanced hybrid app:
 
-- SwiftUI owns onboarding, workspace navigation, Tailscale/LAN connection state, startup-audit status, HealthKit sync, offline recovery, settings, and report sharing.
-- One persistent `WKWebView` renders the complete Investment, Sectoral Analytics, Market Intelligence, and Health & Wellness workspaces.
-- The Mac remains the private data plane for Kite, Mail, Podcasts, Calendar, Reminders, Notes, earnings verification, sector snapshots, PDF generation, and stored Health snapshots.
+- SwiftUI owns onboarding, workspace navigation (including Integrations), Tailscale/LAN connection state, startup-audit status, HealthKit sync, offline recovery, settings, and report sharing.
+- One persistent `WKWebView` renders Portfolio Overview, Sectoral Analytics, Market Intelligence, Health & Wellness, Algorithm Canvas, Strategies, and Integrations.
+- The Mac native app is the WKWebView target in `apple-app/mac/PortfolioIntelligenceMacApp.swift`, installed by `scripts/install-desktop-app.sh`. Chrome `--app` is not the product chrome.
 
 The Safari PWA remains a fallback. It is not the primary HealthKit-capable product.
 

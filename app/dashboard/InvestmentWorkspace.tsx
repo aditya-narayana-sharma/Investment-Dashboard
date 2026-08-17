@@ -564,7 +564,7 @@ const INVESTMENT_SECTIONS = [
   { id: "i1", label: "Action Board" },
   { id: "i2", label: "Portfolio" },
   { id: "i3", label: "Risk" },
-  { id: "i4", label: "Axis picks" },
+  { id: "i4", label: "Research picks" },
 ] as const;
 
 export type InvestmentWorkspaceProps = {
@@ -652,6 +652,7 @@ export function InvestmentWorkspace({
   const [gttSelection, setGttSelection] = useState<KiteGttSelection>(null);
   const [alertSelection, setAlertSelection] = useState<KiteAlertSelection>(null);
   const [analystGroupMode, setAnalystGroupMode] = useState<AnalystGroupMode>("calls");
+  const [researchProvider, setResearchProvider] = useState("axis");
   const [collapsedAnalystGroups, setCollapsedAnalystGroups] = useState<Set<string>>(() => new Set());
   const { holdings, portfolio, orders, gtts, marketCapAllocation, sectorAllocation, subSectorAllocation, classification } = snapshot;
   const positions = snapshot.positions ?? [];
@@ -756,13 +757,13 @@ export function InvestmentWorkspace({
 
   return <div className="investment-workspace-shell">
       <WorkspaceSectionNav
-        label="Investment sections"
+        label="Portfolio Overview sections"
         sections={INVESTMENT_SECTIONS}
         activeId={activeSection}
         onSelect={selectSection}
       />
       <div id="investment-i1" className="workspace-section action-board-workspace-section">
-      <CollapsibleSection number="I-1" title="Investment action board" note="Clickable daily actions, numeric advantages and strategic rationale">
+      <CollapsibleSection number="I-1" title="Portfolio Overview action board" note="Clickable daily actions, numeric advantages and strategic rationale">
         <DailyKanbanBoard workspace="investment"/>
       </CollapsibleSection>
       </div>
@@ -1007,10 +1008,19 @@ export function InvestmentWorkspace({
       </div>
 
       <div id="investment-i4" className="workspace-section">
-      <CollapsibleSection number="I-4" title="Axis picks" note={`Call matrix · Axis recommended stocks · recommended risk radar · as-of ${axisAsOfLabel}${content.investment.axisUsedLastTradingDay ? " · weekend/holiday fallback" : ""}`}>
+      <CollapsibleSection number="I-4" title="Research picks" note={`Call matrix · ${researchProvider === "axis" ? "Axis recommended stocks" : `${researchProvider} mailbox / local PDF`} · recommended risk radar · as-of ${axisAsOfLabel}${content.investment.axisUsedLastTradingDay ? " · weekend/holiday fallback" : ""}`}>
         <section className="panel analyst-matrix" data-visual="axis-call-constellation">
           <div className="panel-title"><div><h3>Analyst call matrix</h3><p>Targets are reference points, not quarter forecasts</p></div><Target size={18}/></div>
           <div className="analyst-matrix-controls">
+            <label htmlFor="research-provider">House
+              <select id="research-provider" value={researchProvider} onChange={(event) => setResearchProvider(event.target.value)}>
+                <option value="axis">Axis Research</option>
+                <option value="hdfc">HDFC Securities</option>
+                <option value="sbi">SBI Securities</option>
+                <option value="et-prime">ET Prime</option>
+                <option value="moneycontrol">Moneycontrol</option>
+              </select>
+            </label>
             <label htmlFor="analyst-group-by">Group by
               <select id="analyst-group-by" value={analystGroupMode} onChange={(event) => setAnalystGroupMode(event.target.value as AnalystGroupMode)}>
                 <option value="calls">Analyst calls</option>
@@ -1021,7 +1031,9 @@ export function InvestmentWorkspace({
               </select>
             </label>
           </div>
-          {analystGroups.length ? analystGroups.map((group) => {
+          {researchProvider !== "axis"
+            ? <div className="analyst-matrix-empty"><Target size={18}/><b>No source-backed rows for this house</b><span>Configure a mailbox and local PDF folder on Integrations. Unpublished KPI fields stay blank. Paywall logins are not scraped.</span></div>
+            : analystGroups.length ? analystGroups.map((group) => {
             const groupStateKey = `${analystGroupMode}:${group.key}`;
             const groupControlId = `analyst-group-${groupStateKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
             const isCollapsed = collapsedAnalystGroups.has(groupStateKey);
@@ -1052,8 +1064,10 @@ export function InvestmentWorkspace({
           }) : <div className="analyst-matrix-empty"><Target size={18}/><b>No source-backed rows in this group</b><span>Target achieved includes only explicit Axis Research Mail/PDF closure evidence.</span></div>}
           <div className="table-note"><Target size={16}/><span>Axis Mail calls as-of {axisAsOfLabel} are prioritised and deduplicated by symbol. Plain BUY variants resolve to one BUY category; Trading and Technical BUY remain distinct. Target achieved is a separate closed-call view sourced from explicit Axis Research Mail/PDF evidence and is never treated as an active recommendation. CMP prefers Kite last price when held; otherwise a yfinance delayed NSE quote.</span></div>
         </section>
+        {researchProvider === "axis" ? <>
         <AxisRecommendationWorkbench recommendations={mailAxisRecommendations} content={content} kiteBySymbol={resolvedKiteBySymbol} yfinanceBySymbol={resolvedYfinanceBySymbol}/>
         <article className="panel risk-panel threat-flower"><div className="panel-title"><div><h3>Recommended risk radar</h3><p>{axisAsOfLabel} · {mailAxisProfiles.length} deduplicated Axis calls from iCloud → Axis Research</p></div><Target size={18}/></div><RiskRadar profiles={mailAxisProfiles} selected={axisRisk} onSelect={setAxisRisk} averageLabel="Axis list average" idPrefix="axis-recommended-risk" emptyLabel={`No Axis risk profiles for ${mailWindow}`} /></article>
+        </> : null}
       </CollapsibleSection>
       </div>
   </div>;

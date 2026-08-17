@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
 import { inr } from "./utils";
+import { useActiveBroker } from "../integrations/broker/use-active";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
 type OrderSide = "BUY" | "SELL";
@@ -27,6 +28,7 @@ export function KiteOrderTicket({ selection, holdings, onClose, onSubmitted }: {
   const normalizedSymbol = symbol.trim().toUpperCase();
   const matchedHolding = holdings.find((holding) => holding.symbol.toUpperCase() === normalizedSymbol);
   const lookup = useKiteInstrumentLookup(normalizedSymbol, "NSE");
+  const broker = useActiveBroker();
   const referencePrice = matchedHolding?.price || lookup.publicPrice || 0;
   const expected = useMemo(() => selection && normalizedSymbol ? `${side} ${quantity} ${normalizedSymbol}` : "", [normalizedSymbol, quantity, selection, side]);
   if (!selection) return null;
@@ -41,7 +43,8 @@ export function KiteOrderTicket({ selection, holdings, onClose, onSubmitted }: {
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch("/api/kite/order", {
+      if (!broker.orderPath) throw new Error(broker.notes || "This broker cannot place live orders.");
+      const response = await fetch(broker.orderPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

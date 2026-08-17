@@ -250,6 +250,7 @@ export type ContentDigestSnapshot = {
   marketCalendar?: MarketCalendarSnapshot;
   healthNote: AppleNoteSnapshot | null;
   investment: InvestmentMailIntelligence;
+  earningsCalendarName?: string;
   sources: {
     newsletters: ContentSourceState;
     axisResearch: ContentSourceState;

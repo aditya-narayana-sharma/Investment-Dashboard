@@ -46,3 +46,11 @@ test("non-Earnings calendars never enter the tracked schedule", () => {
   ]);
   assert.deepEqual(rows.map((row) => row.id), ["exact"]);
 });
+
+test("configured earnings calendar names are selectable without admitting other calendars", () => {
+  const rows = exactEarningsCalendarItems([
+    event({ id: "renamed", title: "RENAMED Results", calendar: "Results", startsAt: "2026-08-06T00:00:00.000Z", sourceDate: "2026-08-06" }),
+    event({ id: "exact", title: "EXACT Results", startsAt: "2026-08-06T00:00:00.000Z", sourceDate: "2026-08-06" }),
+  ], "Results");
+  assert.deepEqual(rows.map((row) => row.id), ["renamed"]);
+});

@@ -12,7 +12,7 @@
   "theme_color": "#050607",
   "categories": ["finance", "productivity", "health"],
   "shortcuts": [
-    { "name": "Investment", "short_name": "Investment", "url": "/?view=investment", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Portfolio Overview", "short_name": "Portfolio", "url": "/?view=investment", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
     { "name": "Sector Overview", "short_name": "Sectors", "url": "/?view=sectors", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
     { "name": "Health & Wellness", "short_name": "Health", "url": "/?view=health", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] }
   ],

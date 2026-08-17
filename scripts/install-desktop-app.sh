@@ -24,27 +24,35 @@ if ! curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1; 
   "$ROOT_DIR/scripts/start-flask-app.sh"
 fi
 
-cat > "$MACOS_DIR/${APP_NAME}" <<EOF
+NATIVE_SRC="$ROOT_DIR/apple-app/mac/PortfolioIntelligenceMacApp.swift"
+NATIVE_BIN="$MACOS_DIR/${APP_NAME}"
+
+if [[ "$(uname -s)" == "Darwin" ]] && command -v swiftc >/dev/null 2>&1; then
+  PORTFOLIO_DESKTOP_URL="$DASHBOARD_URL" swiftc -parse-as-library -O -o "$NATIVE_BIN" \
+    -sdk "$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || echo /)" \
+    -framework AppKit -framework WebKit \
+    "$NATIVE_SRC"
+  chmod +x "$NATIVE_BIN"
+else
+  cat > "$NATIVE_BIN" <<EOF
 #!/bin/bash
 set -euo pipefail
 ROOT_DIR=$(printf '%q' "$ROOT_DIR")
 LOG_DIR=\$HOME/Library/Logs/PortfolioIntelligence
 mkdir -p "\$LOG_DIR"
-
 if ! curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1; then
   /bin/bash "\$ROOT_DIR/scripts/start-flask-app.sh" >>"\$LOG_DIR/desktop-app.log" 2>&1 || true
 fi
-
 URL=$(printf '%q' "$DASHBOARD_URL")
-if [[ -d "/Applications/Google Chrome.app" ]]; then
-  open -na "Google Chrome" --args --app="\$URL" --new-window
-elif [[ -d "/Applications/Microsoft Edge.app" ]]; then
-  open -na "Microsoft Edge" --args --app="\$URL" --new-window
-else
-  open "\$URL"
+NATIVE="\$ROOT_DIR/apple-app/mac/.build/PortfolioIntelligence"
+if [[ -x "\$NATIVE" ]]; then
+  PORTFOLIO_DESKTOP_URL="\$URL" exec "\$NATIVE"
 fi
+echo "Native WKWebView app requires macOS swiftc. Falling back to the default browser (not Chrome --app)." >>"\$LOG_DIR/desktop-app.log"
+open "\$URL"
 EOF
-chmod +x "$MACOS_DIR/${APP_NAME}"
+  chmod +x "$NATIVE_BIN"
+fi
 
 cat > "$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

@@ -4,7 +4,13 @@ set -uo pipefail
 BASE_URL="${DASHBOARD_PUBLIC_URL:-http://127.0.0.1:${PORTFOLIO_FLASK_PORT:-5050}}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AUDIT_JSON="${PORTFOLIO_STARTUP_AUDIT_PATH:-$ROOT_DIR/artifacts/private/startup-audit.json}"
-SECTORS=(pharma power infrastructure auto telecom banking nbfc fmcg consumer energy defence)
+mapfile -t SECTORS < <(node --input-type=module -e "
+import { mailSourceSelectors } from '$ROOT_DIR/scripts/integrations-config.mjs';
+for (const id of mailSourceSelectors().sectors) console.log(id);
+" 2>/dev/null || true)
+if [[ ${#SECTORS[@]} -eq 0 ]]; then
+  SECTORS=(pharma power infrastructure auto telecom banking nbfc fmcg consumer energy defence)
+fi
 FAILURES=0
 FAILED_NAMES=()
 HEALTH_REQUIRED_DATE="$(/usr/bin/python3 "$ROOT_DIR/scripts/health_date_policy.py" --date-only)"
