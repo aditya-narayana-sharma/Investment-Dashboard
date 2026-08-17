@@ -15,6 +15,8 @@ type FeedConfig = {
   stripPublisherSuffix?: boolean;
 };
 
+const PER_SOURCE_ITEM_CEILING = 100;
+
 const FEEDS: FeedConfig[] = [
   {
     id: "economic_times",
@@ -199,7 +201,7 @@ async function fetchFeed(feed: FeedConfig): Promise<{ source: SectorNewsSourceSt
         items: [],
       };
     }
-    const parsed = parseItems(xml, feed, 8).map((item) => {
+    const parsed = parseItems(xml, feed, PER_SOURCE_ITEM_CEILING).map((item) => {
       const blob = `${item.title} ${item.summary}`;
       return {
         ...item,

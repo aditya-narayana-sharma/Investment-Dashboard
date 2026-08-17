@@ -2,9 +2,10 @@ import {
   walkTreeNodes,
   type StrategyTreeV1,
 } from "../../packages/contracts/src/strategy-tree.ts";
-import type { LiveHolding } from "../live-types";
+import type { LiveHolding, LivePosition } from "../live-types";
+import { isBeesSymbol, nifty500Name } from "./builder-universe";
 
-export type TreeInstrumentSource = "holding" | "watchlist";
+export type TreeInstrumentSource = "holding" | "position" | "watchlist" | "catalogue";
 
 export type TreeInstrument = {
   symbol: string;
@@ -21,6 +22,14 @@ export type WatchlistSnapshot = {
   status: "live" | "unavailable";
   message: string;
   instruments: TreeInstrument[];
+};
+
+export type TreeLivePreviewStatus = "live" | "stale" | "unavailable" | "auth_required";
+
+export type ResolveTreeInstrumentsOptions = {
+  positions?: readonly LivePosition[];
+  nseSymbols?: readonly string[];
+  catalogue?: readonly TreeInstrument[];
 };
 
 function normalizeSymbol(value: string): string {
@@ -79,16 +88,57 @@ export function instrumentFromHolding(holding: LiveHolding): TreeInstrument {
   return instrument;
 }
 
-/** Holdings first, then watchlist names that are not already holdings. Never invent symbols. */
+export function instrumentFromPosition(position: LivePosition): TreeInstrument {
+  const symbol = normalizeSymbol(position.symbol);
+  const instrument: TreeInstrument = {
+    symbol,
+    tradingsymbol: symbol,
+    name: nifty500Name(symbol) || symbol,
+    source: "position",
+  };
+  if (Number.isFinite(position.price)) instrument.lastPrice = position.price;
+  if (Number.isFinite(position.qty)) instrument.qty = position.qty;
+  if (Number.isFinite(position.pnl)) instrument.pnl = position.pnl;
+  return instrument;
+}
+
+export function instrumentFromCatalogue(row: {
+  symbol: string;
+  name?: string;
+  exchange?: string;
+}): TreeInstrument | undefined {
+  const symbol = normalizeSymbol(row.symbol);
+  if (!symbol || isBeesSymbol(symbol)) return undefined;
+  const name = (row.name ?? nifty500Name(symbol) ?? "").trim() || symbol;
+  return {
+    symbol,
+    tradingsymbol: symbol,
+    name,
+    source: "catalogue",
+    exchange: (row.exchange ?? "NSE").trim().toUpperCase() || "NSE",
+  };
+}
+
+function remember(bySymbol: Map<string, TreeInstrument>, instrument: TreeInstrument | undefined) {
+  if (!instrument?.symbol || bySymbol.has(instrument.symbol)) return;
+  bySymbol.set(instrument.symbol, instrument);
+}
+
+/**
+ * Holdings, then open positions, then a live watchlist, then known NSE cash-equity
+ * names from the tree / Kite catalogue. Never invent tickers or last prices.
+ */
 export function resolveTreeInstruments(
   holdings: readonly LiveHolding[],
   watchlist: WatchlistSnapshot,
+  options: ResolveTreeInstrumentsOptions = {},
 ): TreeInstrument[] {
   const bySymbol = new Map<string, TreeInstrument>();
   for (const holding of holdings) {
-    const instrument = instrumentFromHolding(holding);
-    if (!instrument.symbol) continue;
-    bySymbol.set(instrument.symbol, instrument);
+    remember(bySymbol, instrumentFromHolding(holding));
+  }
+  for (const position of options.positions ?? []) {
+    remember(bySymbol, instrumentFromPosition(position));
   }
   if (watchlist.status === "live") {
     for (const row of watchlist.instruments) {
@@ -106,6 +156,16 @@ export function resolveTreeInstruments(
       });
     }
   }
+  for (const row of options.catalogue ?? []) {
+    remember(bySymbol, row.source === "catalogue" ? row : instrumentFromCatalogue(row));
+  }
+  for (const raw of options.nseSymbols ?? []) {
+    const symbol = normalizeSymbol(raw);
+    if (!symbol || bySymbol.has(symbol) || isBeesSymbol(symbol)) continue;
+    const name = nifty500Name(symbol);
+    if (!name) continue;
+    remember(bySymbol, instrumentFromCatalogue({ symbol, name, exchange: "NSE" }));
+  }
   return [...bySymbol.values()].sort((left, right) => left.symbol.localeCompare(right.symbol));
 }
 
@@ -115,4 +175,35 @@ export function findTreeInstrument(
 ): TreeInstrument | undefined {
   const needle = normalizeSymbol(symbol);
   return instruments.find((item) => item.symbol === needle || item.tradingsymbol === needle);
+}
+
+/**
+ * Red asset warnings are only for unresolved tickers. Holdings, positions, NSE
+ * cash-equity names, and Kite catalogue hits are valid. A missing watchlist is
+ * not a trading block and must not be concatenated onto a holdings warning.
+ */
+export function treeAssetWarning(input: {
+  symbol: string;
+  instrument?: TreeInstrument;
+  previewStatus: TreeLivePreviewStatus;
+  watchlistStatus: WatchlistSnapshot["status"];
+}): string | null {
+  const symbol = normalizeSymbol(input.symbol);
+  if (!symbol || input.instrument) return null;
+  if (nifty500Name(symbol) && !isBeesSymbol(symbol)) return null;
+
+  switch (input.previewStatus) {
+    case "live":
+      return input.watchlistStatus === "live"
+        ? "Not in live holdings or watchlist"
+        : "Not in live holdings";
+    case "stale":
+    case "unavailable":
+    case "auth_required":
+      return "Not in last known holdings";
+    default: {
+      const _never: never = input.previewStatus;
+      return _never;
+    }
+  }
 }

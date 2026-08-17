@@ -222,6 +222,7 @@
   gap: 2px;
   padding: 8px 18px;
   border: 2px solid #3b82f6;
+  border-radius: var(--radius);
   background: #0b1220;
   color: #fff;
   cursor: grab;
@@ -256,7 +257,7 @@
   height: 18px;
   padding: 0;
   border: 2px solid #fff;
-  border-radius: 50%;
+  border-radius: 50% !important;
   background: #2563eb;
   transform: translateY(-50%);
   pointer-events: auto;
@@ -611,6 +612,8 @@
 .symphony-if-operands {
   grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
   align-items: start;
+  overflow: visible;
+  isolation: isolate;
 }
 .symphony-if-sentence {
   margin: 0;
@@ -689,8 +692,71 @@
   gap: 4px;
   min-width: 0;
   isolation: isolate;
-  overflow: auto;
-  max-height: 280px;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.symphony-operand:has(.symphony-kpi-menu),
+.symphony-operand:has(.symphony-asset-menu) {
+  z-index: 18;
+}
+.symphony-kpi-picker {
+  position: relative;
+  min-width: 0;
+}
+.symphony-kpi-trigger {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  background: #050505;
+  color: var(--ink);
+  font: 600 12px/1.3 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.symphony-kpi-trigger span,
+.symphony-asset-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.symphony-kpi-trigger::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  flex: none;
+  border-radius: 0 !important;
+}
+.symphony-kpi-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
+.symphony-kpi-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  display: grid;
+  border: 1px solid var(--line);
+  background: var(--bg-app, #07090c);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.symphony-kpi-menu input[type="search"] {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-app, #050505);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: 12px var(--font-mono);
 }
 .symphony-kpi-hits {
   list-style: none;
@@ -698,7 +764,7 @@
   padding: 0;
   max-height: 160px;
   overflow: auto;
-  border: 2px solid var(--line);
+  border: 0;
 }
 .symphony-kpi-hits button {
   width: 100%;
@@ -707,8 +773,10 @@
   gap: 8px;
   padding: 6px 8px;
   border: 0;
+  border-radius: 0 !important;
   background: #050505;
   color: #fff;
+  font: 600 12px/1.35 var(--font-mono);
   text-align: left;
   cursor: pointer;
 }
@@ -837,6 +905,7 @@
 }
 .symphony-broker-ticket h3 { margin: 0; font-size: 14px; }
 .symphony-broker-warn { color: #fcd34d; font-size: 12px; }
+.symphony-broker-funds { color: #fca5a5; font-size: 12px; font-weight: 700; }
 .symphony-broker-result.success { color: #86efac; }
 .symphony-broker-result.error { color: #fca5a5; }
 .symphony-broker-ticket dl { display: grid; gap: 4px; margin: 0; }
@@ -1096,19 +1165,24 @@
   position: relative;
   display: grid;
   gap: 6px;
+  min-width: 0;
+  z-index: 1;
+}
+.symphony-asset-picker:has(.symphony-asset-menu) {
+  z-index: 18;
 }
 .symphony-asset-trigger {
   width: 100%;
-  min-height: 40px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
   background: var(--bg-app);
   color: var(--ink);
-  font: 600 14px/1.3 var(--font-mono);
+  font: 600 12px/1.3 var(--font-mono);
   text-align: left;
   cursor: pointer;
 }
@@ -1120,18 +1194,21 @@
   border-right: 5px solid transparent;
   border-top: 6px solid var(--muted);
   flex: none;
+  border-radius: 0 !important;
 }
 .symphony-asset-trigger span[data-empty="true"] { color: var(--muted); font-weight: 500; }
 .symphony-asset-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
 .symphony-asset-menu {
   position: absolute;
-  z-index: 12;
+  z-index: 20;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
+  min-width: 240px;
   display: grid;
   border: 1px solid var(--line);
   background: var(--bg-app);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 .symphony-asset-menu input[type="search"] {
   width: 100%;
@@ -1151,14 +1228,30 @@
 }
 .symphony-asset-options button {
   width: 100%;
+  display: grid;
+  gap: 2px;
   padding: 9px 12px;
   border: 0;
   border-bottom: 1px solid var(--line);
+  border-radius: 0 !important;
   background: transparent;
   color: var(--ink);
   font: 600 13px/1.35 var(--font-mono);
   text-align: left;
   cursor: pointer;
+}
+.symphony-asset-option-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.symphony-asset-option-kpis {
+  color: var(--muted);
+  font: 500 10px/1.35 var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .symphony-asset-options li:last-child button { border-bottom: 0; }
 .symphony-asset-group {
@@ -1327,6 +1420,7 @@
 .algorithm-builder.symphony-editor .symphony-block-head select,
 .algorithm-builder.symphony-editor .symphony-operand input,
 .algorithm-builder.symphony-editor .symphony-operand select,
+.algorithm-builder.symphony-editor .symphony-kpi-trigger,
 .algorithm-builder.symphony-editor .symphony-if-operands > select {
   background: var(--bg-elevated);
   color: var(--ink);
@@ -1435,9 +1529,15 @@
   min-width: 0;
 }
 .algorithm-builder.symphony-editor .symphony-asset-picker:has(.symphony-asset-menu),
+.algorithm-builder.symphony-editor .symphony-kpi-picker:has(.symphony-kpi-menu),
 .algorithm-builder.symphony-editor .symphony-add-wrap:has(.symphony-add-menu) {
   position: relative;
   z-index: 16;
+}
+.algorithm-builder.symphony-editor .symphony-tree .symphony-kpi-hits button,
+.algorithm-builder.symphony-editor .symphony-tree .symphony-asset-options button,
+.algorithm-builder.symphony-editor .symphony-tree .symphony-add-item {
+  border-radius: 0 !important;
 }
 .algorithm-builder.symphony-editor .builder-preview .kpi-registry-grid {
   gap: 4px;
@@ -1473,6 +1573,8 @@ html[data-appearance="sepia"] .symphony-block-head select,
 html[data-appearance="sepia"] .symphony-if-operands > select,
 html[data-appearance="sepia"] .symphony-operand input,
 html[data-appearance="sepia"] .symphony-operand select,
+html[data-appearance="sepia"] .symphony-kpi-trigger,
+html[data-appearance="sepia"] .symphony-asset-trigger,
 html[data-appearance="sepia"] .builder-palette input[type="search"],
 html[data-appearance="sepia"] .builder-inspector input,
 html[data-appearance="sepia"] .builder-inspector select,

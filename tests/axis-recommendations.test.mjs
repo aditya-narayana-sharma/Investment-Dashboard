@@ -198,3 +198,69 @@ test("mergeHoldingTradingCalls does not duplicate live trading rows and collapse
   assert.equal(injected[0].call, "TRADING BUY");
   assert.equal(injected[0].bucket, "trading");
 });
+
+test("workbench cards include every active matrix symbol/category and keep all Axis buckets", async () => {
+  const {
+    axisCallBucket,
+    activeMatrixCallKey,
+    workbenchCallKey,
+    mergeActiveMatrixRowsIntoWorkbench,
+    dedupeAxisCallsBySymbol,
+  } = await import("../app/axis-holding-trading-calls.ts");
+  const { analystCalls } = await import("../app/portfolio-data.ts");
+
+  const axisOnly = [
+    { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "BUY", target: 2530, cmp: 1978, upside: "—", horizon: "Result update", source: "Axis PDF", date: "6 Aug", thesis: "Bharti Airtel: BUY", color: "#4c8fff", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-06", bucket: "fundamental", origin: "pdf" },
+    { symbol: "BHARTIARTL", name: "Bharti Airtel", call: "TRADING BUY", target: 2530, cmp: 1960, upside: "—", horizon: "Axis Investment Picks", source: "Axis PDF", date: "7 Aug", thesis: "Bharti Airtel: TRADING BUY", color: "#21b5c5", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-07", bucket: "trading", origin: "pdf" },
+    { symbol: "DLF", name: "DLF", call: "TECHNICAL BUY", target: 750, cmp: 686, upside: "—", horizon: "Weekly technical setup", source: "Axis PDF", date: "10 Jul", thesis: "DLF: TECHNICAL BUY", color: "#e3b844", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-07-10", bucket: "technical", origin: "pdf" },
+    { symbol: "CDSL", name: "CDSL", call: "TECHNICAL BUY", target: 1525, cmp: 1432, upside: "—", horizon: "Weekly technical setup", source: "Axis PDF", date: "10 Jul", thesis: "CDSL: TECHNICAL BUY", color: "#f08bd3", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-07-10", bucket: "technical", origin: "pdf" },
+    { symbol: "KSL", name: "Kalyani Steels", call: "TECHNICAL BUY", target: 1025, cmp: 959, upside: "—", horizon: "Weekly technical setup", source: "Axis PDF", date: "10 Jul", thesis: "KSL: TECHNICAL BUY", color: "#79a7ff", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-07-10", bucket: "technical", origin: "pdf" },
+    { symbol: "OBEROIRLTY", name: "Oberoi Realty", call: "TRADING BUY", target: 1985, cmp: 1807, upside: "—", horizon: "Axis Punch", source: "Axis PDF", date: "6 Aug", thesis: "Oberoi Realty: TRADING BUY", color: "#42c878", scores: [3, 3, 3, 3, 3, 3], dateKey: "2026-08-06", bucket: "trading", origin: "pdf" },
+  ];
+
+  const axisUnique = dedupeAxisCallsBySymbol(axisOnly);
+  const matrixRows = [
+    ...axisUnique.map((item) => ({
+      symbol: item.symbol,
+      house: `${item.source} / iCloud Axis Research`,
+      rating: item.call,
+      target: item.target,
+      date: item.date,
+      thesis: item.thesis,
+      mail: true,
+    })),
+    ...analystCalls
+      .filter((item) => !axisUnique.some((axis) => axis.symbol === item.symbol))
+      .map((item) => ({ ...item, mail: false })),
+    {
+      symbol: "CHOLAFIN",
+      house: "Axis Mail / iCloud Axis Research",
+      rating: "TARGET ACHIEVED",
+      target: 1945,
+      date: "6 Aug",
+      thesis: "Closed Punch",
+      mail: true,
+      targetAchieved: true,
+    },
+  ];
+
+  const cards = mergeActiveMatrixRowsIntoWorkbench(axisOnly, matrixRows, new Map([["AETHER", "Aether Industries"]]));
+  const activeMatrix = matrixRows.filter((row) => !row.targetAchieved);
+  for (const row of activeMatrix) {
+    const key = activeMatrixCallKey(row);
+    assert.ok(
+      cards.some((card) => workbenchCallKey(card) === key),
+      `workbench missing active matrix call ${key} (${row.rating})`,
+    );
+  }
+
+  assert.equal(axisCallBucket({ call: "BUY", horizon: "Axis Investment Picks", bucket: undefined }), "trading");
+  assert.ok(cards.some((card) => axisCallBucket(card) === "technical"), "technical cards must remain visible");
+  assert.ok(cards.some((card) => axisCallBucket(card) === "trading"), "trading cards must remain visible");
+  assert.ok(cards.some((card) => card.symbol === "AETHER" && axisCallBucket(card) === "fundamental"));
+  assert.equal(cards.find((card) => card.symbol === "AETHER")?.name, "Aether Industries");
+  assert.equal(cards.find((card) => card.symbol === "AETHER")?.target, 1429);
+  assert.equal(cards.find((card) => card.symbol === "AETHER")?.cmp, null, "do not fabricate CMP for matrix-only fills");
+  assert.equal(cards.some((card) => card.symbol === "CHOLAFIN"), false, "closed calls stay out of the workbench");
+  assert.equal(cards.filter((card) => card.symbol === "BHARTIARTL").length, 2, "Axis fundamental + trading buckets stay distinct");
+});

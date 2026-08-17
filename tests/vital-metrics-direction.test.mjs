@@ -157,10 +157,8 @@ test("fixture metrics assign once across direction rows; unavailable and favoura
 });
 
 test("Incognito gate still wraps Vital Metrics console content", () => {
-  const h3Block = workspaceSource.slice(
-    workspaceSource.indexOf('id="health-h3"'),
-    workspaceSource.indexOf("sector-detail-shell"),
-  );
+  const start = workspaceSource.indexOf('id="health-h3"');
+  const h3Block = workspaceSource.slice(start, start + 1800);
   assert.match(h3Block, /HealthIncognitoGate/);
   assert.match(h3Block, /HealthMasonryGrid/);
   assert.match(h3Block, /Vital metrics hidden by Incognito/);

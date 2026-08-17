@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Sandboxed WKWebView client (InvestmentDashboard Mac Catalyst / iOS Mac destination).
+  This is NOT Stratji.app. Stratji's unsandboxed helper entitlements live in Stratji/Stratji.entitlements.
+  This process only loads the dashboard over the network; it does not run Flask, osascript, or Health ZIP import.
+-->
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.app-sandbox</key>

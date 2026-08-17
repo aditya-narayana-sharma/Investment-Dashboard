@@ -88,22 +88,25 @@ struct NativeWorkspacePicker: View {
     @Binding var selection: DashboardWorkspace
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(DashboardWorkspace.allCases) { workspace in
-                Button {
-                    selection = workspace
-                } label: {
-                    Label(workspace.title, systemImage: workspace.systemImage)
-                        .font(.caption.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .contentShape(Rectangle())
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(DashboardWorkspace.allCases) { workspace in
+                    Button {
+                        selection = workspace
+                    } label: {
+                        Label(workspace.title, systemImage: workspace.systemImage)
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 9)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selection == workspace ? Color.white : Color.secondary)
+                    .background(selection == workspace ? Color.accentColor : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityAddTraits(selection == workspace ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(selection == workspace ? Color.white : Color.secondary)
-                .background(selection == workspace ? Color.accentColor : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .accessibilityAddTraits(selection == workspace ? .isSelected : [])
             }
         }
         .padding(6)
@@ -114,54 +117,86 @@ struct NativeWorkspacePicker: View {
     }
 }
 
-struct NativeFreshnessStrip: View {
-    @ObservedObject var model: DashboardStatusModel
+struct DashboardAuditFreshnessStrip: View {
+    @ObservedObject var session: NativeRefreshCoordinator
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: model.audit?.isCurrent == false ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
-                .foregroundStyle(model.audit?.isCurrent == false ? .orange : model.connection.color)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: session.audit?.isCurrent == false ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
+                    .foregroundStyle(session.audit?.isCurrent == false ? .orange : session.connection.color)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(statusTitle)
-                    .font(.caption.bold())
-                    .lineLimit(1)
-                Text(statusDetail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(statusTitle)
+                        .font(.caption.bold())
+                        .lineLimit(1)
+                    Text(statusDetail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 4)
+
+                if let failures = session.audit?.failures, failures > 0 {
+                    Text("\(failures) source\(failures == 1 ? "" : "s")")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.14))
+                        .clipShape(Capsule())
+                }
             }
 
-            Spacer(minLength: 4)
-
-            if let failures = model.audit?.failures, failures > 0 {
-                Text("\(failures) source\(failures == 1 ? "" : "s")")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(Color.orange.opacity(0.14))
-                    .clipShape(Capsule())
+            if let sources = session.refresh?.sources, !sources.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(sources) { source in
+                            HStack(spacing: 4) {
+                                Text(source.source)
+                                Text(source.displayState)
+                                    .bold()
+                                    .foregroundStyle(FreshnessLabel.color(for: source.state))
+                            }
+                            .font(.caption2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(Color.primary.opacity(0.06))
+                            .clipShape(Capsule())
+                            .accessibilityLabel("\(source.source) \(source.displayState)")
+                        }
+                    }
+                }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(Color.primary.opacity(0.04))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private var statusTitle: String {
-        if let audit = model.audit {
+        if session.viewingCachedSnapshot {
+            return "Cached Mac snapshot"
+        }
+        if let audit = session.audit {
             return audit.isCurrent ? "Complete startup audit passed" : "Startup audit needs attention"
         }
-        return model.connection.label
+        return session.connection.label
     }
 
     private var statusDetail: String {
-        if let audit = model.audit {
+        if session.viewingCachedSnapshot {
+            if let last = session.lastSuccessfulRefresh {
+                return "Last success \(last.formatted(date: .abbreviated, time: .shortened)). Not live."
+            }
+            return "Showing the last stored snapshot. Not live."
+        }
+        if let audit = session.audit {
             return audit.message
         }
-        switch model.connection {
+        switch session.connection {
         case .degraded(let message), .offline(let message):
             return message
         default:
@@ -170,57 +205,14 @@ struct NativeFreshnessStrip: View {
     }
 }
 
-struct DashboardOfflineOverlay: View {
-    let message: String
-    let hasLastLoadedDashboard: Bool
-    let lastSuccessfulLoad: Date?
-    let retry: () -> Void
-    let continueOffline: () -> Void
-    let settings: () -> Void
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "network.slash")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(.orange)
-            Text("Mac dashboard unavailable")
-                .font(.title3.bold())
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            if let lastSuccessfulLoad {
-                Text("Last loaded \(lastSuccessfulLoad.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 10) {
-                Button("Settings", action: settings)
-                    .buttonStyle(.bordered)
-                if hasLastLoadedDashboard {
-                    Button("View last loaded", action: continueOffline)
-                        .buttonStyle(.bordered)
-                }
-                Button("Try again", action: retry)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: 460)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-        }
-        .padding(20)
-    }
-}
-
 struct DashboardSettingsView: View {
     @Binding var serverAddress: String
     @ObservedObject var statusModel: DashboardStatusModel
     @ObservedObject var pairing: HealthPairingModel
+    @ObservedObject var session: NativeRefreshCoordinator
+    @EnvironmentObject private var auth: AuthenticationService
+    let openDashboard: () -> Void
+    var openIntegrations: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var draftAddress: String
     @State private var pairingCode = ""
@@ -228,11 +220,17 @@ struct DashboardSettingsView: View {
     init(
         serverAddress: Binding<String>,
         statusModel: DashboardStatusModel,
-        pairing: HealthPairingModel
+        pairing: HealthPairingModel,
+        session: NativeRefreshCoordinator,
+        openDashboard: @escaping () -> Void,
+        openIntegrations: (() -> Void)? = nil
     ) {
         _serverAddress = serverAddress
         self.statusModel = statusModel
         self.pairing = pairing
+        self.session = session
+        self.openDashboard = openDashboard
+        self.openIntegrations = openIntegrations
         _draftAddress = State(initialValue: serverAddress.wrappedValue)
     }
 
@@ -243,8 +241,27 @@ struct DashboardSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Author") {
+                    if let email = auth.authorEmail {
+                        Label(email, systemImage: "person.crop.circle")
+                    } else {
+                        Text("Signed in with Auth0 Universal Login.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Log out", role: .destructive) {
+                        Task {
+                            if let normalizedURL {
+                                await auth.clearWebSession(baseURL: normalizedURL)
+                            }
+                            await auth.logout()
+                            dismiss()
+                        }
+                    }
+                }
+
                 Section("Private Mac dashboard") {
-                    TextField("https://your-mac.tailnet.ts.net/", text: $draftAddress)
+                    TextField("http://192.168.1.10:5050/", text: $draftAddress)
                         .textContentType(.URL)
                         .dashboardDisablesAutocapitalization()
                         .autocorrectionDisabled()
@@ -257,16 +274,16 @@ struct DashboardSettingsView: View {
                             Task { await statusModel.check(baseURL: normalizedURL) }
                         }
                     } else {
-                        Label("Enter a valid HTTP or HTTPS address.", systemImage: "exclamationmark.triangle.fill")
+                        Label("Enter the Mac LAN address from npm run remote, or pick a discovered Mac during onboarding.", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
 
                 Section("Private access") {
-                    Label("Keep the Mac awake with Portfolio Intelligence running.", systemImage: "desktopcomputer")
-                    Label("Use the same Tailscale account on this iPhone and Mac.", systemImage: "lock.shield")
-                    Label("Tailscale HTTPS is preferred; LAN is a fallback.", systemImage: "network")
+                    Label("Keep the Mac awake with Stratji running on the same Wi-Fi.", systemImage: "desktopcomputer")
+                    Label("Pair this iPhone with npm run iphone:pair before private data loads.", systemImage: "lock.shield")
+                    Label("Bonjour finds Stratji automatically. Tailscale is not required.", systemImage: "network")
                 }
 
 #if os(iOS)
@@ -289,8 +306,57 @@ struct DashboardSettingsView: View {
                         }
                         .disabled(pairing.isPairing || pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).count < 6)
                     }
+                    Text("On the Mac run npm run iphone:pair. The code expires after five minutes.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 #endif
+                Section("Integrations") {
+                    Text("The Integrations page is Settings, not a seventh workspace.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let openIntegrations {
+                        Button("Open Integrations") {
+                            openIntegrations()
+                        }
+                    }
+                    if let pipelines = session.integrations?.pipelines, !pipelines.isEmpty {
+                        ForEach(pipelines.keys.sorted(), id: \.self) { key in
+                            if let pipeline = pipelines[key] {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(key.replacingOccurrences(of: "_", with: " ").capitalized)
+                                            .font(.subheadline.bold())
+                                        Spacer()
+                                        NativeStatusChip(state: pipeline.status)
+                                    }
+                                    Text(pipeline.notes)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if let last = pipeline.lastValidated {
+                                        Text("Last validated \(last)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("Integrations appear after a successful Mac refresh.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Debug") {
+                    Button("Inspect data plane") {
+                        dismiss()
+                        openDashboard()
+                    }
+                    Text("Full-screen sheet of the same Mac workspace already shown after the native loading bar.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("Connection & Health")
             .toolbar {
@@ -318,6 +384,7 @@ struct DashboardOnboardingView: View {
     @Binding var isComplete: Bool
     @ObservedObject var statusModel: DashboardStatusModel
     @ObservedObject var pairing: HealthPairingModel
+    @StateObject private var discovery = NativeMacDiscovery()
     @State private var draftAddress: String
     @State private var pairingCode = ""
     @State private var step = 0
@@ -364,7 +431,7 @@ struct DashboardOnboardingView: View {
                             .buttonStyle(.bordered)
                     }
                     Spacer()
-                    Button(step == 2 ? "Open dashboard" : "Continue") {
+                    Button(step == 2 ? "Open Stratji" : "Continue") {
                         advance()
                     }
                     .buttonStyle(.borderedProminent)
@@ -373,6 +440,8 @@ struct DashboardOnboardingView: View {
             }
             .padding(24)
             .navigationTitle("Set up Portfolio Intelligence")
+            .onAppear { discovery.start() }
+            .onDisappear { discovery.stop() }
         }
         .interactiveDismissDisabled()
     }
@@ -382,20 +451,52 @@ struct DashboardOnboardingView: View {
         switch step {
         case 0:
             VStack(spacing: 12) {
-                Label("Investment, Sectoral Analytics, and Health", systemImage: "rectangle.3.group.fill")
+                Label("Native workspaces: Portfolio, Sectors, Intel, Health, Builder, Strategies", systemImage: "rectangle.3.group.fill")
                 Label("Kite and Apple-source secrets stay on your Mac", systemImage: "lock.shield.fill")
-                Label("The Mac must stay awake and connected", systemImage: "desktopcomputer")
+                Label("Same Wi-Fi as the Mac. No Tailscale.", systemImage: "wifi")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case 1:
-            VStack(spacing: 12) {
-                TextField("https://your-mac.tailnet.ts.net/", text: $draftAddress)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(discovery.status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if discovery.endpoints.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    ForEach(discovery.endpoints) { endpoint in
+                        Button {
+                            draftAddress = endpoint.url.absoluteString
+                            Task { await statusModel.check(baseURL: endpoint.url) }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(endpoint.name)
+                                        .font(.subheadline.bold())
+                                    Text(endpoint.url.absoluteString)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if draftAddress == endpoint.url.absoluteString {
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                TextField("http://192.168.1.10:5050/", text: $draftAddress)
                     .textFieldStyle(.roundedBorder)
                     .dashboardDisablesAutocapitalization()
                     .autocorrectionDisabled()
-                Button("Test Mac connection") {
-                    guard let normalizedURL else { return }
-                    Task { await statusModel.check(baseURL: normalizedURL) }
+                HStack {
+                    Button("Find Macs") { discovery.start() }
+                    Button("Test Mac connection") {
+                        guard let normalizedURL else { return }
+                        Task { await statusModel.check(baseURL: normalizedURL) }
+                    }
                 }
                 .buttonStyle(.bordered)
                 if case .online = statusModel.connection {
@@ -437,7 +538,7 @@ struct DashboardOnboardingView: View {
 
     private var stepTitle: String {
         switch step {
-        case 0: "Your private dashboard on iPhone"
+        case 0: "Your private Stratji client"
         case 1: "Connect to the Mac"
         default: "Pair HealthKit"
         }
@@ -446,18 +547,18 @@ struct DashboardOnboardingView: View {
     private var stepBody: String {
         switch step {
         case 0:
-            "The app provides the complete live dashboard while keeping brokerage and Apple content access on your Mac."
+            "This iPhone is a native Stratji client. The Mac stays the data plane. After pairing, each tab renders Portfolio, Sectors, Market Intelligence, Health, Algorithm Builder, and Strategies from JSON — not a Tailscale browser."
         case 1:
-            "Enter the Tailscale HTTPS address for the Mac running Portfolio Intelligence, then verify the gateway."
+            "Run npm run remote on the Mac, stay on the same Wi-Fi, then pick the discovered Stratji Mac or enter its LAN address."
         default:
-            "Generate a short-lived pairing code on the Mac. The resulting upload credential is stored only in this iPhone's Keychain."
+            "Generate a short-lived pairing code on the Mac with npm run iphone:pair. The resulting credential is stored only in this iPhone's Keychain and is required for LAN access."
         }
     }
 
     private var stepImage: String {
         switch step {
         case 0: "chart.line.uptrend.xyaxis"
-        case 1: "lock.icloud.fill"
+        case 1: "wifi"
         default: "heart.text.square.fill"
         }
     }

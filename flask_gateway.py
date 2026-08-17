@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import threading
+import base64
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
@@ -33,6 +34,10 @@ STARTUP_AUDIT_PATH = Path(os.environ.get(
     "PORTFOLIO_STARTUP_AUDIT_PATH",
     ROOT / "artifacts" / "private" / "startup-audit.json",
 ))
+STARTUP_PROGRESS_PATH = Path(os.environ.get(
+    "PORTFOLIO_STARTUP_PROGRESS_PATH",
+    ROOT / "artifacts" / "private" / "startup-progress.json",
+))
 HEALTH_PAIRINGS_PATH = Path(os.environ.get(
     "PORTFOLIO_HEALTH_PAIRINGS_PATH",
     ROOT / "artifacts" / "private" / "health-pairings.json",
@@ -45,6 +50,8 @@ PAIRING_CODE_TTL_SECONDS = 5 * 60
 IST = timezone(timedelta(hours=5, minutes=30))
 PAIRING_CODES: dict[str, datetime] = {}
 PAIRING_LOCK = threading.Lock()
+AUTH0_SESSION_COOKIE = "stratji_author"
+AUTH0_SESSION_DAYS = 14
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -58,6 +65,23 @@ HOP_BY_HOP_HEADERS = {
 
 app = Flask("Portfolio Intelligence")
 app.config["APP_NAME"] = "Portfolio Intelligence"
+
+
+def _load_private_auth0_env() -> None:
+    path = ROOT / "artifacts" / "private" / "auth0.env"
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key.startswith("AUTH0_") and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
+_load_private_auth0_env()
 
 
 def _current_health_target():
@@ -133,7 +157,24 @@ def _provided_health_token() -> str:
     auth = request.headers.get("Authorization") or ""
     if auth.lower().startswith("bearer "):
         provided = auth[7:].strip()
+    if not provided:
+        provided = request.cookies.get("stratji_device") or ""
+    if not provided:
+        cookie_header = request.headers.get("Cookie") or ""
+        for part in cookie_header.split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "stratji_device" and value:
+                provided = value
+                break
     return provided
+
+
+def _is_loopback_request() -> bool:
+    remote = request.remote_addr or ""
+    try:
+        return ipaddress.ip_address(remote).is_loopback
+    except ValueError:
+        return remote in {"127.0.0.1", "::1", "localhost"}
 
 
 def _authorized_health_post() -> bool:
@@ -142,13 +183,128 @@ def _authorized_health_post() -> bool:
 
 
 def _authorized_pairing_admin() -> bool:
-    remote = request.remote_addr or ""
-    try:
-        if ipaddress.ip_address(remote).is_loopback:
-            return True
-    except ValueError:
-        pass
+    if _is_loopback_request():
+        return True
     return _shared_health_token_matches(_provided_health_token())
+
+
+def _auth0_domain() -> str:
+    return os.environ.get("AUTH0_DOMAIN", "").strip().rstrip("/")
+
+
+def _auth0_is_configured() -> bool:
+    domain = _auth0_domain()
+    return bool(domain) and not domain.upper().startswith("YOUR_")
+
+
+def _auth0_author_email() -> str:
+    return os.environ.get("AUTH0_AUTHOR_EMAIL", "").strip().lower()
+
+
+def _auth0_session_secret() -> bytes:
+    env = os.environ.get("AUTH0_SESSION_SECRET", "").strip()
+    if env:
+        return env.encode("utf-8")
+    path = ROOT / "artifacts" / "private" / "auth0-session-secret"
+    if path.is_file():
+        return path.read_bytes().strip()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    secret = secrets.token_hex(32).encode("utf-8")
+    path.write_bytes(secret)
+    return secret
+
+
+def _verify_auth0_access_token(access_token: str) -> dict | None:
+    if not _auth0_is_configured() or not access_token:
+        return None
+    request = UpstreamRequest(
+        f"https://{_auth0_domain()}/userinfo",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, ValueError, OSError):
+        return None
+    if not isinstance(payload, dict) or not payload.get("sub"):
+        return None
+    return payload
+
+
+def _author_allowed(profile: dict) -> bool:
+    allowed = _auth0_author_email()
+    if not allowed:
+        return True
+    email = str(profile.get("email") or "").strip().lower()
+    return email == allowed
+
+
+def _sign_author_session(profile: dict) -> str:
+    expires = datetime.now(timezone.utc) + timedelta(days=AUTH0_SESSION_DAYS)
+    payload = json.dumps({
+        "email": profile.get("email") or "",
+        "name": profile.get("name") or "",
+        "sub": profile.get("sub") or "",
+        "exp": int(expires.timestamp()),
+    }, separators=(",", ":"))
+    body = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+    signature = hmac.new(_auth0_session_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def _read_author_session() -> dict | None:
+    raw = request.cookies.get(AUTH0_SESSION_COOKIE) or ""
+    if "." not in raw:
+        return None
+    body, _, signature = raw.partition(".")
+    expected = hmac.new(_auth0_session_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return None
+    padding = "=" * ((4 - len(body) % 4) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(body + padding).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        exp = int(payload.get("exp") or 0)
+    except (TypeError, ValueError):
+        return None
+    if exp < int(datetime.now(timezone.utc).timestamp()):
+        return None
+    return payload
+
+
+def _author_session_response(payload: dict, status: int = 200) -> Response:
+    return Response(json.dumps(payload), status=status, content_type="application/json")
+
+
+def _lan_path_is_public() -> bool:
+    if request.method == "OPTIONS":
+        return True
+    path = request.path.rstrip("/") or "/"
+    if path == "/_flask/health" and request.method == "GET":
+        return True
+    if path == "/_health/pair" and request.method == "POST":
+        return True
+    return False
+
+
+@app.before_request
+def _require_paired_phone_on_lan() -> Response | None:
+    if _is_loopback_request() or _lan_path_is_public():
+        return None
+    if _authorized_health_post():
+        return None
+    return _health_snapshot_response({
+        "status": "unauthorized",
+        "message": "Pair this iPhone from the Mac with npm run iphone:pair before loading private data over the local network.",
+    }, 401)
 
 
 def _valid_install_id(value: object) -> bool:
@@ -279,6 +435,37 @@ def startup_audit() -> Response:
             "failures": -1,
             "message": "The startup refresh audit could not be read.",
         }, 503)
+    return _health_snapshot_response(payload)
+
+
+@app.get("/_startup/progress")
+def startup_progress() -> Response:
+    try:
+        payload = json.loads(STARTUP_PROGRESS_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        payload = {
+            "schemaVersion": 1,
+            "status": "unknown",
+            "stage": "service",
+            "state": "start",
+            "label": "No startup refresh progress has been recorded yet.",
+            "fraction": 0,
+            "completed": [],
+            "failed": [],
+            "percent": 0,
+        }
+    except (OSError, json.JSONDecodeError):
+        return _health_snapshot_response({
+            "status": "unavailable",
+            "stage": "service",
+            "state": "failed",
+            "label": "Startup refresh progress could not be read.",
+            "completed": [],
+            "failed": [],
+            "percent": 0,
+        }, 503)
+    if isinstance(payload, dict) and "status" not in payload:
+        payload["status"] = "ok"
     return _health_snapshot_response(payload)
 
 
@@ -448,6 +635,66 @@ def health_snapshot() -> Response:
     }, 201)
 
 
+@app.get("/_auth/session")
+def author_session() -> Response:
+    if not _auth0_is_configured():
+        return _author_session_response({"status": "disabled", "authenticated": False})
+    profile = _read_author_session()
+    if not profile:
+        return _author_session_response({"status": "unauthenticated", "authenticated": False}, 401)
+    return _author_session_response({
+        "status": "ok",
+        "authenticated": True,
+        "email": profile.get("email") or "",
+        "name": profile.get("name") or "",
+    })
+
+
+@app.post("/_auth/session")
+def create_author_session() -> Response:
+    if not _auth0_is_configured():
+        return _author_session_response({
+            "status": "disabled",
+            "message": "Set AUTH0_DOMAIN in artifacts/private/auth0.env to mint a web session cookie.",
+        }, 503)
+    payload = request.get_json(silent=True) or {}
+    access_token = str(payload.get("accessToken") or "")
+    profile = _verify_auth0_access_token(access_token)
+    if not profile:
+        return _author_session_response({
+            "status": "unauthorized",
+            "message": "Auth0 access token was missing or rejected.",
+        }, 401)
+    if not _author_allowed(profile):
+        return _author_session_response({
+            "status": "forbidden",
+            "message": "This Auth0 account is not the Stratji author.",
+        }, 403)
+    response = _author_session_response({
+        "status": "ok",
+        "authenticated": True,
+        "email": profile.get("email") or "",
+        "name": profile.get("name") or "",
+    })
+    response.set_cookie(
+        AUTH0_SESSION_COOKIE,
+        _sign_author_session(profile),
+        httponly=True,
+        samesite="Lax",
+        path="/",
+        max_age=AUTH0_SESSION_DAYS * 24 * 60 * 60,
+        secure=request.is_secure,
+    )
+    return response
+
+
+@app.post("/_auth/logout")
+def clear_author_session() -> Response:
+    response = _author_session_response({"status": "ok", "authenticated": False})
+    response.delete_cookie(AUTH0_SESSION_COOKIE, path="/")
+    return response
+
+
 @app.get("/install")
 def install() -> Response:
     dashboard_url = request.host_url.rstrip("/") + "/"
@@ -464,13 +711,13 @@ def install() -> Response:
         section{{border-top:3px solid #4c8fff;background:#0d1013;padding:22px;margin:18px 0}}
         li{{margin:10px 0;color:#c5cbd2}}a{{display:inline-block;background:#174b84;color:white;padding:11px 14px;text-decoration:none;font-weight:800;margin-right:10px;margin-top:8px}}
         code{{color:#8fc2ff;word-break:break-all}}</style></head><body><main><h1>Install Portfolio Intelligence</h1>
-        <p>Private app hosted on your Mac. Install once on Dock and Home Screen; it keeps using this Mac as the server.</p>
-        <section><h2>iPhone or iPad</h2><ol>
-        <li>Open this page in <b>Safari</b> (not Chrome): <code>{escape(dashboard_url)}</code></li>
-        <li>Tap the Share button.</li>
-        <li>Choose <b>Add to Home Screen</b>.</li>
-        <li>Tap <b>Add</b>. The icon opens as a standalone app.</li></ol>
-        <p>Prefer Tailscale on both devices for mobile-data access. Same Wi-Fi works when the Mac is bound for LAN.</p></section>
+        <p>Private app hosted on your Mac. The iPhone client is the native InvestmentDashboard app, not a Tailscale browser.</p>
+        <section><h2>iPhone</h2><ol>
+        <li>On the Mac run <code>npm run remote</code> so Flask is on the LAN and advertised over Bonjour.</li>
+        <li>Install with <code>npm run iphone:native</code>, or open <code>apple-app/InvestmentDashboard.xcodeproj</code> and Run on the device.</li>
+        <li>On the Mac run <code>npm run iphone:pair</code>, then enter the code in the iPhone app.</li>
+        <li>Keep this Mac awake on the same Wi-Fi as the iPhone.</li></ol>
+        <p>Safari Add to Home Screen remains a fallback only: <code>{escape(dashboard_url)}</code></p></section>
         <section><h2>Mac Dock app</h2><ol>
         <li>On the Mac run <code>npm run desktop</code> once (creates <b>Portfolio Intelligence.app</b> in ~/Applications and pins it to the Dock).</li>
         <li>Or in Safari open the dashboard and choose <b>File → Add to Dock</b>.</li>
@@ -490,9 +737,10 @@ def proxy(path: str) -> Response:
         headers=_request_headers(),
         method=request.method,
     )
+    force_content = request.args.get("force") == "1" or "startup" in request.args
     timeout_seconds = (
         CONTENT_REFRESH_TIMEOUT_SECONDS
-        if path.startswith("api/content/")
+        if path.startswith("api/content/") or (path.startswith("api/dashboard/refresh") and force_content)
         else UPSTREAM_TIMEOUT_SECONDS
     )
     try:

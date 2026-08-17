@@ -139,28 +139,27 @@ Persistent source and freshness rules for maintainers live in `AGENTS.md`.
 
 - Node.js `>=22.13.0`
 - Python 3.10 or newer for the private Flask gateway
+- **Full Xcode** to build Stratji.app (Command Line Tools are not enough)
 - macOS (Apple Mail, Reminders, Calendar, Podcasts, and Health import are Mac-side)
 
-### Canonical macOS service
+### Clone path (any Mac)
 
 ```bash
+git clone <this-repo>
+cd "Investment Dashboard"
 npm install
 npm run flask:setup
-scripts/run-dashboard-service.sh
+npm run lint
+npm run build
+npm run flask:service
+npm run desktop
 ```
 
-`flask:setup` creates an isolated `.venv-flask`. The service starts Vinext on `127.0.0.1:3000` if needed, binds Waitress to **`127.0.0.1:5050` only**, then runs the startup audit. Open `http://127.0.0.1:5050/` (or `http://localhost:5050/`).
-
-Equivalent npm wrappers:
-
-```bash
-npm run flask:service    # scripts/start-flask-app.sh → run-dashboard-service.sh
-npm run flask            # same local-only job, then print Tailscale URL if connected
-npm run flask:stop
-npm run remote           # start the gateway and print the private Tailscale Serve URL
-```
+`flask:setup` creates `.venv-flask`. `flask:service` starts Vinext on `127.0.0.1:3000` if needed, binds Waitress to **`127.0.0.1:5050` only**, then runs the startup audit. Open `http://127.0.0.1:5050/` or use Stratji.app. Tailscale and Auth0 are not required.
 
 Logs: `~/Library/Logs/PortfolioIntelligence/` (`service.log`, `vinext.log`, `flask.log`, `startup-refresh.log`).
+
+After Flask is reachable, every start runs `scripts/refresh-dashboard-data.sh`. Inspect that log before treating the dashboard as live.
 
 ### Vinext only (UI without the Flask gateway)
 
@@ -179,27 +178,21 @@ KITE_MCP_PROJECT_DIR=/path/to/kite-mcp-server npm run dev
 KITE_MCP_URL=http://127.0.0.1:8080/mcp npm run dev
 ```
 
-### Dock and iPhone
+### Dock
 
 ```bash
-npm run desktop       # ~/Applications/Portfolio Intelligence.app
-npm run iphone        # Tailscale when signed in; otherwise same-Wi-Fi LAN
-npm run iphone:pair   # single-use HealthKit pairing code after the native app is installed
+npm run desktop       # builds Stratji.app → ~/Applications/Stratji.app
 ```
 
-Alternatively open `http://localhost:5050/` in Safari and choose **File → Add to Dock**. The install guide is also at `/install`.
+Stratji unlocks with **Touch ID or the Mac login password** for that launch. Choose **Lock** in the Stratji menu to lock again. Auth0 is not required when `Auth0.plist` still has `YOUR_` placeholders.
 
-The primary iPhone client is the SwiftUI app in `apple-app/InvestmentDashboard.xcodeproj` (native onboarding, workspace navigation, source freshness, HealthKit upload, offline recovery, PDF sharing around one WKWebView). The Safari PWA is a fallback. See `apple-app/README.md`.
-
-The iPhone refreshes dashboard sources on open, foreground, connectivity return, **Refresh now**, and every five minutes while active. Keep the Mac awake. Kite credentials, Mail, Podcasts, Health data, and MCP calls remain server-side. The pairing token lives in the iPhone Keychain; the Mac stores only its hash in the ignored private artifacts directory.
-
-Install Tailscale on Mac and iPhone, sign in to the same tailnet, then `npm run remote`. Tailscale Serve publishes the loopback Flask port to the tailnet only — not to the open internet.
+Alternatively open `http://127.0.0.1:5050/` in Safari. The install guide is also at `/install`.
 
 ---
 
 ## Kite authentication
 
-The dashboard starts the local Kite MCP server automatically, then reads holdings, positions, margins, orders, and GTTs through a server-only MCP session. The browser refreshes `/api/kite/snapshot` immediately and every five minutes.
+The dashboard starts the local Kite MCP server automatically, then reads holdings, positions, margins, orders, and GTTs through a server-only MCP session. Stratji.app runs one complete refresh on the splash screen, then keeps that snapshot until you click Refresh all (or Reload All). The browser does the same after its first load.
 
 Use **Authenticate Kite** only when the existing session genuinely requires login. Complete Zerodha login, return to the dashboard, and press **Refresh now**. After one successful login, the daily access token is kept until the next ~06:00 IST boundary (Zerodha’s once-per-day rule). This is not a fixed 12-hour timer. The dashboard and local Kite MCP reuse that token across restarts; avoid additional same-day logins because Zerodha can invalidate the previous access token for the same API key.
 
@@ -233,6 +226,26 @@ node --test tests/rendered-html.test.mjs
 - Incognito on Health hides values, metadata, actions, recommendations, and accessibility text.
 - Remote access is Tailscale Serve to the loopback gateway, not a public bind.
 - Research Mailboxes are read-only except Reminder checkboxes. Displayed Mail and Podcast summaries omit contact details and links.
+
+---
+
+## Mac unlock and licenses
+
+Stratji.app unlocks with **LocalAuthentication** (Touch ID or Mac login password). The session lasts until **Lock** or quit. There is no Auth0 tenant to create.
+
+Paid features use a local license file, not a cloud billing server:
+
+| Tier | Includes |
+| --- | --- |
+| **Basic** | Portfolio Overview I-1–I-4, Sectoral Analytics S-1/S-2, Integrations wizard |
+| **Pro** | Basic + Market Intelligence, Health, S-3 Decision Lab, PDF brief |
+| **Ultra** | Pro + Algorithm Canvas, Strategies library, Streak export checklist |
+
+Unlock Pro/Ultra by pasting a key in **Settings** (`stratji-pro-yourtoken` / `stratji-ultra-yourtoken`), setting `STRATJI_LICENSE_KEY`, or choosing the operator tier on the publisher’s Mac. Keys live in `~/Library/Application Support/Stratji/license.json` (and a gitignored repo copy). v1 is an honor + key file: any well-formed prefix unlocks that tier. Later TARGET work can replace this with a signed JWT from stratji.co.in — do not treat v1 as SaaS billing.
+
+Locked workspaces stay visible in nav and show an upgrade pane. Stratji does not invent live data behind a paywall.
+
+Auth0.plist `YOUR_` placeholders must stay in git. Do not commit filled Auth0.plist, `.env`, `artifacts/private/`, `.venv-flask`, `node_modules`, or Xcode DerivedData.
 
 ---
 

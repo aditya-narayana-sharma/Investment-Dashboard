@@ -1,5 +1,7 @@
 # STRATJI — "Portfolio Intelligence" · Master System Prompt & Handoff Specification
 
+> **Living bible (execute this instead):** [STRATJI-Publish-Ready-Master-Plan.md](STRATJI-Publish-Ready-Master-Plan.md) and the agent-executable [STRATJI-Platform-Master-Prompt.md](STRATJI-Platform-Master-Prompt.md), plus `docs/stratji/`. This file is a **historical 4-workspace as-built inventory** traced from an earlier Visual-Overhaul snapshot. Do not treat its “four workspaces / fourteen sections” count as current law — the product now has **six workspaces** plus Integration Page chrome.
+
 > **Purpose of this document.** This is a complete, as-built handoff/documentation prompt for the local
 > **Investment Dashboard** repo that Aditya refers to as **"STRATJI"** and that self-brands in code as the
 > **"Portfolio Intelligence"** Mac/iPhone app. It is written so that a capable AI coding agent (Claude Code,

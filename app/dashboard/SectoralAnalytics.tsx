@@ -5,11 +5,12 @@ import { Activity, Database, ExternalLink, Layers3 } from "lucide-react";
 import { CartesianGrid, Cell, LabelList, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { sectorComposite, sectorSourceNote, sectors } from "../sector-data";
 import { fundamentalMetricLabels, sectorCompanies, sectorUniverseLabels, type FundamentalMetricKey, type SectorCompany } from "../sector-company-data";
-import { isUsableSectorMarketStatus, type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
+import { isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "../sector-news-types";
 import { lifeCyclePoints, marketStructurePoints, sectorImpactRows, type ImpactSignal } from "../sector-analytics-data";
 import type { LiveHolding } from "../live-types";
 import type { SectorRankingView } from "./types";
+import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
 import { currentIstDateLabel, inr } from "./utils";
 
 const impactGlyph: Record<ImpactSignal, string> = { tailwind: "▲", headwind: "▼", "two-way": "●", na: "—" };
@@ -17,6 +18,42 @@ const LIFE_CYCLE_STAGES = ["", "Growth", "Shakeout", "Mature", "Decline", "Legac
 const axisLabelStyle = { fill: "#9ba6b2", fontSize: 11, fontWeight: 700 };
 
 export type SectorAnalyticsPage = "pulse" | "companies" | "rankings" | "lifecycle" | "structure" | "mece";
+
+function industryAnalyticsSuggestions(industryName: string | null): LlmAssistSuggestion[] {
+  const subject = industryName ?? "all industries in the supplied snapshot";
+  return [
+    {
+      id: "vs-nifty",
+      label: "vs Nifty 50",
+      prompt: `How does ${subject} compare with Nifty 50 using only the supplied snapshot and EOD benchmarks? Do not invent index levels. If a level is missing, say unavailable.`,
+    },
+    {
+      id: "breadth",
+      label: "Session breadth",
+      prompt: `Summarize advancers vs decliners and median 1M return for ${subject} from the supplied snapshot only. Missing quotes stay blank.`,
+    },
+    {
+      id: "leaders-laggards",
+      label: "Leaders vs laggards",
+      prompt: `Who are the supplied leaders and laggards for ${subject}? Use only supplied rank values. Do not invent returns or KPIs.`,
+    },
+    {
+      id: "composite-pulse",
+      label: "Composite vs pulse",
+      prompt: `What do the supplied composite score and pulse imply for ${subject}? Do not change scores or invent missing KPIs.`,
+    },
+    {
+      id: "constituents",
+      label: "Constituent mix",
+      prompt: `What does the supplied constituent mix and universe share say about concentration in ${subject}? Missing prices stay blank.`,
+    },
+    {
+      id: "owned-names",
+      label: "Owned names in industry",
+      prompt: `Which supplied constituents are marked owned in ${subject}, and what does the supplied P&L say? Do not invent quantities or prices.`,
+    },
+  ];
+}
 
 type CompanyBubblePoint = {
   kind: "company";
@@ -416,7 +453,7 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
   </div>;
 }
 
-export default function SectoralAnalytics({ selectedIds, onToggle, market, marketsBySector = {}, news = emptySectorNewsSnapshot(), holdings, page }: { selectedIds: string[]; onToggle: (sectorId: string) => void; market: SectorMarketSnapshot; marketsBySector?: Record<string, SectorMarketSnapshot>; news?: SectorNewsSnapshot; holdings: LiveHolding[]; page: SectorAnalyticsPage }) {
+export default function SectoralAnalytics({ selectedIds, onToggle, market, marketsBySector = {}, news = emptySectorNewsSnapshot(), holdings, page, benchmarks }: { selectedIds: string[]; onToggle: (sectorId: string) => void; market: SectorMarketSnapshot; marketsBySector?: Record<string, SectorMarketSnapshot>; news?: SectorNewsSnapshot; holdings: LiveHolding[]; page: SectorAnalyticsPage; benchmarks?: SectorBenchmarkSnapshot }) {
   const [rankingView, setRankingView] = useState<SectorRankingView>("market");
   const [returnHorizon, setReturnHorizon] = useState<SectorReturnHorizon>("month");
   const [fundamentalMetric, setFundamentalMetric] = useState<FundamentalMetricKey>("growth");
@@ -512,9 +549,9 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     return item.sectorIds.some((sectorId) => selectedIds.includes(sectorId));
   });
   const newsBySentiment = {
-    Positive: newsItems.filter((item) => item.sentiment === "Positive").slice(0, 3),
-    Neutral: newsItems.filter((item) => item.sentiment === "Neutral").slice(0, 3),
-    Negative: newsItems.filter((item) => item.sentiment === "Negative").slice(0, 3),
+    Positive: newsItems.filter((item) => item.sentiment === "Positive"),
+    Neutral: newsItems.filter((item) => item.sentiment === "Neutral"),
+    Negative: newsItems.filter((item) => item.sentiment === "Negative"),
   } as const;
   const newsColumnTotal = newsBySentiment.Positive.length + newsBySentiment.Neutral.length + newsBySentiment.Negative.length;
   const newsLiveSources = news.sources.filter((source) => source.status === "live");
@@ -552,6 +589,39 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
   const companyPageCount = Math.max(1, Math.ceil(companies.length / companyPageSize));
   const safeCompanyPage = Math.min(companyPage, companyPageCount - 1);
   const visibleCompanies = companies.slice(safeCompanyPage * companyPageSize, (safeCompanyPage + 1) * companyPageSize);
+  const nifty = benchmarks?.indices.find((index) => index.id === "nifty-50");
+  const benchmarkSummary = (benchmarks?.indices ?? []).slice(0, 8).map((index) => {
+    const level = index.level === null ? "unavailable" : String(index.level);
+    const month = index.returns.month === null ? "unavailable" : `${index.returns.month.toFixed(2)}%`;
+    return `${index.officialName} level ${level} 1M ${month}`;
+  }).join("; ") || "no benchmark rows";
+  const leaderSummary = (selected ? leaders : crossLeaders).slice(0, 5).map((company) => {
+    const value = "rankValue" in company ? company.rankValue : null;
+    return `${company.symbol} ${value === null || value === undefined ? "—" : value}`;
+  }).join(", ") || "none";
+  const laggardSummary = (selected ? laggards : crossLaggards).slice(0, 5).map((company) => {
+    const value = "rankValue" in company ? company.rankValue : null;
+    return `${company.symbol} ${value === null || value === undefined ? "—" : value}`;
+  }).join(", ") || "none";
+  const ownedSummary = (selected ? companies : crossIndustryCompanies)
+    .filter((company) => company.holding)
+    .slice(0, 8)
+    .map((company) => `${company.symbol} owned`)
+    .join(", ") || "none";
+  const interrogateContext = [
+    selected
+      ? `Selected industry: ${selected.name}. Pulse ${selected.pulse}. Stance ${selected.stance}. Composite ${sectorComposite(selected).toFixed(1)}/5.`
+      : `All industries unfiltered. Average composite ${avgComposite}/5. Industries advancing ${industriesAdvancing}. Industries declining ${industriesDeclining}.`,
+    selected
+      ? `KPIs: ${selected.kpis.map((kpi) => `${kpi.label} ${kpi.value || "—"}`).join("; ") || "none"}. Watch: ${selected.watch}`
+      : `Tracked companies ${crossIndustryCompanies.length}. Priced ${crossPriced.length}. Advancers ${crossAdvancers}. Decliners ${crossDecliners}. Median 1M ${crossMedianMonth === null ? "—" : `${crossMedianMonth.toFixed(2)}%`}.`,
+    selected
+      ? `Breadth: advancers ${priced.length ? advancers : "—"}; decliners ${priced.length ? decliners : "—"}; median 1M ${medianMonth === null ? "—" : `${medianMonth.toFixed(2)}%`}. Market ${market.status} as-of ${market.asOf}.`
+      : `Cross-industry market ${crossMarketStatus} as-of ${crossMarketAsOf}.`,
+    `Leaders: ${leaderSummary}. Laggards: ${laggardSummary}. Owned: ${ownedSummary}.`,
+    `EOD benchmarks (${benchmarks?.status ?? "unavailable"} as-of ${benchmarks?.asOf ?? "—"}): ${benchmarkSummary}. Nifty 50 level ${nifty?.level ?? "unavailable"}.`,
+    "Source of truth is the selected industry snapshot, rankings, constituents, and EOD benchmarks only. Not Mail or Podcasts.",
+  ].join("\n");
 
   return <section className={`sector-overview sector-analytics-page-${page}`} data-sector-filter={filterActive ? selectedIds.join(",") : "all"} style={{ "--selected-sector": accent } as CSSProperties}>
     {page === "pulse" && <div className="sector-lead" style={{ "--sector": accent } as CSSProperties}>
@@ -577,6 +647,17 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
         return <button type="button" aria-pressed={selected} key={sector.id} onClick={() => { onToggle(sector.id); setCompanyPage(0); }} className={className} style={{ "--sector": sector.color } as CSSProperties}><i/><span>{sector.name}</span><small>{sectorComposite(sector).toFixed(1)}</small></button>;
       })}
     </div>
+    <LlmAssistPanel
+      task="industry"
+      className="llm-assist-span"
+      subtitle={selected
+        ? `${selected.name} snapshot + rankings + constituents + EOD benchmarks, as Source of Truth`
+        : "All-industry snapshot + rankings + constituents + EOD benchmarks, as Source of Truth"}
+      hint="Uses the selected industry snapshot, rankings, constituents, and EOD benchmarks only — not Mail or Podcasts. Missing KPIs stay blank."
+      suggestions={industryAnalyticsSuggestions(selected?.name ?? null)}
+      context={interrogateContext}
+      placeholder={selected ? `e.g. How does ${selected.name} compare with Nifty 50 on the supplied snapshot?` : "e.g. What does all-industry breadth say versus Nifty 50?"}
+    />
 
     {page === "pulse" && <SectorImpactMatrix selectedIds={selectedIds} onToggle={(sectorId) => { if (sectors.some((sector) => sector.id === sectorId)) onToggle(sectorId); }}/>}
 

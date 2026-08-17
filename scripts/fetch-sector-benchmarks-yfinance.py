@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Fetch exact NSE index histories, with exact-index Yahoo fallbacks only."""
+"""Fetch exact NSE index histories, with official archive then exact-index Yahoo fallbacks."""
 
 from __future__ import annotations
 
+import csv
 import json
 import math
+import os
 import statistics
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
+from io import StringIO
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import requests
@@ -17,6 +23,8 @@ NSE_HOME_URL = "https://www.nseindia.com/"
 NSE_REPORT_URL = "https://www.nseindia.com/reports-indices-historical-index-data"
 NSE_HISTORY_URL = "https://www.nseindia.com/api/historical/indicesHistory"
 NSE_SOURCE_URL = NSE_REPORT_URL
+NSE_ARCHIVE_URL = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{stamp}.csv"
+NSE_ARCHIVE_SOURCE_URL = "https://nsearchives.nseindia.com/content/indices/"
 YAHOO_SOURCE_URL = "https://finance.yahoo.com/markets/world-indices/"
 REQUEST_HEADERS = {
     "Accept": "application/json,text/plain,*/*",
@@ -24,6 +32,175 @@ REQUEST_HEADERS = {
     "Referer": NSE_REPORT_URL,
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36",
 }
+ARCHIVE_LOOKBACK_DAYS = 370
+ARCHIVE_WORKERS = 8
+
+
+def cache_path() -> Path:
+    configured = os.environ.get("PORTFOLIO_BENCHMARK_CACHE")
+    if configured:
+        return Path(configured)
+    return Path("artifacts/private/nse-index-close-cache.json")
+
+
+def normalize_index_name(name: str) -> str:
+    return " ".join(str(name).upper().split())
+
+
+def compact_index_name(name: str) -> str:
+    return "".join(ch for ch in normalize_index_name(name) if ch.isalnum())
+
+
+def index_name_keys(name: str) -> list[str]:
+    normalized = normalize_index_name(name)
+    compact = compact_index_name(name)
+    keys = [normalized]
+    if compact and compact not in keys:
+        keys.append(compact)
+    return [key for key in keys if key]
+
+
+def resolve_index_id(name: str, name_to_id: dict[str, str]) -> str | None:
+    for key in index_name_keys(name):
+        found = name_to_id.get(key)
+        if found:
+            return found
+    return None
+
+
+def weekday_range(start: date, end: date) -> list[date]:
+    days: list[date] = []
+    cursor = start
+    while cursor <= end:
+        if cursor.weekday() < 5:
+            days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def parse_close_all_csv(text: str) -> list[tuple[str, str, float]]:
+    rows: list[tuple[str, str, float]] = []
+    reader = csv.DictReader(StringIO(text.lstrip("\ufeff")))
+    if reader.fieldnames:
+        reader.fieldnames = [(name or "").strip() for name in reader.fieldnames]
+    for row in reader:
+        name = normalize_index_name(row.get("Index Name") or "")
+        raw_date = str(row.get("Index Date") or "").strip()
+        parsed_close = number(row.get("Closing Index Value") or row.get("Close"))
+        if not name or parsed_close is None:
+            continue
+        stamp = raw_date
+        for fmt in ("%d-%m-%Y", "%d-%b-%Y", "%Y-%m-%d"):
+            try:
+                stamp = datetime.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+                break
+            except ValueError:
+                continue
+        if len(stamp) == 10 and stamp[4] == "-" and stamp[7] == "-":
+            rows.append((name, stamp, parsed_close))
+    return rows
+
+
+def load_archive_cache() -> dict[str, list[tuple[str, float]]]:
+    path = cache_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    closes = payload.get("closes") if isinstance(payload, dict) else None
+    if not isinstance(closes, dict):
+        return {}
+    parsed: dict[str, list[tuple[str, float]]] = {}
+    for index_id, rows in closes.items():
+        series: list[tuple[str, float]] = []
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 2:
+                continue
+            value = number(row[1])
+            if value is None:
+                continue
+            series.append((str(row[0]), value))
+        parsed[str(index_id)] = normalized_closes(series)
+    return parsed
+
+
+def save_archive_cache(closes: dict[str, list[tuple[str, float]]]) -> None:
+    path = cache_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        "closes": {index_id: [[stamp, value] for stamp, value in series] for index_id, series in closes.items()},
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def fetch_archive_csv(day: date) -> list[tuple[str, str, float]]:
+    session = requests.Session()
+    session.headers.update(REQUEST_HEADERS)
+    url = NSE_ARCHIVE_URL.format(stamp=day.strftime("%d%m%Y"))
+    try:
+        response = session.get(url, timeout=20)
+        if response.status_code in (404, 403):
+            return []
+        if response.status_code == 503:
+            response = session.get(url, timeout=20)
+        response.raise_for_status()
+        if "Index Name" not in response.text[:200]:
+            return []
+        return parse_close_all_csv(response.text)
+    except requests.RequestException:
+        return []
+
+
+def archive_backfill_start(by_id: dict[str, list[tuple[str, float]]], today: date | None = None) -> date:
+    today = today or date.today()
+    lookback_start = today - timedelta(days=ARCHIVE_LOOKBACK_DAYS)
+    starts: list[date] = []
+    for series in by_id.values():
+        if len(series) < 2:
+            starts.append(lookback_start)
+            continue
+        first = datetime.strptime(series[0][0], "%Y-%m-%d").date()
+        last = datetime.strptime(series[-1][0], "%Y-%m-%d").date()
+        starts.append(lookback_start if first > lookback_start else last + timedelta(days=1))
+    return min(starts) if starts else lookback_start
+
+
+def nse_archive_histories(registry: list[dict[str, Any]]) -> dict[str, list[tuple[str, float]]]:
+    name_to_id: dict[str, str] = {}
+    for item in registry:
+        index_id = str(item.get("id") or "")
+        if not index_id:
+            continue
+        label = str(item.get("nseIndexName") or item.get("officialName") or "")
+        for key in index_name_keys(label):
+            name_to_id[key] = index_id
+    cached = load_archive_cache()
+    by_id: dict[str, list[tuple[str, float]]] = {
+        str(item["id"]): list(cached.get(str(item["id"]), []))
+        for item in registry
+        if item.get("id")
+    }
+    missing_days = weekday_range(archive_backfill_start(by_id), date.today())
+    if missing_days:
+        lock = Lock()
+        with ThreadPoolExecutor(max_workers=ARCHIVE_WORKERS) as pool:
+            futures = [pool.submit(fetch_archive_csv, day) for day in missing_days]
+            for future in as_completed(futures):
+                rows = future.result()
+                with lock:
+                    for name, stamp, value in rows:
+                        index_id = resolve_index_id(name, name_to_id)
+                        if index_id:
+                            by_id.setdefault(index_id, []).append((stamp, value))
+        for index_id, series in list(by_id.items()):
+            by_id[index_id] = normalized_closes(series)
+        save_archive_cache(by_id)
+    return {index_id: normalized_closes(series) for index_id, series in by_id.items()}
 
 
 def number(value: Any) -> float | None:
@@ -55,9 +232,11 @@ def nse_history(item: dict[str, Any], session: requests.Session) -> list[tuple[s
         "to": today.strftime("%d-%m-%Y"),
     }
     response = session.get(NSE_HISTORY_URL, params=params, headers=REQUEST_HEADERS, timeout=20)
-    if response.status_code in (401, 403):
+    if response.status_code in (401, 403, 503):
         session.get(NSE_HOME_URL, headers=REQUEST_HEADERS, timeout=15)
         response = session.get(NSE_HISTORY_URL, params=params, headers=REQUEST_HEADERS, timeout=20)
+    if response.status_code == 503:
+        raise RuntimeError("NSE historical API returned 503")
     response.raise_for_status()
     payload = response.json()
     data = payload.get("data", []) if isinstance(payload, dict) else []
@@ -155,7 +334,11 @@ def build_record(
     }
 
 
-def index_record(item: dict[str, Any], session: requests.Session) -> dict[str, Any]:
+def index_record(
+    item: dict[str, Any],
+    session: requests.Session,
+    archive_closes: list[tuple[str, float]] | None = None,
+) -> dict[str, Any]:
     errors: list[str] = []
     try:
         closes = nse_history(item, session)
@@ -165,6 +348,9 @@ def index_record(item: dict[str, Any], session: requests.Session) -> dict[str, A
     except Exception as exc:
         errors.append(f"NSE: {exc}")
 
+    if archive_closes and len(archive_closes) >= 2:
+        return build_record(item, archive_closes, "NSE official EOD index archive", NSE_ARCHIVE_SOURCE_URL)
+
     try:
         closes = yahoo_history(item)
         if len(closes) >= 2:
@@ -172,6 +358,8 @@ def index_record(item: dict[str, Any], session: requests.Session) -> dict[str, A
         errors.append(f"Yahoo returned {len(closes)} closing observation(s)")
     except Exception as exc:
         errors.append(f"Yahoo: {exc}")
+    if archive_closes is not None:
+        errors.append(f"NSE archive returned {len(archive_closes)} closing observation(s)")
     return {"id": item["id"], "ticker": str(item.get("ticker") or ""), "error": "; ".join(errors)}
 
 
@@ -184,7 +372,16 @@ def main() -> int:
         session.get(NSE_HOME_URL, headers=REQUEST_HEADERS, timeout=15)
     except requests.RequestException:
         pass
-    json.dump({"indices": [index_record(item, session) for item in registry]}, sys.stdout)
+    archive_by_id = nse_archive_histories(registry)
+    json.dump(
+        {
+            "indices": [
+                index_record(item, session, archive_by_id.get(str(item.get("id") or "")))
+                for item in registry
+            ]
+        },
+        sys.stdout,
+    )
     return 0
 
 

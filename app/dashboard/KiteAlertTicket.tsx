@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
+import { KiteTicketPortal } from "./KiteTicketPortal";
+import { readKiteTicketResponse } from "./kite-ticket-response";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
@@ -31,11 +33,13 @@ export function KiteAlertTicket({
   holdings,
   onClose,
   onSubmitted,
+  kiteSessionLive = true,
 }: {
   selection: KiteAlertSelection;
   holdings: LiveHolding[];
   onClose: () => void;
   onSubmitted: () => Promise<void>;
+  kiteSessionLive?: boolean;
 }) {
   const [symbol, setSymbol] = useState(selection?.holding?.symbol ?? "");
   const [exchange, setExchange] = useState<AlertExchange>("NSE");
@@ -58,6 +62,7 @@ export function KiteAlertTicket({
   );
   const ready = Boolean(
     selection
+    && kiteSessionLive
     && reviewed
     && confirmation.trim().toUpperCase() === expected
     && /^[A-Z0-9&.\- ]{1,48}$/.test(normalizedSymbol)
@@ -83,6 +88,8 @@ export function KiteAlertTicket({
     try {
       const response = await fetch("/api/kite/alert", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symbol: normalizedSymbol,
@@ -93,13 +100,11 @@ export function KiteAlertTicket({
           confirmation,
         }),
       });
-      const payload = await response.json() as {
-        status?: string;
-        message?: string;
-        result?: { uuid?: string; kite_response?: { uuid?: string } } | string;
-      };
-      if (!response.ok) throw new Error(payload.message || `Kite alert returned ${response.status}`);
-      const nested = payload.result && typeof payload.result === "object" ? payload.result : null;
+      const payload = await readKiteTicketResponse(response, "Kite alert");
+      if (!payload.ok) throw new Error(payload.message);
+      const nested = payload.payload?.result && typeof payload.payload.result === "object"
+        ? payload.payload.result as { uuid?: string; kite_response?: { uuid?: string } }
+        : null;
       const uuid = nested?.uuid || nested?.kite_response?.uuid || "";
       setResult({
         tone: "success",
@@ -115,7 +120,7 @@ export function KiteAlertTicket({
     }
   }
 
-  return <div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+  return <KiteTicketPortal><div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="kite-order-ticket alert" role="dialog" aria-modal="true" aria-labelledby="kite-alert-title">
       <header>
         <div>
@@ -132,6 +137,7 @@ export function KiteAlertTicket({
           {" "}Review symbol, exchange, direction, and trigger before confirming. Alerts notify only — they do not place orders.
         </span>
       </div>
+      {!kiteSessionLive && <div className="kite-order-warning kite-order-session" role="alert"><AlertTriangle size={18}/><span><b>Kite session required — log in on this Mac.</b> Alerts cannot be submitted while Kite is unavailable, cached, or unauthenticated.</span></div>}
       <div className="kite-order-fields">
         <label>Symbol
           <input list="kite-alert-instruments" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. NTPC" autoComplete="off" spellCheck={false}/>
@@ -155,7 +161,7 @@ export function KiteAlertTicket({
       </div>
       <div className="kite-order-summary">
         <span>Condition</span>
-        <b>LTP {direction === "above" ? "≥" : "≤"} {trigger > 0 ? inr.format(trigger) : "—"}</b>
+        <b data-demo-sensitive="">LTP {direction === "above" ? "≥" : "≤"} {trigger > 0 ? inr.format(trigger) : "—"}</b>
         <small>Simple Kite Connect alert via create_alert. Does not place or modify orders.</small>
       </div>
       <label className="kite-order-review"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)}/><span>I reviewed this exact price alert and want Kite to create it.</span></label>
@@ -166,5 +172,5 @@ export function KiteAlertTicket({
         <button type="button" className="alert" onClick={() => void submitAlert()} disabled={!ready || submitting}>{submitting ? "Submitting…" : "Create price alert"}</button>
       </footer>
     </section>
-  </div>;
+  </div></KiteTicketPortal>;
 }

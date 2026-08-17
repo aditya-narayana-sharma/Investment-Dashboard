@@ -93,6 +93,7 @@ export function InstrumentGauge({
   ratio,
   tone = "neutral",
   redline,
+  sensitive = false,
 }: {
   label: string;
   value: string;
@@ -101,6 +102,7 @@ export function InstrumentGauge({
   ratio: number;
   tone?: "neutral" | "positive" | "warning" | "danger";
   redline?: string;
+  sensitive?: boolean;
 }) {
   const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
   const circumference = 2 * Math.PI * 36;
@@ -121,7 +123,7 @@ export function InstrumentGauge({
             strokeDashoffset={offset}
           />
         </svg>
-        <div className="gauge-center"><b>{value}</b></div>
+        <div className="gauge-center"><b {...(sensitive ? { "data-demo-sensitive": "" } : {})}>{value}</b></div>
       </div>
       <span>{label}</span>
       <small>{detail}</small>

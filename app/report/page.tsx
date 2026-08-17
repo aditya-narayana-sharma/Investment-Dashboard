@@ -13,6 +13,9 @@ import { axisImpliedUpsidePct, completeAxisPicks } from "../axis-pick-metrics";
 import { sortDonutHoldings } from "../portfolio-donut";
 import { sectorCompanies } from "../sector-company-data";
 import { macroDials, sectorImpactRows, squeezeWidths, type ImpactSignal } from "../sector-analytics-data";
+import { LicenseGate } from "../dashboard/LicenseGate";
+import { tierAllows } from "../license";
+import { useLicenseSnapshot } from "../license-snapshot";
 import styles from "./report.module.css";
 
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
@@ -191,6 +194,7 @@ function PrintNestedDonut({ holdings, marketCap, sectors, subSectors, value, pnl
 }
 
 export default function Report() {
+  const { license } = useLicenseSnapshot();
   const [snapshot, setSnapshot] = useState<KiteSnapshot | null>(null);
   const [content, setContent] = useState<ContentDigestSnapshot | null>(null);
   const [yfinanceBySymbol, setYfinanceBySymbol] = useState<Map<string, number>>(new Map());
@@ -331,6 +335,12 @@ export default function Report() {
   }, [refreshLatest]);
 
   const investmentMailReady = content?.sources.axisResearch.status === "live" && content?.sources.newsletters.status === "live";
+  if (!tierAllows(license.tier, "pdf") && !license.author) {
+    return <main className={styles.report}>
+      <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span>PDF is Pro</span></nav>
+      <LicenseGate feature="pdf" license={license} title="Investment Brief PDF" />
+    </main>;
+  }
   if (!snapshot || snapshot.status !== "live" || !investmentMailReady) {
     const authStatus = snapshot?.authStatus;
     const needsAuth = Boolean(
@@ -439,7 +449,7 @@ export default function Report() {
   const actionPage = sectorPage + 1;
 
   return <main className={styles.report}>
-    <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span className={styles.liveStamp}><CheckCircle2 size={15}/> Live Kite · {asOf}</span><button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><Download size={15}/>{refreshing ? "Exporting report" : "Export Report"}</button></nav>
+    <nav className={styles.noPrint}><Link href="/">Back to dashboard</Link><span className={styles.liveStamp}><CheckCircle2 size={15}/> Live Kite · {asOf}</span><button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><Download size={15}/>{refreshing ? "Generating report PDF" : "Generate Report PDF"}</button></nav>
     {error && <p className={`${styles.noPrint} ${styles.exportError}`} role="alert">{error}</p>}
     {preparedDownload && <p className={`${styles.noPrint} ${styles.downloadReady}`}><span>Report PDF ready as {preparedDownload.filename}. Choose where to save it if the download dialog is still open.</span><a href={preparedDownload.url} download={preparedDownload.filename} onClick={(event) => { event.preventDefault(); void promptPdfDownload(preparedDownload.url, preparedDownload.filename); }}><Download size={15}/> Download prepared PDF</a></p>}
 

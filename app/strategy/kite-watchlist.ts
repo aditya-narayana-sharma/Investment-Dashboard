@@ -95,7 +95,7 @@ export async function getKiteWatchlist(): Promise<WatchlistSnapshot> {
     const tool = pickWatchlistTool(toolNames);
     if (!tool) {
       return unavailableWatchlist(
-        "Unavailable: Kite MCP has no watchlist tool. Tree symbols use live holdings only.",
+        "Unavailable: Kite MCP has no watchlist tool. Search company names in the instrument picker via yfinance; holdings remain the live portfolio source.",
       );
     }
     const payload = await callKiteTool(tool);

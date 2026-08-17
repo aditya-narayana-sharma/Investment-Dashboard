@@ -8,8 +8,8 @@ const visualCss = await readFile(new URL("../app/visual-overhaul.css", import.me
 test("macro evidence summaries stay source-derived and follow the selected event", () => {
   assert.match(workspace, /function buildMacroEvidenceSummaries/);
   assert.match(workspace, /const evidenceSummaries = buildMacroEvidenceSummaries\(selectedEvidenceItems, eventKey, bandKey\)/);
-  assert.match(workspace, /const selectedEvidenceItems = scenarioEvidenceItems\(candidateItems, eventKey, bandKey\)/);
-  assert.match(workspace, /eventKey === "flows"[\s\S]*fiiDiiFlowsSnapshot\.evidence[\s\S]*\.\.\.mailItems/);
+  assert.match(workspace, /const selectedEvidenceItems = assembleScenarioEvidence\(candidateItems, eventKey, bandKey, event\)/);
+  assert.match(workspace, /eventKey === "flows"[\s\S]*fiiDiiFlowsSnapshot\.evidence[\s\S]*content\.axisResearch[\s\S]*content\.newsletters/);
   assert.match(workspace, /<AiEvidenceSummaries summaries=\{evidenceSummaries\}\/\>/);
   assert.match(workspace, /AI-generated evidence summaries/);
   assert.match(workspace, /Source-derived · outcome classified/);

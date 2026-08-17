@@ -7,7 +7,7 @@ import { computeKpisFromOhlcv } from "../app/strategy/tree-indicators.ts";
 const kpiRegistry = JSON.parse(readFileSync(new URL("../packages/kpi-registry/definitions/kpis.json", import.meta.url), "utf8"));
 const KPI_REGISTRY_COUNT = kpiRegistry.count;
 const kpiDefinitions = kpiRegistry.kpis;
-import { resolveTreeInstruments, collectTreeSymbols } from "../app/strategy/tree-instruments.ts";
+import { resolveTreeInstruments, collectTreeSymbols, treeAssetWarning } from "../app/strategy/tree-instruments.ts";
 import { buildTreeAlertPreviews, buildTreeGttPreviews, buildTreeOrderPreviews } from "../app/strategy/tree-orders.ts";
 import { lookupKpiValue } from "../app/strategy/tree-evaluate.ts";
 import { buildTreeLivePreview, parseTreeLiveKpiSymbol } from "../app/strategy/tree-live.ts";
@@ -39,7 +39,7 @@ function holding(symbol, extras = {}) {
   };
 }
 
-function kiteSnapshot(status, holdings = []) {
+function kiteSnapshot(status, holdings = [], positions = []) {
   return {
     status,
     authStatus: status === "live" ? "authenticated" : "unavailable",
@@ -47,7 +47,7 @@ function kiteSnapshot(status, holdings = []) {
     message: status === "live" ? "Live holdings." : "Kite unavailable.",
     portfolio: { invested: 0, value: 0, pnl: 0, pnlPct: 0, dayPnl: 0, dayPct: 0, topTwo: 0, equityMargin: 0 },
     holdings,
-    positions: [],
+    positions,
     orders: [],
     gtts: [],
     alerts: [],
@@ -62,6 +62,19 @@ function kiteSnapshot(status, holdings = []) {
       asOf: "test",
       pendingSymbols: [],
     },
+  };
+}
+
+function position(symbol, extras = {}) {
+  return {
+    id: `${symbol}-CNC`,
+    symbol,
+    product: extras.product ?? "CNC",
+    side: extras.side ?? "LONG",
+    qty: extras.qty ?? 4,
+    avg: extras.avg ?? 100,
+    price: extras.price ?? 120,
+    pnl: extras.pnl ?? 10,
   };
 }
 
@@ -219,4 +232,84 @@ test("live preview evaluates an extra KPI-panel symbol without inventing values"
   assert.equal(preview.kpis["pe_ttm:RELIANCE"].value, null);
   const relianceKpis = Object.keys(preview.kpis).filter((key) => key.endsWith(":RELIANCE"));
   assert.equal(relianceKpis.length, KPI_REGISTRY_COUNT);
+});
+
+test("positions and NSE cash-equity names resolve without a live watchlist", () => {
+  const unavailable = { status: "unavailable", message: "Unavailable: Kite MCP has no watchlist tool.", instruments: [] };
+  const fromPosition = resolveTreeInstruments([], unavailable, {
+    positions: [position("AXISBANK", { price: 250, qty: 7, pnl: 18 })],
+  });
+  assert.equal(fromPosition.length, 1);
+  assert.equal(fromPosition[0].symbol, "AXISBANK");
+  assert.equal(fromPosition[0].source, "position");
+  assert.equal(fromPosition[0].lastPrice, 250);
+  assert.equal(fromPosition[0].qty, 7);
+
+  const fromNse = resolveTreeInstruments([], unavailable, {
+    nseSymbols: ["AXISBANK", "ICICIBANK", "NOTAREALTICKER"],
+  });
+  assert.deepEqual(fromNse.map((item) => item.symbol), ["AXISBANK", "ICICIBANK"]);
+  assert.ok(fromNse.every((item) => item.source === "catalogue" && item.lastPrice === undefined));
+
+  const holdingsWin = resolveTreeInstruments([holding("AXISBANK", { price: 111, qty: 2 })], unavailable, {
+    positions: [position("AXISBANK", { price: 250, qty: 7 })],
+    nseSymbols: ["AXISBANK"],
+  });
+  assert.equal(holdingsWin[0].source, "holding");
+  assert.equal(holdingsWin[0].lastPrice, 111);
+  assert.equal(holdingsWin[0].qty, 2);
+});
+
+test("live preview keeps Core Satellite bank names valid when watchlist is unavailable", () => {
+  const tree = createSeedTree(new Date("2026-08-16T00:00:00+05:30"));
+  const preview = buildTreeLivePreview(tree, {
+    kite: kiteSnapshot("live", [holding("RELIANCE", { price: 1405, qty: 12 })], [position("AXISBANK", { price: 250, qty: 4 })]),
+    watchlist: { status: "unavailable", message: "Unavailable: no watchlist tool.", instruments: [] },
+    yfinance: [],
+  });
+  assert.equal(preview.nodes["asset-icicibank"].instrument.source, "catalogue");
+  assert.equal(preview.nodes["asset-icicibank"].instrument.symbol, "ICICIBANK");
+  assert.equal(preview.nodes["asset-icicibank"].instrument.lastPrice, undefined);
+  assert.equal(preview.instruments.find((item) => item.symbol === "AXISBANK")?.source, "position");
+  assert.equal(preview.instruments.find((item) => item.symbol === "RELIANCE")?.source, "holding");
+});
+
+test("asset warnings stay silent for holdings, positions, and NSE cash names", () => {
+  const unavailable = "unavailable";
+  assert.equal(treeAssetWarning({
+    symbol: "AXISBANK",
+    previewStatus: "live",
+    watchlistStatus: unavailable,
+  }), null);
+  assert.equal(treeAssetWarning({
+    symbol: "ICICIBANK",
+    previewStatus: "live",
+    watchlistStatus: unavailable,
+  }), null);
+  assert.equal(treeAssetWarning({
+    symbol: "HDFCBANK",
+    instrument: { symbol: "HDFCBANK", tradingsymbol: "HDFCBANK", name: "HDFC Bank", source: "holding", lastPrice: 10 },
+    previewStatus: "live",
+    watchlistStatus: unavailable,
+  }), null);
+  assert.equal(treeAssetWarning({
+    symbol: "NOTAREALTICKER",
+    previewStatus: "live",
+    watchlistStatus: unavailable,
+  }), "Not in live holdings");
+  assert.equal(treeAssetWarning({
+    symbol: "NOTAREALTICKER",
+    previewStatus: "live",
+    watchlistStatus: "live",
+  }), "Not in live holdings or watchlist");
+  assert.equal(treeAssetWarning({
+    symbol: "NOTAREALTICKER",
+    previewStatus: "stale",
+    watchlistStatus: unavailable,
+  }), "Not in last known holdings");
+  assert.doesNotMatch(treeAssetWarning({
+    symbol: "NOTAREALTICKER",
+    previewStatus: "live",
+    watchlistStatus: unavailable,
+  }) ?? "", /watchlist unavailable/i);
 });

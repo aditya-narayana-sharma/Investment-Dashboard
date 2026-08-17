@@ -30,6 +30,7 @@ import { createSeedTree } from "../../strategy/seed-tree";
 import { validateStrategyGraph } from "../../strategy/validate";
 import { STRATEGIES_LIVE_PATH } from "../../strategy/persist";
 import type { TreeLivePreview } from "../../strategy/tree-live";
+import { LlmAssistPanel } from "../LlmAssistPanel";
 import { AlgorithmBuilder } from "./AlgorithmBuilder";
 import { BuilderLibraryActions } from "./BuilderLibraryActions";
 import { TreeBrokerConfirm, type TreeBrokerDraft } from "./TreeBrokerConfirm";
@@ -419,6 +420,15 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
                 <p>Select a block to inspect or delete it.</p>
               )}
             </div>
+            <LlmAssistPanel
+              task="builder"
+              hint="Draft a StrategyTreeV1 from a prompt. Invalid JSON is rejected and the canvas stays as-is."
+              context={`Current tree name: ${tree.name}. Interval: ${tree.interval}. Description: ${tree.description ?? ""}.`}
+              placeholder="e.g. Core-satellite with HDFCBANK quality sleeve and a RELIANCE trend gate"
+              applyLabel="Interrogate LLM"
+              disabled={readOnly}
+              onApplyTree={(next) => applyDocument({ tree: next, graph: compileTreeToGraph(next) })}
+            />
           </aside>
           <aside className="builder-preview" aria-label="Backtest overview">
             <h3>Backtest overview</h3>
@@ -538,6 +548,11 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
         <TreeBrokerConfirm
           draft={brokerDraft}
           authUrl={live?.authUrl}
+          equityMargin={live?.equityMargin}
+          marginsKnown={live?.marginsKnown}
+          estimatedPrice={brokerDraft.kind === "order"
+            ? live?.instruments.find((item) => item.symbol === brokerDraft.preview.symbol)?.lastPrice ?? 0
+            : 0}
           onClose={() => setBrokerDraft(null)}
         />
       )}

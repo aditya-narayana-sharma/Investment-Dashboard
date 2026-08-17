@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
+import { KiteTicketPortal } from "./KiteTicketPortal";
+import { readKiteTicketResponse } from "./kite-ticket-response";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
@@ -33,11 +35,13 @@ export function KiteGttTicket({
   holdings,
   onClose,
   onSubmitted,
+  kiteSessionLive = true,
 }: {
   selection: KiteGttSelection;
   holdings: LiveHolding[];
   onClose: () => void;
   onSubmitted: () => Promise<void>;
+  kiteSessionLive?: boolean;
 }) {
   const kind = selection?.kind ?? "gtt";
   const label = kindLabel(kind);
@@ -68,6 +72,7 @@ export function KiteGttTicket({
   const referenceLast = Number(displayedLastPrice);
   const ready = Boolean(
     selection
+    && kiteSessionLive
     && reviewed
     && confirmation.trim().toUpperCase() === expected
     && /^[A-Z0-9&.-]{1,32}$/.test(normalizedSymbol)
@@ -101,6 +106,8 @@ export function KiteGttTicket({
     try {
       const response = await fetch("/api/kite/gtt", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind,
@@ -114,8 +121,8 @@ export function KiteGttTicket({
           confirmation,
         }),
       });
-      const payload = await response.json() as { message?: string };
-      if (!response.ok) throw new Error(payload.message || `Kite ${label} returned ${response.status}`);
+      const payload = await readKiteTicketResponse(response, `Kite ${label}`);
+      if (!payload.ok) throw new Error(payload.message);
       setResult({ tone: "success", text: payload.message || `${label} submitted to Kite.` });
       await onSubmitted();
     } catch (error) {
@@ -125,7 +132,7 @@ export function KiteGttTicket({
     }
   }
 
-  return <div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+  return <KiteTicketPortal><div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className={`kite-order-ticket ${side.toLowerCase()}`} role="dialog" aria-modal="true" aria-labelledby="kite-gtt-title">
       <header>
         <div>
@@ -143,6 +150,7 @@ export function KiteGttTicket({
           {kind === "tsl" ? " Protective TSLs are SELL stop GTTs and surface under the TSLs tab after refresh." : " Entry GTTs typically BUY; SELL legs classify under TSLs."}
         </span>
       </div>
+      {!kiteSessionLive && <div className="kite-order-warning kite-order-session" role="alert"><AlertTriangle size={18}/><span><b>Kite session required — log in on this Mac.</b> {label}s cannot be submitted while Kite is unavailable, cached, or unauthenticated.</span></div>}
       <div className="kite-order-fields">
         <label>Symbol
           <input list="kite-gtt-instruments" value={symbol} onChange={(event) => applyHolding(event.target.value)} placeholder="e.g. NTPC" autoComplete="off" spellCheck={false}/>
@@ -165,7 +173,7 @@ export function KiteGttTicket({
       </div>
       <div className="kite-order-summary">
         <span>Trigger → limit</span>
-        <b>{trigger > 0 ? inr.format(trigger) : "—"} → {limit > 0 ? inr.format(limit) : "—"}</b>
+        <b data-demo-sensitive="">{trigger > 0 ? inr.format(trigger) : "—"} → {limit > 0 ? inr.format(limit) : "—"}</b>
         <small>Single-leg LIMIT GTT via Kite create_gtt · reviewed reference last {referenceLast > 0 ? inr.format(referenceLast) : "required"}. Estimated notional {limit > 0 ? inr.format(limit * quantity) : "—"}.</small>
       </div>
       <label className="kite-order-review"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)}/><span>I reviewed this exact {label} and want Kite to create it.</span></label>
@@ -176,5 +184,5 @@ export function KiteGttTicket({
         <button type="button" className={side.toLowerCase()} onClick={() => void submitGtt()} disabled={!ready || submitting}>{submitting ? "Submitting…" : `Create ${label}`}</button>
       </footer>
     </section>
-  </div>;
+  </div></KiteTicketPortal>;
 }

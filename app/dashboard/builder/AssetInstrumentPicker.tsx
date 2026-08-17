@@ -8,15 +8,19 @@ import {
   type BuilderUniverseGroup,
 } from "../../strategy/builder-universe";
 import type { TreeLivePreview } from "../../strategy/tree-live";
+import type { TreeInstrumentSource } from "../../strategy/tree-instruments";
 import { useKiteInstrumentSearch, type KiteInstrumentOption } from "../useKiteInstrumentLookup";
+import { useYfinanceInstrumentSearch } from "../useYfinanceInstrumentSearch";
+import { formatInstrumentKpis, type InstrumentQuoteKpis } from "../../strategy/yfinance-tickers";
 
-export type AssetOptionOrigin = "holding" | "watchlist" | "catalogue" | "current" | "universe";
+export type AssetOptionOrigin = "holding" | "watchlist" | "catalogue" | "current" | "universe" | "yfinance";
 
 export type AssetInstrumentOption = {
   symbol: string;
   name: string;
   origin: AssetOptionOrigin;
   group?: BuilderUniverseGroup;
+  kpis?: InstrumentQuoteKpis;
 };
 
 export function formatInstrumentOption(symbol: string, name?: string): string {
@@ -31,31 +35,33 @@ function originRank(item: AssetInstrumentOption): number {
   switch (item.origin) {
     case "holding":
       return 0;
-    case "watchlist":
+    case "yfinance":
       return 1;
-    case "current":
+    case "watchlist":
       return 2;
+    case "current":
+      return 3;
     case "universe":
       switch (item.group) {
         case "broad":
-          return 3;
-        case "industry":
           return 4;
-        case "thematic":
+        case "industry":
           return 5;
-        case "strategy":
+        case "thematic":
           return 6;
+        case "strategy":
+          return 7;
         case "equity":
-          return 7;
+          return 8;
         case undefined:
-          return 7;
+          return 8;
         default: {
           const _never: never = item.group;
           return _never;
         }
       }
     case "catalogue":
-      return 8;
+      return 9;
     default: {
       const _never: never = item.origin;
       return _never;
@@ -67,6 +73,8 @@ function groupLabel(item: AssetInstrumentOption): string {
   switch (item.origin) {
     case "holding":
       return "Holdings";
+    case "yfinance":
+      return "yfinance";
     case "watchlist":
       return "Watchlist";
     case "current":
@@ -100,11 +108,27 @@ function liveStatusLabel(live?: TreeLivePreview): string | null {
   }
 }
 
+function originFromInstrumentSource(source: TreeInstrumentSource): AssetOptionOrigin {
+  switch (source) {
+    case "holding":
+    case "position":
+      return "holding";
+    case "watchlist":
+      return "watchlist";
+    case "catalogue":
+      return "catalogue";
+    default: {
+      const _never: never = source;
+      return _never;
+    }
+  }
+}
+
 function preferredFromLive(live?: TreeLivePreview): AssetInstrumentOption[] {
   return (live?.instruments ?? []).flatMap((item) => {
     const symbol = item.symbol.trim().toUpperCase();
     if (!symbol || isBeesSymbol(symbol)) return [];
-    const origin: AssetOptionOrigin = item.source === "watchlist" ? "watchlist" : "holding";
+    const origin = originFromInstrumentSource(item.source);
     const name = (item.name ?? "").trim();
     return [{ symbol, name: name.toUpperCase() === symbol ? "" : name, origin }];
   });
@@ -126,20 +150,46 @@ function universeOptions(): AssetInstrumentOption[] {
   });
 }
 
+function yfinanceOptions(rows: readonly { symbol: string; name: string; price?: number; changePct?: number; marketCap?: number; pe?: number; sector?: string; exchange?: string; currency?: string; asOf?: string }[]): AssetInstrumentOption[] {
+  return rows.flatMap((item) => {
+    const symbol = item.symbol.trim().toUpperCase();
+    if (!symbol || isBeesSymbol(symbol)) return [];
+    const name = (item.name ?? "").trim();
+    const kpis: InstrumentQuoteKpis = {};
+    if (item.price !== undefined) kpis.price = item.price;
+    if (item.changePct !== undefined) kpis.changePct = item.changePct;
+    if (item.marketCap !== undefined) kpis.marketCap = item.marketCap;
+    if (item.pe !== undefined) kpis.pe = item.pe;
+    if (item.sector) kpis.sector = item.sector;
+    if (item.exchange) kpis.exchange = item.exchange;
+    if (item.currency) kpis.currency = item.currency;
+    if (item.asOf) kpis.asOf = item.asOf;
+    return [{
+      symbol,
+      name: name.toUpperCase() === symbol ? "" : name,
+      origin: "yfinance" as const,
+      ...(Object.keys(kpis).length ? { kpis } : {}),
+    }];
+  });
+}
+
 function mergeOptions(
   preferred: readonly AssetInstrumentOption[],
   catalogue: readonly AssetInstrumentOption[],
   universe: readonly AssetInstrumentOption[],
+  yfinance: readonly AssetInstrumentOption[],
   current: AssetInstrumentOption | null,
 ): AssetInstrumentOption[] {
   const bySymbol = new Map<string, AssetInstrumentOption>();
-  for (const item of [...preferred, ...universe, ...catalogue, ...(current ? [current] : [])]) {
+  for (const item of [...preferred, ...yfinance, ...universe, ...catalogue, ...(current ? [current] : [])]) {
     if (isBeesSymbol(item.symbol) && item.origin !== "current") continue;
     const existing = bySymbol.get(item.symbol);
     if (!existing || originRank(item) < originRank(existing)) {
-      bySymbol.set(item.symbol, { ...item, name: item.name || existing?.name || "", group: item.group ?? existing?.group });
+      bySymbol.set(item.symbol, { ...item, name: item.name || existing?.name || "", group: item.group ?? existing?.group, kpis: item.kpis ?? existing?.kpis });
     } else if (!existing.name && item.name) {
-      bySymbol.set(item.symbol, { ...existing, name: item.name, group: existing.group ?? item.group });
+      bySymbol.set(item.symbol, { ...existing, name: item.name, group: existing.group ?? item.group, kpis: existing.kpis ?? item.kpis });
+    } else if (!existing.kpis && item.kpis) {
+      bySymbol.set(item.symbol, { ...existing, kpis: item.kpis });
     }
   }
   return [...bySymbol.values()].sort((left, right) => {
@@ -175,6 +225,7 @@ export function AssetInstrumentPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const search = useKiteInstrumentSearch(query, open);
+  const yfinance = useYfinanceInstrumentSearch(query, open);
   const ticker = symbol.trim().toUpperCase();
   const preferred = useMemo(() => preferredFromLive(live), [live]);
   const universe = useMemo(() => universeOptions(), []);
@@ -189,8 +240,14 @@ export function AssetInstrumentPicker({
     return { symbol: ticker, name, origin: "current" };
   }, [label, preferred, ticker, universe]);
   const options = useMemo(
-    () => mergeOptions(preferred, catalogueOptions(search.instruments), universe, current).filter((item) => matchesQuery(item, query)),
-    [current, preferred, query, search.instruments, universe],
+    () => mergeOptions(
+      preferred,
+      catalogueOptions(search.instruments),
+      universe,
+      yfinanceOptions(yfinance.instruments),
+      current,
+    ).filter((item) => item.origin === "yfinance" || matchesQuery(item, query)),
+    [current, preferred, query, search.instruments, universe, yfinance.instruments],
   );
   const selected = current ?? preferred.find((item) => item.symbol === ticker) ?? null;
   const triggerText = selected ? formatInstrumentOption(selected.symbol, selected.name) : "Select instrument";
@@ -200,8 +257,13 @@ export function AssetInstrumentPicker({
     : query.trim() && search.status === "checking"
       ? "Searching NSE catalogue…"
       : null;
+  const yfinanceLabel = query.trim() && yfinance.status === "unavailable"
+    ? (yfinance.message || "Unavailable")
+    : query.trim() && yfinance.status === "checking"
+      ? "Searching yfinance…"
+      : null;
   const emptyLabel = options.length === 0
-    ? (query.trim() ? "No matching ticker" : "Search NSE or wait for holdings/watchlist")
+    ? (query.trim() ? "No matching ticker" : "Search company, ticker, or holdings")
     : null;
   const groupedOptions = useMemo(() => options.map((item, index) => {
     const header = groupLabel(item);
@@ -256,8 +318,8 @@ export function AssetInstrumentPicker({
             ref={searchRef}
             type="search"
             value={query}
-            placeholder="Search NSE ticker or name"
-            aria-label="Search NSE instruments"
+            placeholder="Search company or NSE ticker"
+            aria-label="Search instruments"
             autoComplete="off"
             spellCheck={false}
             onChange={(event) => setQuery(event.target.value)}
@@ -289,14 +351,20 @@ export function AssetInstrumentPicker({
                       onChange({ symbol: item.symbol, name: item.name || item.symbol });
                       closeMenu();
                     }}
-                  >{formatInstrumentOption(item.symbol, item.name)}</button>
+                  >
+                    <span className="symphony-asset-option-title">{formatInstrumentOption(item.symbol, item.name)}</span>
+                    {item.origin === "yfinance" || item.kpis ? (
+                      <small className="symphony-asset-option-kpis">{formatInstrumentKpis(item.kpis)}</small>
+                    ) : null}
+                  </button>
                 </li>
             ))}
           </ul>
         </div>
       )}
       {kiteLabel && <small className="symphony-asset-status" data-status={live?.status}>{kiteLabel}</small>}
-      {catalogueLabel && <small className="symphony-asset-status" data-status="unavailable">{catalogueLabel}</small>}
+      {catalogueLabel && open && <small className="symphony-asset-status" data-status="unavailable">{catalogueLabel}</small>}
+      {yfinanceLabel && open && <small className="symphony-asset-status" data-status={yfinance.status === "unavailable" ? "unavailable" : undefined}>{yfinanceLabel}</small>}
       {emptyLabel && open && <small className="symphony-asset-status">{emptyLabel}</small>}
     </div>
   );

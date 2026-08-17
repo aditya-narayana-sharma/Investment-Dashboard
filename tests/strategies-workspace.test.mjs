@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   applyCanonicalWorkspaceUrl,
+  parseHealthH3Page,
   parseStrategiesSection,
   parseWorkspaceView,
 } from "../app/dashboard/workspace-routing.ts";
@@ -19,6 +20,22 @@ test("parseWorkspaceView maps strategies and strategy-library", () => {
   assert.deepEqual(applyCanonicalWorkspaceUrl(aliased), { view: "strategies", rewritten: true });
   assert.equal(aliased.searchParams.get("view"), "strategies");
   assert.equal(aliased.searchParams.get("section"), "y2");
+});
+
+test("health nutrition aliases resolve to the combined Nutrition page", () => {
+  assert.equal(parseHealthH3Page("nutrition"), "nutrition");
+  assert.equal(parseHealthH3Page("nutrition-1"), "nutrition");
+  assert.equal(parseHealthH3Page("nutrition-2"), "nutrition");
+  assert.equal(parseHealthH3Page("heart"), "heart");
+  assert.equal(parseHealthH3Page(null), "metrics-overview");
+
+  const aliased = new URL("http://localhost/?view=health&section=h3&page=nutrition-2");
+  assert.deepEqual(applyCanonicalWorkspaceUrl(aliased), { view: "health", rewritten: true });
+  assert.equal(aliased.searchParams.get("page"), "nutrition");
+
+  const canonical = new URL("http://localhost/?view=health&section=h3&page=nutrition");
+  assert.deepEqual(applyCanonicalWorkspaceUrl(canonical), { view: "health", rewritten: false });
+  assert.equal(canonical.searchParams.get("page"), "nutrition");
 });
 
 test("Composer seed module stores nine StrategyTreeV1 reconstructions", async () => {

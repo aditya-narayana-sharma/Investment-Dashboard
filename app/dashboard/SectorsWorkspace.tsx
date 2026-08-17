@@ -18,7 +18,10 @@ import { aggregateSectorMarketStatus, isUsableSectorMarketStatus } from "../sect
 import type { SectorNewsSnapshot } from "../sector-news-types";
 import type { LiveHolding } from "../live-types";
 import { SectorDecisionLab, type SectorDecisionPage } from "./SectorDecisionLab";
-import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { LicenseGate } from "./LicenseGate";
+import { tierAllows, type PublicLicense } from "../license";
+import { useLicenseSnapshot } from "../license-snapshot";
+import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
 
 const SectoralAnalytics = lazy(() => import("./SectoralAnalytics"));
 type SectorAnalyticsPage = import("./SectoralAnalytics").SectorAnalyticsPage;
@@ -37,7 +40,7 @@ const SECTOR_TOP_SECTIONS = [
 
 const SECTION_PAGES: Record<SectorWorkspaceSection, Array<{ id: SectorSectionPage; label: string }>> = {
   s2: [
-    { id: "pulse", label: "Sector pulse" },
+    { id: "pulse", label: "Industry Analytics" },
     { id: "companies", label: "Companies" },
     { id: "rankings", label: "Rankings" },
     { id: "lifecycle", label: "Life cycle" },
@@ -45,7 +48,7 @@ const SECTION_PAGES: Record<SectorWorkspaceSection, Array<{ id: SectorSectionPag
     { id: "mece", label: "MECE map" },
   ],
   s3: [
-    { id: "benchmarks", label: "Benchmarks" },
+    { id: "benchmarks", label: "Benchmarks & Decision Lab" },
     { id: "investability", label: "Investability" },
     { id: "pestel", label: "PESTEL" },
     { id: "porter", label: "Porter" },
@@ -69,6 +72,7 @@ function sectionFromUrl() {
       topSection: "s1" as SectorTopSection,
       section: null as SectorWorkspaceSection | null,
       page: null as SectorSectionPage | null,
+      exclusive: true,
     };
   }
   const search = new URLSearchParams(window.location.search);
@@ -81,7 +85,7 @@ function sectionFromUrl() {
   const page = section && SECTION_PAGES[section].some((item) => item.id === rawPage)
     ? rawPage as SectorSectionPage
     : section ? SECTION_PAGES[section][0]!.id : null;
-  return { topSection, section, page };
+  return { topSection, section, page, exclusive: true };
 }
 
 function SectionPageNav({
@@ -138,6 +142,8 @@ function SectorWorkspaceShell({
   sectorNews,
   sectorMarketsLoading,
   holdings,
+  s3Locked,
+  license,
 }: {
   benchmarks: SectorBenchmarkSnapshot;
   selectedSectorIds: string[];
@@ -147,9 +153,13 @@ function SectorWorkspaceShell({
   sectorNews: SectorNewsSnapshot;
   sectorMarketsLoading: boolean;
   holdings: LiveHolding[];
+  s3Locked: boolean;
+  license: PublicLicense;
 }) {
   const [activePages, setActivePages] = useState<Record<SectorWorkspaceSection, SectorSectionPage>>(DEFAULT_SECTION_PAGES);
-  const [activeSection, setActiveSection] = useState<SectorTopSection>("s1");
+  const [activeSection, setActiveSection] = useState<SectorTopSection>(() => sectionFromUrl().topSection);
+  const [exclusive, setExclusive] = useState(() => sectionFromUrl().exclusive);
+  const focusedSection = exclusive ? activeSection : null;
   const primarySectorId = selectedSectorIds[selectedSectorIds.length - 1];
   const marketSnapshots = Object.values(sectorMarketById);
   const aggregatedMarketStatus = aggregateSectorMarketStatus(marketSnapshots);
@@ -174,13 +184,19 @@ function SectorWorkspaceShell({
     const sync = () => {
       const route = sectionFromUrl();
       setActiveSection(route.topSection);
+      setExclusive(route.exclusive);
       if (route.section && route.page) {
         setActivePages((current) => ({ ...current, [route.section!]: route.page! }));
       }
+      if (route.exclusive) revealDashboardSection(route.topSection, `sector-${route.topSection}`);
     };
     sync();
+    const retry = window.setTimeout(sync, 0);
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
+    return () => {
+      window.clearTimeout(retry);
+      window.removeEventListener("popstate", sync);
+    };
   }, []);
 
   const selectPage = useCallback((section: SectorWorkspaceSection, page: SectorSectionPage) => {
@@ -189,6 +205,7 @@ function SectorWorkspaceShell({
     url.searchParams.set("page", page);
     window.history.pushState({}, "", url);
     setActiveSection(section);
+    setExclusive(true);
     setActivePages((current) => ({ ...current, [section]: page }));
   }, []);
 
@@ -203,39 +220,41 @@ function SectorWorkspaceShell({
     }
     window.history.pushState({}, "", url);
     setActiveSection(section);
+    setExclusive(true);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`sector-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activePages]);
 
-  return <div className="sector-workspace-shell sector-full-workspace">
+  return <div className="sector-workspace-shell sector-full-workspace" data-focus-section={focusedSection ?? undefined}>
     <WorkspaceSectionNav
       label="Sectoral Analytics sections"
       sections={SECTOR_TOP_SECTIONS}
       activeId={activeSection}
       onSelect={selectTopSection}
     />
-    <div id="sector-s1" className="workspace-section action-board-workspace-section">
-      <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions">
+    <div id="sector-s1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(focusedSection, "s1")}>
+      <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions" defaultOpen={focusedSection === "s1"}>
         <DailyKanbanBoard workspace="sectors"/>
       </CollapsibleSection>
     </div>
 
-    <div id="sector-s2" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${s2StatusPill}`}>{s2Status}</span>}>
+    <div id="sector-s2" className="workspace-section sector-full-section" hidden={nativeChromeHidesSection(focusedSection, "s2")}>
+      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${s2StatusPill}`}>{s2Status}</span>} defaultOpen={focusedSection === "s2"}>
         <SectionPageNav section="s2" activePage={activePages.s2} onSelect={selectPage}/>
         <div id="sector-s2-panel" className="sector-full-section-body s2" role="tabpanel" aria-labelledby={`sector-s2-tab-${activePages.s2}`}>
           <Suspense fallback={<div className="live-empty compact"><b>Loading industry analytics…</b></div>}>
-            <SectoralAnalytics selectedIds={selectedSectorIds} onToggle={onToggleSector} market={sectorMarket} marketsBySector={sectorMarketById} news={sectorNews} holdings={holdings} page={activePages.s2 as SectorAnalyticsPage}/>
+            <SectoralAnalytics selectedIds={selectedSectorIds} onToggle={onToggleSector} market={sectorMarket} marketsBySector={sectorMarketById} news={sectorNews} holdings={holdings} page={activePages.s2 as SectorAnalyticsPage} benchmarks={benchmarks}/>
           </Suspense>
         </div>
       </CollapsibleSection>
     </div>
 
-    <div id="sector-s3" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</span>}>
+    <div id="sector-s3" className="workspace-section sector-full-section" hidden={nativeChromeHidesSection(focusedSection, "s3")}>
+      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</span>} defaultOpen={focusedSection === "s3"}>
         <SectionPageNav section="s3" activePage={activePages.s3} onSelect={selectPage}/>
         <div id="sector-s3-panel" className="sector-full-section-body s3" role="tabpanel" aria-labelledby={`sector-s3-tab-${activePages.s3}`}>
-          <SectorDecisionLab page={activePages.s3 as SectorDecisionPage} benchmarks={benchmarks} marketsBySector={sectorMarketById}/>
+          {s3Locked
+            ? <LicenseGate feature="sectorsS3" license={license} title="S-3 Benchmarks & Decision Lab" />
+            : <SectorDecisionLab page={activePages.s3 as SectorDecisionPage} benchmarks={benchmarks} marketsBySector={sectorMarketById}/>}
         </div>
       </CollapsibleSection>
     </div>
@@ -251,6 +270,8 @@ export function SectorsWorkspace({
   sectorMarketsLoading = false,
   holdings,
   benchmarks,
+  s3Locked,
+  license,
 }: {
   selectedSectorIds: string[];
   onToggleSector: (sectorId: string) => void;
@@ -260,7 +281,12 @@ export function SectorsWorkspace({
   sectorMarketsLoading?: boolean;
   holdings: LiveHolding[];
   benchmarks: SectorBenchmarkSnapshot;
+  s3Locked?: boolean;
+  license?: PublicLicense;
 }) {
+  const { license: snapshotLicense } = useLicenseSnapshot();
+  const resolvedLicense = license ?? snapshotLicense;
+  const resolvedS3Locked = s3Locked ?? !tierAllows(resolvedLicense.tier, "sectorsS3");
   return <SectorWorkspaceShell
     selectedSectorIds={selectedSectorIds}
     onToggleSector={onToggleSector}
@@ -270,5 +296,7 @@ export function SectorsWorkspace({
     sectorMarketsLoading={sectorMarketsLoading}
     holdings={holdings}
     benchmarks={benchmarks}
+    s3Locked={resolvedS3Locked}
+    license={resolvedLicense}
   />;
 }

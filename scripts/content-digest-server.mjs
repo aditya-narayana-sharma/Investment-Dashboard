@@ -29,6 +29,7 @@ import {
   transcriptTextFromTtml,
 } from "./content-automation.mjs";
 import { loadMarketCalendar } from "./market-calendar-adapter.mjs";
+import { readLocalLlmEnv } from "./local-llm-generate.mjs";
 import {
   classifyPodcastInsight,
   configuredPodcastSummarizer,
@@ -38,6 +39,7 @@ import {
   summarizePodcastTranscript,
 } from "./podcast-summarizer.mjs";
 import { formatIstDateLabel } from "./nse-trading-day.mjs";
+import { writeStartupProgress, readStartupProgress } from "./startup-progress.mjs";
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.CONTENT_DIGEST_PORT ?? 3003);
@@ -56,12 +58,14 @@ const CALENDAR_NOTES_CHARS = 1600;
 const DIGEST_BULLET_MAX = 8;
 const CONTENT_SNAPSHOT_PATH = process.env.CONTENT_SNAPSHOT_PATH ?? fileURLToPath(new URL("../artifacts/private/content-snapshot.json", import.meta.url));
 const CONTENT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const FORCE_REFRESH_BUDGET_MS = 480_000;
+const FORCE_REFRESH_BUDGET_MS = 150_000;
 const NEWSLETTER_DIGEST_LIMIT = 500;
-const NEWSLETTER_LIST_TIMEOUT_MS = 60_000;
-const NEWSLETTER_BODY_TIMEOUT_MS = 120_000;
+const MAIL_STAGE_TIMEOUT_MS = 50_000;
+const AXIS_STAGE_TIMEOUT_MS = 40_000;
+const NEWSLETTER_LIST_TIMEOUT_MS = 25_000;
+const NEWSLETTER_BODY_TIMEOUT_MS = 20_000;
 /** Soft deadline inside osascript so bodies return before Node kills the process. */
-const NEWSLETTER_BODY_BUDGET_MS = 95_000;
+const NEWSLETTER_BODY_BUDGET_MS = 15_000;
 function istDateKey(daysAgo) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
 }
@@ -813,18 +817,12 @@ function mailItem(message, axis = false, includeDate = false, archiveIndex = nul
 }
 
 async function readNewsletterListing() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterListScript], {
-    timeout: NEWSLETTER_LIST_TIMEOUT_MS,
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  const stdout = await runOsascript(newsletterListScript, NEWSLETTER_LIST_TIMEOUT_MS, 16 * 1024 * 1024);
   return JSON.parse(stdout);
 }
 
 async function readNewsletterBodies() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", newsletterBodyScript], {
-    timeout: NEWSLETTER_BODY_TIMEOUT_MS,
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  const stdout = await runOsascript(newsletterBodyScript, NEWSLETTER_BODY_TIMEOUT_MS, 32 * 1024 * 1024);
   return JSON.parse(stdout);
 }
 
@@ -833,6 +831,10 @@ function newsletterMessageKey(subject, received) {
 }
 
 async function readNewsletters() {
+  return withTimeout(readNewslettersUnbound(), MAIL_STAGE_TIMEOUT_MS, "iCloud Newsletters");
+}
+
+async function readNewslettersUnbound() {
   // Listing alone is enough for status=live when the mailbox is readable.
   const listed = await readNewsletterListing();
   let messages = listed.messages ?? [];
@@ -878,7 +880,11 @@ async function readNewsletters() {
 }
 
 async function readAxisResearch() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", axisMailScript], { timeout: 45000, maxBuffer: 12 * 1024 * 1024 });
+  return withTimeout(readAxisResearchUnbound(), AXIS_STAGE_TIMEOUT_MS, "iCloud Axis Research");
+}
+
+async function readAxisResearchUnbound() {
+  const stdout = await runOsascript(axisMailScript, AXIS_STAGE_TIMEOUT_MS, 12 * 1024 * 1024);
   const parsed = JSON.parse(stdout);
   const uniqueMessages = parsed.messages
     .filter(isAxisResearchMail)
@@ -901,26 +907,44 @@ async function readAxisResearch() {
   };
 }
 
+function digestItemEvidenceText(item) {
+  return `${item.title ?? ""} ${item.summary ?? ""} ${(item.bullets ?? []).join(" ")}`.replace(/\bwar chest\b/gi, " ");
+}
+
 function macroEvidence(newsletters, axisItems) {
+  // Keep more than 4 items per KPI so the scenario lab can attach ≥4 cards per range.
+  // Match title + summary + bullets so Axis geopolit/oil excerpts are not dropped.
   const definitions = [
-    ["oilWar", /\boil\b|\bbrent\b|\bcrude\b|\biran\b|\bhormuz\b|geopolit|\b(?:war|conflict|missile|sanction)s?\b|\bshipping\b|energy price|commodity/i],
-    ["flows", /\bfii\b|\bfpi\b|\bdii\b|foreign investor|foreign institutional|institutional (?:investor|flow)|fund flow|passive flow|liquidity|msci|net (?:buy|sell)(?:ers?)?\b/i],
-    ["rates", /\binr\b|rupee|currency|yield|bond|rate cut|rate hike|interest rate|inflation|monetary policy|rbi/i],
-    ["breadth", /breadth|volatility|vix|mid.?cap|small.?cap|risk.?off|market correction|technical outlook|trade setup|\bnifty\b|\bsensex\b/i],
-    ["earnings", /\bearnings\b|\bresults?\b|\bq[1-4]\b|annual analysis|annual report|financial performance|\bmargin\b|\bguidance\b|\brevenue\b|\bprofit\b|sector rotation/i],
+    ["oilWar", /\b(?:brent|wti|crude(?:\s+oil)?|opec|hormuz|iran|geopolit(?:ical|ics)?|lpg|petroleum|oil[- ]?(?:price|prices|import|imports|shock|supply|bill)|(?:imported|russian)\s+crude|oil)\b/i, /\b(?:maze of conflicts|data fortress|herbal extract|chicken surplus|poultry companies)\b/i],
+    ["flows", /\b(?:fiis?|fpis?|diis?|foreign (?:investor|institutional|inflow|outflow)|institutional (?:investor|flow)|net (?:buy|sell)|passive flow|\bmsci\b|healthy flows?|dollar-?deposit|fcnr)\b/i, null],
+    ["rates", /\b(?:rupee|\binr\b|forex|fx reserve|bond yield|10y|gilt|g-sec|monetary policy|\brbi\b|fed funds|rate cut|rate hike|interest rate|\bcpi\b|\bwpi\b|inflation|\bcurrency\b)/i, /\bcryptocurrency\b/i],
+    ["breadth", /\b(?:breadth|india(?:n)? vix|\bvix\b|volatility|mid-?caps?|small-?caps?|risk-?off|market correction|technical outlook|trade setup|\bnifty(?:50)?\b|\bsensex\b|advance(?:r|s)?[- ]declin)/i, null],
+    ["earnings", /\b(?:earnings?|result updates?|\bq[1-4]fy?\d{0,2}\b|annual analysis|annual report|financial performance|\bguidance\b|\bpat\b|\brevenue\b|\bprofit\b|sector rotation|\bmargin(?:s)?\b)/i, /\b(?:cuddly mascot|must-read tech news|college major)\b/i],
   ];
-  const items = [...axisItems, ...newsletters].sort((left, right) => new Date(right.receivedAt ?? 0) - new Date(left.receivedAt ?? 0));
-  return definitions.map(([key, matcher]) => {
+  const seenKeys = new Set();
+  const items = [...axisItems, ...newsletters]
+    .filter((item) => {
+      const title = String(item.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const day = item.receivedAt
+        ? String(item.receivedAt).slice(0, 10)
+        : (String(item.time ?? "").match(/^\d{1,2}\s+\w+/)?.[0] ?? String(item.time ?? "")).toLowerCase();
+      const key = `${item.source}|${title}|${day}`.toLowerCase();
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    })
+    .sort((left, right) => new Date(right.receivedAt ?? 0) - new Date(left.receivedAt ?? 0));
+  return definitions.map(([key, matcher, exclude]) => {
     const matched = items.filter((item) => {
-      const evidenceText = `${item.title} ${item.summary}`.replace(/\bwar chest\b/gi, "");
-      return matcher.test(evidenceText);
+      const evidenceText = digestItemEvidenceText(item);
+      return matcher.test(evidenceText) && !exclude?.test(evidenceText);
     });
     return {
       key,
       count: matched.length,
       latestTitle: matched[0]?.title ?? "No matching Mail evidence",
       latestAt: matched[0]?.time ?? "—",
-      items: matched.slice(0, 4),
+      items: matched.slice(0, 16),
     };
   });
 }
@@ -931,7 +955,7 @@ async function readPodcasts() {
   const columns = new Set(JSON.parse(schema.stdout || "[]").map((column) => column.name));
   const podcastColumns = new Set(JSON.parse(podcastSchema.stdout || "[]").map((column) => column.name));
   const { stdout } = await execFileAsync("sqlite3", ["-readonly", "-json", PODCAST_DB, podcastQuery(columns, podcastColumns)], { timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
-  const summarizer = configuredPodcastSummarizer();
+  const summarizer = configuredPodcastSummarizer({ ...process.env, ...readLocalLlmEnv() });
   const previousByTitle = new Map(
     (lastSnapshot?.podcasts || []).map((item) => [normalizeEpisodeTitle(item.title), item]),
   );
@@ -1281,19 +1305,53 @@ async function buildInvestmentIntelligence(newsletters, axisItems, axisLastFetch
   };
 }
 
+async function refreshSource(stage, label, task) {
+  writeStartupProgress({ stage, state: "start", label: `Refreshing ${label}…` });
+  const result = await settle(task);
+  writeStartupProgress({
+    stage,
+    state: result.status === "fulfilled" ? "ok" : "failed",
+    label: result.status === "fulfilled" ? `${label} received.` : appleStageFailureLabel(label, result.reason),
+  });
+  return result;
+}
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function runOsascript(script, timeoutMs, maxBuffer = 16 * 1024 * 1024) {
+  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", script], {
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
+    maxBuffer,
+  });
+  return stdout;
+}
+
+function appleStageFailureLabel(label, reason) {
+  const text = formatExecError(reason);
+  if (/-1743|-1744|not authorised|not authorized|not permitted|not allowed to send apple events|osascript is not allowed/i.test(text)) {
+    return `Permission required — allow Stratji to control ${label}.`;
+  }
+  return `${label} stale or unavailable.`;
+}
+
 async function refresh() {
-  const calendar = await settle(readCalendar);
+  const calendar = await refreshSource("calendar", "Apple Calendar", readCalendar);
   const marketCalendar = await settle(() => loadMarketCalendar({
     windowStart: ANALYSIS_WINDOW_START,
     windowEnd: CALENDAR_WINDOW_END,
   }));
-  const newsletters = await settle(readNewsletters);
-  const axisResearch = await settle(readAxisResearch);
-  const [podcasts, reminders, healthNote] = await Promise.all([
-    settle(readPodcasts),
-    settle(readReminders),
-    settle(readHealthNote),
-  ]);
+  const newsletters = await refreshSource("mail", "iCloud Newsletters", readNewsletters);
+  const axisResearch = await refreshSource("axis", "iCloud Axis Research", readAxisResearch);
+  const reminders = await refreshSource("reminders", "Apple Reminders", readReminders);
+  const podcasts = await refreshSource("podcasts", "Apple Podcasts", readPodcasts);
+  const healthNote = await settle(readHealthNote);
   const newsletterValue = newsletters.status === "fulfilled" ? newsletters.value : { total: 0, items: [] };
   const axisValue = axisResearch.status === "fulfilled" ? axisResearch.value : { total: 0, items: [], targetItems: [] };
   const podcastValue = podcasts.status === "fulfilled" ? podcasts.value : [];
@@ -1721,6 +1779,11 @@ const server = createServer(async (request, response) => {
         }),
       );
     }
+    return;
+  }
+  if (requestUrl.pathname === "/progress") {
+    response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    response.end(JSON.stringify(readStartupProgress()));
     return;
   }
   if (requestUrl.pathname !== "/refresh") {

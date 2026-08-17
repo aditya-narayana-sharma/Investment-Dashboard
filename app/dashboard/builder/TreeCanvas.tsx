@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { KPI_BUCKETS, KPI_REGISTRY_COUNT, kpiById, searchKpis, type KpiBucketId } from "../../../packages/kpi-registry";
 import { ASSET_CLASSES, type AssetClass } from "../../strategy/asset-classes";
 import type { ComparatorOp, TreeBlockKind, TreeNode, TreeOperand, WeightChild } from "../../strategy/graph-types";
 import type { TreeLivePreview } from "../../strategy/tree-live";
+import { treeAssetWarning } from "../../strategy/tree-instruments";
 import type { TreeInsertSlot } from "../../strategy/tree-ops";
 import { AssetInstrumentPicker } from "./AssetInstrumentPicker";
 
@@ -177,10 +178,33 @@ function OperandPicker({
   live?: TreeLivePreview;
   onChange: (next: TreeOperand) => void;
 }) {
+  const pickerId = useId();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [bucket, setBucket] = useState<KpiBucketId | "all">("all");
   const matches = useMemo(() => searchKpis(query, bucket), [query, bucket]);
   const mode = operand.type;
+  const kpiLabel = operand.type === "kpi" ? (kpiById(operand.kpiId)?.label ?? operand.kpiId) : "Select KPI";
+
+  const closeMenu = () => {
+    setOpen(false);
+    setQuery("");
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) closeMenu();
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
 
   return (
     <div className="symphony-operand" aria-label={ariaLabel}>
@@ -209,14 +233,70 @@ function OperandPicker({
         />
       ) : (
         <>
-          <input
-            type="search"
-            value={query}
-            disabled={disabled}
-            placeholder={kpiById(operand.kpiId)?.label ?? "Search KPIs"}
-            aria-label={`${ariaLabel} KPI`}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+          <div className="symphony-kpi-picker" ref={rootRef}>
+            <button
+              type="button"
+              className="symphony-kpi-trigger"
+              disabled={disabled}
+              aria-label={`${ariaLabel} KPI`}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              aria-controls={pickerId}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (disabled) return;
+                if (open) closeMenu();
+                else setOpen(true);
+              }}
+            >
+              <span>{kpiLabel}</span>
+            </button>
+            {open && !disabled && (
+              <div className="symphony-kpi-menu" onClick={(event) => event.stopPropagation()}>
+                <input
+                  ref={searchRef}
+                  type="search"
+                  value={query}
+                  placeholder="Search KPIs"
+                  aria-label={`${ariaLabel} KPI search`}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <div className="symphony-kpi-buckets" role="group" aria-label="KPI buckets">
+                  <button type="button" className={bucket === "all" ? "active" : ""} onClick={() => setBucket("all")}>ALL · {KPI_REGISTRY_COUNT}</button>
+                  {KPI_BUCKETS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={bucket === item.id ? "active" : ""}
+                      onClick={() => setBucket(item.id)}
+                    >{item.label}</button>
+                  ))}
+                </div>
+                <ul id={pickerId} className="symphony-kpi-hits" data-testid="symphony-kpi-picker" role="listbox" aria-label={`${ariaLabel} KPI`}>
+                  {matches.map((kpi) => (
+                    <li key={kpi.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        disabled={disabled}
+                        data-kpi-id={kpi.id}
+                        aria-selected={kpi.id === operand.kpiId}
+                        className={kpi.id === operand.kpiId ? "active" : ""}
+                        onClick={() => {
+                          onChange({ type: "kpi", kpiId: kpi.id, symbol: operand.symbol });
+                          closeMenu();
+                        }}
+                      >
+                        {kpi.label} <small>{kpi.id}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <AssetInstrumentPicker
             symbol={operand.symbol}
             disabled={disabled}
@@ -224,36 +304,6 @@ function OperandPicker({
             ariaLabel={`${ariaLabel} symbol`}
             onChange={(next) => onChange({ ...operand, symbol: next.symbol })}
           />
-          <div className="symphony-kpi-buckets" role="group" aria-label="KPI buckets">
-            <button type="button" className={bucket === "all" ? "active" : ""} disabled={disabled} onClick={() => setBucket("all")}>ALL · {KPI_REGISTRY_COUNT}</button>
-            {KPI_BUCKETS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={bucket === item.id ? "active" : ""}
-                disabled={disabled}
-                onClick={() => setBucket(item.id)}
-              >{item.label}</button>
-            ))}
-          </div>
-          <ul className="symphony-kpi-hits" data-testid="symphony-kpi-picker">
-            {matches.map((kpi) => (
-              <li key={kpi.id}>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  data-kpi-id={kpi.id}
-                  className={kpi.id === operand.kpiId ? "active" : ""}
-                  onClick={() => {
-                    onChange({ type: "kpi", kpiId: kpi.id, symbol: operand.symbol });
-                    setQuery("");
-                  }}
-                >
-                  {kpi.label} <small>{kpi.id}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
         </>
       )}
     </div>
@@ -450,7 +500,15 @@ function TreeBlockView({
 
   let body: ReactNode;
   switch (node.kind) {
-    case "asset":
+    case "asset": {
+      const warning = live
+        ? treeAssetWarning({
+          symbol: node.params.symbol,
+          instrument: liveNode?.instrument,
+          previewStatus: live.status,
+          watchlistStatus: live.watchlist.status,
+        })
+        : null;
       body = (
         <div className="symphony-fields" onClick={(event) => event.stopPropagation()}>
           <AssetInstrumentPicker
@@ -470,16 +528,15 @@ function TreeBlockView({
               {liveNode.instrument.qty !== undefined ? ` · qty ${formatLiveNumber(liveNode.instrument.qty)}` : ""}
             </p>
           )}
-          {node.params.symbol && !liveNode?.instrument && live && (
-            <p className="symphony-live-badge" data-status={live.status === "live" ? "unavailable" : live.status}>
-              {live.status === "live"
-                ? `Not in live holdings${live.watchlist.status === "unavailable" ? " · watchlist unavailable" : " or watchlist"}`
-                : "Not in last known holdings/watchlist"}
+          {warning && (
+            <p className="symphony-live-badge" data-status={live?.status === "live" ? "unavailable" : live?.status}>
+              {warning}
             </p>
           )}
         </div>
       );
       break;
+    }
     case "group":
       body = (
         <>
@@ -537,15 +594,15 @@ function TreeBlockView({
           <p className="symphony-if-sentence">
             IF {operandText(node.params.left)} {comparatorWord(node.params.op)} {operandText(node.params.right)}
           </p>
+          {liveNode && (
+            <p className="symphony-live-badge" data-status={liveNode.passed === null ? "unavailable" : live?.kiteStatus ?? "unavailable"}>
+              {liveNode.passed === true ? "Condition passes" : liveNode.passed === false ? "Condition fails" : "Condition unavailable"}
+              {liveNode.left ? ` · ${liveNode.left.label ?? liveNode.left.kpiId} ${formatLiveNumber(liveNode.left.value)}` : ""}
+              {liveNode.right ? ` vs ${liveNode.right.label ?? liveNode.right.kpiId} ${formatLiveNumber(liveNode.right.value)}` : ""}
+              {liveNode.left?.asOf ? ` · as-of ${liveNode.left.asOf}` : ""}
+            </p>
+          )}
           <div className="symphony-if-operands" onClick={(event) => event.stopPropagation()}>
-            {liveNode && (
-              <p className="symphony-live-badge" data-status={liveNode.passed === null ? "unavailable" : live?.kiteStatus ?? "unavailable"}>
-                {liveNode.passed === true ? "Condition passes" : liveNode.passed === false ? "Condition fails" : "Condition unavailable"}
-                {liveNode.left ? ` · ${liveNode.left.label ?? liveNode.left.kpiId} ${formatLiveNumber(liveNode.left.value)}` : ""}
-                {liveNode.right ? ` vs ${liveNode.right.label ?? liveNode.right.kpiId} ${formatLiveNumber(liveNode.right.value)}` : ""}
-                {liveNode.left?.asOf ? ` · as-of ${liveNode.left.asOf}` : ""}
-              </p>
-            )}
             <OperandPicker
               operand={node.params.left}
               disabled={disabled}

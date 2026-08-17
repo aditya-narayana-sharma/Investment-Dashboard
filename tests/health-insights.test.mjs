@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseHealthTopSection } from "../app/dashboard/workspace-routing.ts";
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const insightsSource = readFileSync(join(root, "app/health-insights.ts"), "utf8");
 const workspaceSource = readFileSync(join(root, "app/dashboard/HealthWorkspace.tsx"), "utf8");
@@ -17,21 +19,30 @@ test("health insights module exposes note parsing and enrichment helpers", () =>
   assert.match(insightsSource, /export function enrichHealthSources/);
   assert.match(insightsSource, /source: "Livity"/);
   assert.match(insightsSource, /status: "Unavailable"/);
-  assert.doesNotMatch(insightsSource, /Health Daily v2/);
+  assert.doesNotMatch(insightsSource, /Health Daily/);
   assert.match(insightsSource, /Recheck the low blood-oxygen reading/);
   assert.match(insightsSource, /Complete the nutrition diary before interpreting it/);
   assert.match(insightsSource, /Recover from a high-output movement day/);
 });
 
-test("Health workspace surfaces Insights page and mirroring blocker honestly", () => {
-  assert.match(workspaceSource, /id: "insights"/);
+test("Health workspace inlines Insights, Guidance and Guardrails into Daily Optimism", () => {
+  assert.match(workspaceSource, /id="health-h2-insights"/);
+  assert.match(workspaceSource, /id="health-h2-guidance"/);
+  assert.match(workspaceSource, /id="health-h2-guardrails"/);
+  assert.match(workspaceSource, /<h3>Insights<\/h3>/);
+  assert.match(workspaceSource, /<h3>Guidance<\/h3>/);
   assert.match(workspaceSource, /Livity \/ iPhone Mirroring unavailable/);
   assert.match(workspaceSource, /enrichHealthGuidanceActions/);
   assert.match(workspaceSource, /parseHealthDailyNoteStats/);
   assert.match(workspaceSource, /Daily Optimism/);
   assert.match(workspaceSource, /TODAY’S HEALTH BRIEF/);
+  assert.match(workspaceSource, /route\.section === "h3" && pages\.length > 1/);
+  assert.doesNotMatch(workspaceSource, /\{ id: "insights", label: "Insights" \}/);
+  assert.doesNotMatch(workspaceSource, /\{ id: "guidance", label: "Guidance" \}/);
+  assert.doesNotMatch(workspaceSource, /\{ id: "guardrails", label: "Guardrails" \}/);
   assert.doesNotMatch(workspaceSource, /No optimism entry available/);
-  assert.doesNotMatch(workspaceSource, /Health Daily v2/);
+  assert.doesNotMatch(workspaceSource, /Health Daily/);
+  assert.doesNotMatch(workspaceSource, /sector-detail-shell/);
   assert.doesNotMatch(workspaceSource, /Health Status/);
 });
 
@@ -53,4 +64,15 @@ test("parseHealthDailyNoteStats extracts only present note pairs", () => {
   assert.equal(pairs.length >= 3, true);
   assert.equal(pairs.some((item) => item.label.includes("Active Calories") && item.value.includes("577")), true);
   assert.equal(pairs.every((item) => Boolean(item.value)), true);
+});
+
+test("Health section aliases resolve to H-1 / H-2 / H-3", () => {
+  assert.equal(parseHealthTopSection("h1"), "h1");
+  assert.equal(parseHealthTopSection("board"), "h1");
+  assert.equal(parseHealthTopSection("h2"), "h2");
+  assert.equal(parseHealthTopSection("optimism"), "h2");
+  assert.equal(parseHealthTopSection("h3"), "h3");
+  assert.equal(parseHealthTopSection("metrics"), "h3");
+  assert.equal(parseHealthTopSection("h4"), "h3");
+  assert.equal(parseHealthTopSection(null), null);
 });

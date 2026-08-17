@@ -5,7 +5,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_DIR="${PORTFOLIO_FLASK_VENV:-$ROOT_DIR/.venv-flask}"
 FLASK_PORT="${PORTFOLIO_FLASK_PORT:-5050}"
 UPSTREAM_URL="${DASHBOARD_UPSTREAM:-http://127.0.0.1:3000}"
-BIND_HOST="${PORTFOLIO_BIND_HOST:-127.0.0.1}"
+BIND_FILE="$HOME/Library/Application Support/Stratji/bind-host"
+if [[ -z "${PORTFOLIO_BIND_HOST:-}" && -f "$BIND_FILE" ]]; then
+  BIND_HOST="$(tr -d '[:space:]' <"$BIND_FILE" || true)"
+fi
+BIND_HOST="${PORTFOLIO_BIND_HOST:-${BIND_HOST:-127.0.0.1}}"
 NPM_SCRIPT="${PORTFOLIO_NPM_SCRIPT:-start}"
 LOG_DIR="$HOME/Library/Logs/PortfolioIntelligence"
 NPM_BIN="${NPM_BIN:-/opt/homebrew/bin/npm}"
@@ -24,8 +28,10 @@ fi
 
 VINEXT_PID=""
 FLASK_PID=""
+DNS_SD_PID=""
 
 cleanup() {
+  [[ -n "$DNS_SD_PID" ]] && kill "$DNS_SD_PID" 2>/dev/null || true
   [[ -n "$FLASK_PID" ]] && kill "$FLASK_PID" 2>/dev/null || true
   [[ -n "$VINEXT_PID" ]] && kill "$VINEXT_PID" 2>/dev/null || true
   wait 2>/dev/null || true
@@ -35,26 +41,34 @@ trap cleanup EXIT INT TERM
 "$ROOT_DIR/scripts/ensure-kite-server.sh" >>"$LOG_DIR/kite.log" 2>&1
 "$ROOT_DIR/scripts/ensure-pdf-download-server.sh" >>"$LOG_DIR/pdf-download.log" 2>&1
 "$ROOT_DIR/scripts/ensure-content-digest-server.sh" >>"$LOG_DIR/content-digest.log" 2>&1
-"$ROOT_DIR/scripts/refresh-apple-health.sh" >>"$LOG_DIR/apple-health.log" 2>&1 || true
+# Do not block Flask/Vinext boot on Health ZIP import. The startup audit refreshes Health after the gateway is up.
+"$ROOT_DIR/scripts/refresh-apple-health.sh" >>"$LOG_DIR/apple-health.log" 2>&1 &
 
-if ! curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+upstream_up() {
+  curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1
+}
+
+if ! upstream_up; then
   "$NPM_BIN" run "$NPM_SCRIPT" >>"$LOG_DIR/vinext.log" 2>&1 &
   VINEXT_PID=$!
 fi
 
-for _ in {1..60}; do
-  if curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+waited=0
+while [ "$waited" -lt 90 ]; do
+  if upstream_up; then
     break
   fi
-  if [[ -n "$VINEXT_PID" ]]; then
-    kill -0 "$VINEXT_PID" 2>/dev/null || exit 1
-  fi
+  waited=$((waited + 1))
   sleep 1
 done
 
-if ! curl -sf --max-time 3 "$UPSTREAM_URL/" >/dev/null 2>&1; then
+if ! upstream_up; then
   printf 'Dashboard upstream did not start. Check %s/vinext.log\n' "$LOG_DIR" >&2
   exit 1
+fi
+
+if [[ -n "$VINEXT_PID" ]] && ! kill -0 "$VINEXT_PID" 2>/dev/null; then
+  VINEXT_PID=""
 fi
 
 # channel-timeout must cover long Mail/Podcast force refreshes proxied through Flask.
@@ -62,6 +76,12 @@ DASHBOARD_UPSTREAM="$UPSTREAM_URL" "$VENV_DIR/bin/waitress-serve" \
   --listen="$BIND_HOST:$FLASK_PORT" --threads=8 --channel-timeout=360 \
   flask_gateway:app >>"$LOG_DIR/flask.log" 2>&1 &
 FLASK_PID=$!
+
+if [[ "$BIND_HOST" != "127.0.0.1" && "$BIND_HOST" != "::1" && "$BIND_HOST" != "localhost" ]]; then
+  dns-sd -R "Stratji" _stratji._tcp local "$FLASK_PORT" proto=http path=/ >/dev/null 2>&1 &
+  DNS_SD_PID=$!
+  printf 'Bonjour advertisement _stratji._tcp on port %s (bind %s)\n' "$FLASK_PORT" "$BIND_HOST" >>"$LOG_DIR/service.log"
+fi
 
 for _ in {1..30}; do
   if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/_flask/health" >/dev/null 2>&1; then

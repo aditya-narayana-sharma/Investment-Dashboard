@@ -1,6 +1,10 @@
 /* Visual Overhaul — specialized instruments, motion, and interaction language */
 
 :root {
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
   --vo-desk: #1d4ed8;
   --vo-map: #0d9488;
   --vo-news: #a855f7;
@@ -91,6 +95,11 @@
   scrollbar-width: thin;
   font-family: var(--font-mono);
 }
+html.native-chrome-embed .source-freshness-strip.pulse-constellation,
+html[data-native-chrome] .source-freshness-strip.pulse-constellation {
+  padding: 2px 0 6px;
+  gap: 8px;
+}
 .pulse-constellation .pulse-node {
   position: relative;
   min-width: max-content;
@@ -99,6 +108,7 @@
   gap: 9px;
   padding: 8px 12px 8px 10px;
   border: 2px solid var(--line);
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--brutalist-shadow-sm);
   color: inherit;
@@ -111,7 +121,8 @@
 .pulse-constellation .pulse-node:focus-visible {
   border-color: #3b82f6;
   outline: none;
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--brutalist-shadow-lg);
 }
 .pulse-constellation .pulse-node.failed {
   animation: vo-shake 360ms var(--vo-ease);
@@ -121,6 +132,7 @@
   width: 12px;
   height: 12px;
   flex: none;
+  border-radius: 50%;
   background: #71717a;
 }
 .pulse-constellation .pulse-core::after {
@@ -128,6 +140,7 @@
   position: absolute;
   inset: -4px;
   border: 1px solid currentColor;
+  border-radius: 50%;
   opacity: 0.35;
   animation: vo-pulse 2.4s var(--vo-ease) infinite;
 }
@@ -145,6 +158,7 @@
   margin: -6px 0 12px;
   padding: 10px 12px;
   border: 2px solid #3b82f6;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--brutalist-shadow);
   color: #d4d4d8;
@@ -155,50 +169,35 @@
   pointer-events: none;
 }
 
-/* ——— Mode dial (workspace tabs) ——— */
-.workspace-navigation.mode-dial .workspace-tabs button {
-  border-top-width: 4px;
+/* ——— Mode dial (workspace liquid glass capsule) ——— */
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button {
+  border-top-width: 0;
 }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="investment"] { border-top-color: var(--vo-desk); }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
-.workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
-  background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="investment"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="sectors"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="intelligence"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
+  color: rgba(236, 240, 244, 0.62);
 }
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="sectors"] {
-  background: #134e4a; border-color: var(--vo-map); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #2dd4bf;
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="sectors"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="intelligence"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="health"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
+.workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
+  color: #fff;
 }
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="intelligence"] {
-  background: #3b0764; border-color: var(--vo-news); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #c084fc;
-}
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
-  background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
-}
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
-  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
-}
-.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
-  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
-}
-.workspace-tabs button .mode-silhouette {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
+.workspace-navigation.glass-bar .workspace-tabs button:hover,
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible,
+.workspace-navigation.glass-bar .workspace-tabs button:active {
+  box-shadow: none;
+  transform: none;
+  animation: none;
 }
 .workspace-tabs em.orbital-badge {
   position: relative;
-}
-.workspace-tabs em.orbital-badge::before {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  border: 1px dashed currentColor;
-  opacity: 0.45;
-  pointer-events: none;
 }
 
 /* ——— Button / control pop-up press ——— */
@@ -210,7 +209,18 @@
 .digest-show-all,
 .incognito-toggle,
 .pill,
-.kanban-board[data-visual="mission-chips"] .kanban-card {
+.kanban-board[data-visual="mission-chips"] .kanban-card,
+.panel,
+.llm-assist,
+.kanban-summary,
+.kanban-lane,
+.kanban-card,
+.metrics-strip article,
+.portfolio-management-card,
+.masthead,
+.health-kpi-tile,
+.health-organ-portal {
+  border-radius: var(--radius);
   transition:
     box-shadow var(--vo-motion) var(--vo-ease),
     transform var(--vo-motion) var(--vo-ease),
@@ -233,6 +243,7 @@
 .incognito-toggle:hover,
 .incognito-toggle:focus-within,
 .kanban-board[data-visual="mission-chips"] .kanban-card:hover {
+  transform: translateY(-2px) scale(1.02);
   box-shadow: var(--brutalist-shadow-lg);
 }
 .vo-pop:active,
@@ -279,6 +290,7 @@
 .collapsible-content {
   animation: vo-magnetic var(--vo-motion-slow) var(--vo-ease);
   box-shadow: var(--brutalist-shadow);
+  border-radius: var(--radius);
   transform-origin: top center;
 }
 
@@ -287,11 +299,12 @@
 .kanban-board[data-visual="mission-chips"] .kanban-card {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius);
   transition: transform var(--vo-motion) var(--vo-ease), box-shadow var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
 }
 .kanban-board.mission-chips .kanban-card:hover,
 .kanban-board[data-visual="mission-chips"] .kanban-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
   box-shadow: var(--brutalist-shadow-lg);
 }
 .kanban-board.mission-chips .kanban-card.completing,
@@ -453,10 +466,6 @@
   padding: 8px;
   border: 1px dashed #3b82f6;
   background: rgba(5, 5, 5, 0.72);
-}
-.nested-chart-panel.orbital-planet .ring-key i,
-.orbital-planet .nested-chart-panel .ring-key i {
-  border-radius: 0 !important;
 }
 .orbital-planet::before {
   content: "Orbital allocation planet · dock a holding via the gravity well or holdings sheet";
@@ -737,6 +746,7 @@
   width: auto;
   min-width: 78px;
   min-height: 38px;
+  /* Hex clip-path owns the silhouette; radius would fight the polygon. */
   border-radius: 0 !important;
   clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);
   padding: 9px 11px;
@@ -997,7 +1007,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   gap: 10px;
 }
 .pulse-orb {
-  min-height: 120px;
+  min-height: 156px;
   padding: 14px;
   border: 2px solid #27272a;
   background: var(--bg-panel);
@@ -1008,16 +1018,31 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   text-align: center;
 }
 .pulse-orb .orb-core {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
+  /* Sized so global --radius: 12px + 2px border leave an 8–10px value inset. */
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 88px;
+  min-width: 88px;
+  height: 88px;
+  min-height: 88px;
+  padding: 10px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px solid #3b82f6;
   background: radial-gradient(circle, rgba(37, 99, 235, 0.35), #0a0a0a 70%);
   animation: vo-breathe 3.2s var(--vo-ease) infinite;
   font-family: var(--font-mono);
+  font-size: clamp(10px, 1.15vw, 12px);
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-align: center;
   color: #fff;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
 }
 .pulse-orb .orb-satellites {
   display: flex;
@@ -1536,18 +1561,20 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   min-height: 140px;
   padding: 14px;
   border: 2px solid #27272a;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--brutalist-shadow-sm);
   cursor: pointer;
   text-align: left;
   color: inherit;
   font: inherit;
-  transition: transform var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
+  transition: transform var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease), box-shadow var(--vo-motion) var(--vo-ease);
 }
 .health-organ-portal:hover,
 .health-organ-portal:focus-visible {
   transform: scale(1.02);
   border-color: #f43f5e;
+  box-shadow: var(--brutalist-shadow-lg);
   outline: none;
 }
 .health-organ-portal .portal-core {
@@ -1566,6 +1593,14 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border: 2px solid #14532d;
   padding: 8px;
   background: rgba(2, 44, 34, 0.35);
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.nutrition-lab-tray .health-direction-grid.compact {
+  flex: 1;
 }
 
 /* ——— Focus spotlight utility ——— */
@@ -1866,33 +1901,24 @@ html[data-appearance="sepia"] .collapse-button,
 html[data-appearance="sepia"] .workspace-tabs button.active,
 html[data-appearance="sepia"] .workspace-tabs button.active small,
 html[data-appearance="sepia"] .workspace-tabs button.active em {
-  color: var(--btn-fg) !important;
+  color: var(--ink) !important;
 }
 
-/* Cream tiles keep unique workspace top accents + active frames. */
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="investment"] { border-top-color: var(--vo-desk); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
-  background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="investment"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="sectors"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="intelligence"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
 }
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="sectors"] {
-  background: #134e4a; border-color: var(--vo-map); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #2dd4bf;
-}
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="intelligence"] {
-  background: #3b0764; border-color: var(--vo-news); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #c084fc;
-}
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
-  background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
-}
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
-  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
-}
-html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
-  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="sectors"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="intelligence"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="health"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
+  color: var(--ink) !important;
 }
 
 /* Investment visualisation legends and macro evidence are paper surfaces. */
@@ -1959,4 +1985,103 @@ html[data-appearance="sepia"] .exposure-total-label,
 html[data-appearance="sepia"] .spark-filament-label {
   color: var(--chart-label) !important;
   fill: var(--chart-label) !important;
+}
+
+/* Last-wins rounded brutalist clip. Class+!important beats earlier square 0/2/4px
+   rules. html/body/.dashboard-app stay square so the macOS window is not clipped.
+   Hover-pop box-shadow is painted on these same rounded boxes. */
+.panel,
+.masthead,
+.skip-link,
+.metrics-strip article,
+.portfolio-management-card,
+.portfolio-management-heading,
+.portfolio-management-sources,
+.signal,
+.market-ticker,
+.collapse-button,
+.appearance-toggle,
+.appearance-toggle button,
+.incognito-toggle,
+.segmented,
+.segmented button,
+.digest-show-more,
+.digest-show-all,
+.live-feed-banner,
+.live-feed-actions a,
+.live-feed-actions button,
+.source-freshness-strip > div,
+.pulse-constellation .pulse-node,
+.pulse-detail-lane,
+.collapsible-section,
+.collapsible-content,
+.workspace-section,
+.workspace-section-nav,
+.intelligence-section-nav,
+.intelligence-feed-section,
+.kanban-summary,
+.kanban-lane,
+.kanban-card,
+.health-kpi-tile,
+.health-organ-portal,
+.health-highlight,
+.health-coverage-strip > div,
+.macro-regime-card,
+.macro-selected-evidence,
+.sector-lead,
+.sector-filter-status,
+.sector-kpi-grid article,
+.pulse-orb .orb-core,
+.sector-selector button,
+.sender-group,
+.digest-panel,
+.earnings-month-cell,
+.earnings-kpi-grid > div,
+.kite-order-ticket,
+.algorithm-builder .builder-chrome,
+.algorithm-builder .builder-node,
+.algorithm-builder .builder-toolbar button,
+.algorithm-builder .builder-block,
+.strategy-card,
+.table-scroll,
+.holdings-panel,
+.analyst-matrix,
+.scenario-shell,
+.mece-panel,
+.portfolio-map-tile,
+.chart-panel,
+.nested-chart-panel,
+.macro-chart-panel,
+.risk-panel,
+.license-gate,
+.integrations-workspace,
+.axis-pick-list button,
+.decision-card-grid > div,
+.earnings-status-cards article {
+  border-radius: var(--radius) !important;
+}
+.vo-pop:hover,
+.vo-pop:focus-visible,
+.panel:hover,
+.llm-assist:hover,
+.kanban-card:hover,
+.kanban-board[data-visual="mission-chips"] .kanban-card:hover,
+.pulse-constellation .pulse-node:hover,
+.pulse-constellation .pulse-node:focus-visible,
+.health-organ-portal:hover,
+.health-organ-portal:focus-visible,
+.strategy-card:hover,
+.strategy-card:focus-visible,
+.metrics-strip article:hover,
+.portfolio-management-card:hover,
+.sender-group:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--brutalist-shadow-lg);
+}
+.workspace-navigation.glass-bar .workspace-tabs button:hover,
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible,
+.workspace-navigation.glass-bar .workspace-tabs button:active {
+  box-shadow: none;
+  transform: none;
+  animation: none;
 }

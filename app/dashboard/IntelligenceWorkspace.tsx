@@ -18,8 +18,9 @@ import type { LiveHolding } from "../live-types";
 import { findEarningsHolidayConflicts } from "../market-calendar";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
 import { AppleMonthlyCalendar } from "./AppleMonthlyCalendar";
-import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
 import { WaveformStrip } from "./visual-components";
+import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
 import { DIGEST_PAGE_SIZE, earningsReconciliationStats, mergeEarningsCalendarEvents } from "./utils";
 
 const COMPLETED_PAGE_SIZE = 24;
@@ -323,10 +324,10 @@ function DigestMailItem({
             {item.contentSource === "transcript"
               ? item.summaryReason === "transcript_too_short"
                 ? "Transcript available, but too little substantive content remained after sanitization."
-                : "Transcript available — summary not generated. Configure the private local summarizer to create it."
+                : "Transcript available — summary not generated. Paste a Claude, OpenAI, or Gemini key in Settings, then refresh."
               : hasDescriptionEvidence
                 ? item.summaryReason === "summarizer_not_configured"
-                  ? "Publisher description evidence shown — AI summary requires a configured private local model."
+                  ? "Publisher description evidence shown — AI summary needs a Claude, OpenAI, or Gemini key in Settings."
                   : "Publisher description evidence — AI summary not generated."
                 : "Transcript and substantive episode description unavailable."}
           </p>
@@ -584,6 +585,39 @@ function ReminderBox({
   );
 }
 
+const LIVE_INTELLIGENCE_LLM_SUGGESTIONS: LlmAssistSuggestion[] = [
+  {
+    id: "overnight-themes",
+    label: "Overnight newsletter themes",
+    prompt: "What were the main overnight newsletter themes in the supplied digest? Ignore ads, CTAs, and promotions. Do not invent numbers.",
+  },
+  {
+    id: "axis-vs-holdings",
+    label: "Axis conviction vs holdings",
+    prompt: "How do Axis Research conviction ideas compare with current holdings in the supplied digest? Do not invent prices, quantities, or unpublished KPIs.",
+  },
+  {
+    id: "podcast-axis-overlap",
+    label: "Podcast vs Axis overlap",
+    prompt: "Where do podcast summaries overlap with Axis Research? Treat transcript-derived items as transcripts and description-only items as descriptions. Do not invent quotes.",
+  },
+  {
+    id: "what-changed",
+    label: "What changed since last digest",
+    prompt: "What changed across Newsletters, Axis Research, and podcast summaries in this digest window? If a prior comparison is not in the supplied text, say so. Do not invent missing items.",
+  },
+  {
+    id: "axis-result-updates",
+    label: "Axis result updates",
+    prompt: "Summarize Axis Research result updates and company notes from the supplied digest only. Leave unpublished KPIs blank. Never invent figures.",
+  },
+  {
+    id: "cautionary-notes",
+    label: "Cautionary notes across sources",
+    prompt: "Flag risks, downgrades, or cautionary notes across Newsletters, Axis Research, and podcast summaries. Never invent prices or KPIs.",
+  },
+];
+
 /** Complete, unfiltered Live Intelligence Digest — single source for Market Intelligence. */
 export function SectorIntelligenceDigest({
   content,
@@ -667,6 +701,10 @@ export function SectorIntelligenceDigest({
   const transcriptPodcastCount = podcasts.filter(
     (item) => item.contentSource === "transcript" && item.summaryStatus === "generated",
   ).length;
+  const hasLocalPodcastTranscript = podcasts.some((item) => item.contentSource === "transcript");
+  const interrogateSubtitle = hasLocalPodcastTranscript
+    ? "Newsletters + Axis Research + Podcast Transcript Summaries, as Source of Truth"
+    : "Newsletters + Axis Research + podcast summaries (description unless a local transcript was available), as Source of Truth";
 
   async function completeReminder(item: AppleTaskItem) {
     if (item.completed || completingId) return;
@@ -718,6 +756,28 @@ export function SectorIntelligenceDigest({
   return (
     <section className="digest-grid">
       {view === "live" && <>
+      <LlmAssistPanel
+        task="summarize"
+        className="llm-assist-span"
+        titleTone="section"
+        title="Interrogate LLM"
+        subtitle={interrogateSubtitle}
+        hint="Uses the current digest only. If the model fails, the extractive digest stays on screen."
+        suggestions={LIVE_INTELLIGENCE_LLM_SUGGESTIONS}
+        context={[
+          `Newsletters (${allNewsletters.length}): ${allNewsletters.slice(0, 8).map((item) => `${item.title}: ${(item.bullets ?? []).slice(0, 2).join(" ")}`).join(" | ")}`,
+          `Axis (${axisResearch.length}): ${axisResearch.slice(0, 6).map((item) => item.title).join(" | ")}`,
+          `Podcasts (${podcasts.length}): ${podcasts.slice(0, 6).map((item) => {
+            const evidence = item.contentSource === "transcript"
+              ? "transcript"
+              : item.contentSource === "description"
+                ? "description"
+                : "none";
+            return `${item.title} [${evidence}/${item.summaryStatus ?? "none"}]`;
+          }).join(" | ")}`,
+        ].join("\n")}
+        placeholder="e.g. Summarize tonight's newsletters and podcasts without ads"
+      />
       <article className="panel digest-panel briefing-rail">
         <div className="panel-title">
           <div>
@@ -911,6 +971,12 @@ const INTELLIGENCE_SECTIONS = [
   { id: "m4", label: "Calendar + Reminders" },
 ] as const;
 
+function intelligenceSectionFromUrl(): string {
+  if (typeof window === "undefined") return "m1";
+  const requested = new URLSearchParams(window.location.search).get("section");
+  return INTELLIGENCE_SECTIONS.some((section) => section.id === requested) ? requested! : "m1";
+}
+
 function MarketEarningsCalendar({
   content,
   snapshot,
@@ -952,6 +1018,17 @@ function MarketEarningsCalendar({
       </div>
       <span className={`pill ${snapshot.status === "verified" ? "green" : "amber"}`}>{snapshot.status} · {snapshot.asOf}</span>
     </div>
+    <LlmAssistPanel
+      task="summarize"
+      hint="Uses verified reported KPIs only. Unpublished fields stay blank. Calendar rows stay scheduling evidence."
+      context={events.slice(0, 12).map((event) => {
+        const kpis = event.reported
+          ? event.kpis.map((kpi) => `${kpi.label} ${kpi.value || "—"}`).join(", ")
+          : "unpublished KPIs blank";
+        return `${event.date} ${event.symbol} ${event.state} reported=${event.reported} ${kpis}`;
+      }).join("\n")}
+      placeholder="e.g. What did independently verified prints say this week?"
+    />
     <div className="earnings-reconciliation-strip" aria-label="Sanitized earnings reconciliation counts">
       <span><b>{reconciliation.discovered}</b> discovered</span>
       <span><b>{reconciliation.newlyAdded}</b> new</span>
@@ -989,15 +1066,20 @@ export function IntelligenceWorkspace({
   earningsError: string;
   holdings: LiveHolding[];
 }) {
-  const [activeSection, setActiveSection] = useState("m1");
+  const [activeSection, setActiveSection] = useState<string>(intelligenceSectionFromUrl);
   useEffect(() => {
     const sync = () => {
-      const requested = new URLSearchParams(window.location.search).get("section");
-      if (INTELLIGENCE_SECTIONS.some((section) => section.id === requested)) setActiveSection(requested!);
+      const section = intelligenceSectionFromUrl();
+      setActiveSection(section);
+      if (section) revealDashboardSection(section, `intelligence-${section}`);
     };
     sync();
+    const retry = window.setTimeout(sync, 0);
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
+    return () => {
+      window.clearTimeout(retry);
+      window.removeEventListener("popstate", sync);
+    };
   }, []);
   const selectSection = (section: string) => {
     const url = new URL(window.location.href);
@@ -1006,26 +1088,26 @@ export function IntelligenceWorkspace({
     window.history.pushState({}, "", url);
     setActiveSection(section);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`intelligence-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
-    <div className="intelligence-workspace-shell">
+    <div className="intelligence-workspace-shell" data-focus-section={activeSection ?? undefined}>
       <WorkspaceSectionNav
         label="Market Intelligence sections"
         sections={INTELLIGENCE_SECTIONS}
-        activeId={activeSection}
+        activeId={activeSection ?? "m1"}
         onSelect={selectSection}
       />
-      <div id="intelligence-m1" className="workspace-section action-board-workspace-section">
+      <div id="intelligence-m1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(activeSection, "m1")}>
         <CollapsibleSection
           number="M-1" title="Action Board"
           note="Clickable daily source, evidence and monitoring actions"
+          defaultOpen={activeSection === "m1"}
         >
           <DailyKanbanBoard workspace="intelligence"/>
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m2" className="workspace-section">
+      <div id="intelligence-m2" className="workspace-section" hidden={nativeChromeHidesSection(activeSection, "m2")}>
         <CollapsibleSection
           number="M-2" title="Live Intelligence"
           note={
@@ -1035,14 +1117,16 @@ export function IntelligenceWorkspace({
                 ? `refresh issue: ${contentError}`
                 : "waiting for local refresh"
           }
+          defaultOpen={activeSection === "m2"}
         >
           <SectorIntelligenceDigest content={content} mailWindow={mailWindow} view="live" />
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m3" className="workspace-section">
+      <div id="intelligence-m3" className="workspace-section" hidden={nativeChromeHidesSection(activeSection, "m3")}>
         <CollapsibleSection
           number="M-3" title="Earnings Calendar"
           note="Complete Apple Calendar schedule plus independently verified reported results"
+          defaultOpen={activeSection === "m3"}
         >
           {earningsError && (
             <div className="refresh-error">
@@ -1053,10 +1137,11 @@ export function IntelligenceWorkspace({
           <MarketEarningsCalendar content={content} snapshot={earningsSnapshot} holdings={holdings} />
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m4" className="workspace-section">
+      <div id="intelligence-m4" className="workspace-section" hidden={nativeChromeHidesSection(activeSection, "m4")}>
         <CollapsibleSection
           number="M-4" title="Calendar + Reminders"
           note="Complete non-earnings calendars and the three-group reminders experience"
+          defaultOpen={activeSection === "m4"}
         >
           <SectorIntelligenceDigest content={content} mailWindow={mailWindow} view="calendar-reminders" />
         </CollapsibleSection>

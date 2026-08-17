@@ -85,7 +85,7 @@ export function BuilderWorkspace() {
   }, []);
 
   return (
-    <div className="builder-workspace-shell investment-workspace-shell" data-workspace="builder" data-active-section={activeSection}>
+    <div className="builder-workspace-shell investment-workspace-shell" data-workspace="builder" data-active-section={activeSection} data-focus-section={activeSection}>
       <header className="builder-workspace-chrome">
         <h2>Algorithm Builder</h2>
         <WorkspaceSectionNav
@@ -97,7 +97,7 @@ export function BuilderWorkspace() {
       </header>
 
       <div id="builder-board" className="workspace-section action-board-workspace-section" hidden={activeSection !== "board"}>
-        <CollapsibleSection number={builderSectionNumber("board")} title="Action Board" note="Clickable daily canvas, validation and export actions">
+        <CollapsibleSection number={builderSectionNumber("board")} title="Action Board" note="Clickable daily canvas, validation and export actions" defaultOpen={activeSection === "board"}>
           <DailyKanbanBoard workspace="builder"/>
         </CollapsibleSection>
       </div>
@@ -107,7 +107,7 @@ export function BuilderWorkspace() {
           number={builderSectionNumber("canvas")}
           title="Canvas"
           note="Details and backtest above a full-width nested tree"
-          defaultOpen
+          defaultOpen={activeSection === "canvas"}
         >
           <SymphonyEditor
             key={canvasKey}
@@ -121,7 +121,7 @@ export function BuilderWorkspace() {
       </div>
 
       <div id="builder-json" className="workspace-section" hidden={activeSection !== "json"}>
-        <CollapsibleSection number={builderSectionNumber("json")} title="JSON" note="Lossless tree + compiled graph · ids, percents, If/Else, pins">
+        <CollapsibleSection number={builderSectionNumber("json")} title="JSON" note="Lossless tree + compiled graph · ids, percents, If/Else, pins" defaultOpen={activeSection === "json"}>
           <BuilderJsonPanel tree={tree} graph={graph} disabled={false} onApply={applyDocument} />
         </CollapsibleSection>
       </div>

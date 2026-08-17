@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Stratji</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Stratji</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>auth0</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.finance</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Stratji sends Apple Events to Mail, Reminders, Notes, and Podcasts on this Mac so it can refresh newsletter and research mailboxes, reminder lists, notes, and eligible episode descriptions. Automation stays on-device. Stratji does not send your mail or health data to a Stratji cloud.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Stratji reads your calendars to show earnings dates and other scheduled events in Market Intelligence. Calendar entries are scheduling evidence, not proof that a result was published.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Stratji needs full calendar access to list earnings and other events through D-1 and group them on the Market Intelligence workspace. Stratji does not add or modify calendar events unless you explicitly confirm a write feature.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Stratji reads your Reminders lists to populate the Daily Action Board and Market Intelligence. Completing an item in Stratji can mark the matching reminder complete.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Stratji needs Reminders access for the Job 🔍 and Earnings lists (and any lists you map in Integrations). Incomplete items stay actionable; completed items are evidence only and are never silently restored.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Stratji reads operational-day Apple Health aggregates (Activity, Sleep, Heart, Respiratory, Mobility, and Nutrition) to keep your private Health &amp; Wellness workspace current. Body Measurements and Hearing are not requested. Health data stays on this Mac and your paired iPhone.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Stratji starts the local dashboard from your Git checkout. The Mac remains the data plane.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Stratji reads research PDFs from Downloads (or a folder you choose) to extract recommended-stock calls for Market Intelligence.</string>
+	<key>StratjiDashboardURL</key>
+	<string>http://127.0.0.1:5050/</string>
+	<key>StratjiRepoRoot</key>
+	<string>$(STRATJI_REPO_ROOT)</string>
+</dict>
+</plist>

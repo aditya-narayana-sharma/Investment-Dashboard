@@ -4,12 +4,26 @@ set -uo pipefail
 BASE_URL="${DASHBOARD_PUBLIC_URL:-http://127.0.0.1:${PORTFOLIO_FLASK_PORT:-5050}}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AUDIT_JSON="${PORTFOLIO_STARTUP_AUDIT_PATH:-$ROOT_DIR/artifacts/private/startup-audit.json}"
+PROGRESS_PY="$ROOT_DIR/scripts/write-startup-progress.py"
 SECTORS=(pharma power infrastructure auto telecom banking nbfc fmcg consumer energy defence)
 FAILURES=0
 FAILED_NAMES=()
 HEALTH_REQUIRED_DATE="$(/usr/bin/python3 "$ROOT_DIR/scripts/health_date_policy.py" --date-only)"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
+
+emit_progress() {
+  local stage="$1"
+  local state="$2"
+  local label="$3"
+  local fraction="${4:-}"
+  printf 'PROGRESS\t%s\t%s\t%s\n' "$stage" "$state" "$label"
+  if [[ -n "$fraction" ]]; then
+    /usr/bin/python3 "$PROGRESS_PY" "$ROOT_DIR" "$stage" "$state" "$label" "$fraction" >/dev/null 2>&1 || true
+  else
+    /usr/bin/python3 "$PROGRESS_PY" "$ROOT_DIR" "$stage" "$state" "$label" >/dev/null 2>&1 || true
+  fi
+}
 
 check_source() {
   local name="$1"
@@ -64,29 +78,89 @@ except Exception: print("")' "$body")"
 
   if [[ "$semantic_ok" == true ]]; then
     printf '%s\tOK\tHTTP %s · status=%s%s%s\n' "$name" "$code" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}"
+    CHECK_OK=1
   else
     printf '%s\tFAILED\tHTTP %s · status=%s%s%s · expected=%s%s\n' "$name" "${code:-000}" "$status" "${data_date:+ · dataDate=$data_date}" "${source_detail:+ · $source_detail}" "$expected_pattern" "$([[ "$require_d1" == true ]] && printf ' through operational target %s' "$HEALTH_REQUIRED_DATE")"
     FAILURES=$((FAILURES + 1))
     FAILED_NAMES+=("${name} (${status:-missing})")
+    CHECK_OK=0
   fi
   rm -f "$body"
 }
 
+finish_stage() {
+  local stage="$1"
+  local ok_label="$2"
+  local fail_label="$3"
+  if [[ "${CHECK_OK:-0}" == "1" ]]; then
+    emit_progress "$stage" ok "$ok_label"
+  else
+    emit_progress "$stage" failed "$fail_label"
+  fi
+}
+
 printf 'Complete dashboard refresh audit\n'
 printf 'Started\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
-"$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh" >/dev/null 2>&1 || true
+emit_progress service ok "Local Stratji service is up."
+
+if [[ "${PORTFOLIO_SKIP_HEALTH_ZIP:-0}" == "1" ]]; then
+  printf 'Health ZIP\tskipped\tnative hot path uses /_health/snapshot only\n'
+else
+  "$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh" >/dev/null 2>&1 || true
+fi
+
+emit_progress kite start "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…"
 check_source "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
-# Mail/Calendar force refresh can exceed 90s when Mail.app is slow; Calendar is SQLite-backed.
-check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live" "false" "300"
-check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
-check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
+finish_stage kite "Kite snapshot received." "Kite snapshot stale or unavailable."
+
+# content-digest-server emits distinct mail/axis/calendar/reminders/podcasts events while this curl runs.
+# Mail osascript is bounded (~50s); do not let splash sit on a lumped Mail caption for the whole Apple pass.
+check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live" "false" "160"
+MAIL_STATE="ensure"
+if [[ "${CHECK_OK:-0}" != "1" ]]; then
+  MAIL_STATE="ensure-failed"
+fi
+if [[ "$MAIL_STATE" == "ensure" ]]; then
+  emit_progress calendar ensure "Apple Calendar received."
+  emit_progress mail ensure "iCloud Newsletters received."
+  emit_progress axis ensure "Axis Research mailbox received."
+  emit_progress reminders ensure "Apple Reminders received."
+  emit_progress podcasts ensure "Apple Podcasts received."
+else
+  emit_progress calendar ensure-failed "Apple Calendar stale or unavailable."
+  emit_progress mail ensure-failed "iCloud Newsletters stale or unavailable."
+  emit_progress axis ensure-failed "Axis Research mailbox stale or unavailable."
+  emit_progress reminders ensure-failed "Apple Reminders stale or unavailable."
+  emit_progress podcasts ensure-failed "Apple Podcasts stale or unavailable."
+fi
+
+sector_count="${#SECTORS[@]}"
+emit_progress sectors start "Refreshing sector snapshots…" 0
+index=0
 for sector in "${SECTORS[@]}"; do
   check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
+  index=$((index + 1))
+  emit_progress sectors start "Sector ${sector} (${index}/${sector_count})" "$(/usr/bin/python3 -c "print(round($index / ($sector_count + 2), 4))")"
 done
-# S-2 news aggregation accepts live or partial when some publishers are blocked.
 check_source_any "Sector news" "/api/sectors/news?startup=$(date +%s)" "live|partial" "false" "60"
+index=$((index + 1))
+emit_progress sectors start "Sector news (${index}/$((sector_count + 2)))" "$(/usr/bin/python3 -c "print(round($index / ($sector_count + 2), 4))")"
 # S-3 Decision Lab depends on NSE benchmark histories; accept live or partial (definition-only residual gaps).
 check_source_any "NSE benchmarks" "/api/sectors/benchmarks?startup=$(date +%s)" "live|partial" "false" "120"
+if [[ "${CHECK_OK:-0}" == "1" ]]; then
+  emit_progress sectors ok "Sector snapshots received."
+else
+  emit_progress sectors failed "Sector snapshots stale or unavailable."
+fi
+
+emit_progress earnings start "Refreshing earnings calendar…"
+check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
+finish_stage earnings "Earnings snapshot received." "Earnings snapshot stale or unverified."
+
+emit_progress health start "Refreshing Health snapshot…"
+check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
+finish_stage health "Health snapshot received." "Health snapshot stale or unavailable."
+
 printf 'Finished\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 printf 'Failures\t%s\n' "$FAILURES"
 

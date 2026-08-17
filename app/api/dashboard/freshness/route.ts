@@ -7,6 +7,7 @@ export async function GET() {
     const health = await readAppleHealthSnapshot();
     return Response.json({
       status: health.status,
+      dataDate: health.dataDate,
       completedHealthThrough: health.completedThrough ?? health.dataDate,
       partialToday: health.partialToday,
       capturedAt: health.capturedAt,

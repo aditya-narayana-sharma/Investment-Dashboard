@@ -87,7 +87,7 @@ export const healthCategories: Array<{ name: string; note: string; tone: HealthT
     note: "Apple Health · 16 Jul daily ranges with Health weekly/monthly comparison ranges",
     tone: "amber",
     metrics: [
-      { label: "Walking speed", value: "2.2-5.9 km/h", context: "Apple Health daily range · 16 Jul;  Health Daily recorded 4.08 km/h", averages: { weekly: { value: "2.7-4.7 km/h daily-average range", direction: "same", delta: "within range" }, monthly: { value: "2.7-5.0 km/h daily-average range", direction: "same", delta: "within range" } } },
+      { label: "Walking speed", value: "2.2-5.9 km/h", context: "Apple Health daily range · 16 Jul; Health Shortcut recorded 4.08 km/h", averages: { weekly: { value: "2.7-4.7 km/h daily-average range", direction: "same", delta: "within range" }, monthly: { value: "2.7-5.0 km/h daily-average range", direction: "same", delta: "within range" } } },
       { label: "Step length", value: "42-101 cm", context: "Apple Health daily range · 16 Jul", averages: { weekly: { value: "56.5-72 cm daily-average range", direction: "same", delta: "overlapping range" }, monthly: { value: "55.7-72 cm daily-average range", direction: "same", delta: "overlapping range" } } },
       { label: "Double support", value: "36.1%", context: "Apple Health latest 16 Jul reading" },
       { label: "Walking asymmetry", value: "1.9%", context: "Apple Health · 15 Jul average", tone: "green" },
@@ -141,6 +141,6 @@ export const healthCaveats = [
   "The weekly and monthly toggles use 7-day and 30-day HealthKit aggregates when a live iPhone snapshot is available.",
   "Mobility screenshots report daily ranges and ranges of daily averages. These are shown as ranges and are not converted into unsupported point estimates.",
   "Respiratory-rate ranges are preserved as ranges rather than converted into unsupported point estimates.",
-  "A  Health Daily entry can be an earlier shortcut-time snapshot. Direct HealthKit aggregates take precedence when a newer iPhone sync is available.",
+  "Health Shortcut / Health Stats can be an earlier snapshot than HealthKit. Direct HealthKit aggregates take precedence when a newer iPhone sync is available.",
   "This is a private local wellness snapshot, not a diagnosis or medical record.",
 ];

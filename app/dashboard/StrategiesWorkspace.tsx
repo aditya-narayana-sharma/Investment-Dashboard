@@ -19,6 +19,7 @@ import {
 } from "../strategy/library-nse-stats";
 import type { StrategyTreeV1 } from "../strategy/graph-types";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { LlmAssistPanel } from "./LlmAssistPanel";
 import { ReadOnlyTree } from "./strategies/ReadOnlyTree";
 import "./strategies/strategies-workspace.css";
 import type { StrategiesSection } from "./types";
@@ -284,7 +285,7 @@ export function StrategiesWorkspace() {
   }, []);
 
   return (
-    <div className="strategies-workspace-shell investment-workspace-shell" data-workspace="strategies" data-active-section={activeSection}>
+    <div className="strategies-workspace-shell investment-workspace-shell" data-workspace="strategies" data-active-section={activeSection} data-focus-section={activeSection}>
       <header className="strategies-workspace-chrome">
         <h2>Strategies</h2>
         <WorkspaceSectionNav
@@ -296,13 +297,19 @@ export function StrategiesWorkspace() {
       </header>
 
       <div id="strategies-y1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "y1"}>
-        <CollapsibleSection number={strategiesSectionNumber("y1")} title="Action Board" note="Clickable daily actions for the public strategy library">
+        <CollapsibleSection number={strategiesSectionNumber("y1")} title="Action Board" note="Clickable daily actions for the public strategy library" defaultOpen={activeSection === "y1"}>
           <DailyKanbanBoard workspace="strategies"/>
         </CollapsibleSection>
       </div>
 
       <div id="strategies-y2" className="workspace-section" hidden={activeSection !== "y2"}>
-        <CollapsibleSection number={strategiesSectionNumber("y2")} title="Library" note="NSE ETF adaptations · complete StrategyTreeV1 · Indian market only · live 128-KPI values open on Algorithm Canvas" defaultOpen>
+        <CollapsibleSection number={strategiesSectionNumber("y2")} title="Library" note="NSE ETF adaptations · complete StrategyTreeV1 · Indian market only · live 128-KPI values open on Algorithm Canvas" defaultOpen={activeSection === "y2"}>
+          <LlmAssistPanel
+            task="strategy"
+            hint="Machine-drafted notes on the public library. Missing KPIs stay —. Open Algorithm Canvas to edit trees."
+            context={`${COMPOSER_STRATEGIES.length} NSE ETF trees as-of ${COMPOSER_RESEARCH_AS_OF}. Mine: ${mine.map((item) => item.name).join(", ") || "none"}. Top cards: ${sorted.slice(0, 8).map((card) => card.name).join("; ")}.`}
+            placeholder="e.g. Compare quality vs momentum sleeves and what to verify on the canvas"
+          />
           {mine.length > 0 && (
             <section className="strategies-mine" aria-label="My library">
               <h3>My library</h3>

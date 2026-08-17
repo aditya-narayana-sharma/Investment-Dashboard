@@ -14,6 +14,8 @@
     "flask": "./scripts/start-remote-app.sh",
     "flask:stop": "./scripts/stop-flask-app.sh",
     "desktop": "./scripts/install-desktop-app.sh",
+    "desktop:macos": "./scripts/install-stratji-macos.sh",
+    "desktop:chrome": "./scripts/install-desktop-app.sh --chrome",
     "iphone": "./scripts/install-iphone-app.sh",
     "iphone:native": "./scripts/build-and-install-iphone-app.sh",
     "iphone:native:test": "./scripts/test-iphone-app.sh",
@@ -27,7 +29,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "flask:service": "./scripts/start-flask-app.sh",
-    "content:refresh": "./scripts/refresh-content-digest.sh"
+    "content:refresh": "./scripts/refresh-content-digest.sh",
+    "demo:record": "node scripts/record-demo-video.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -49,6 +52,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
+    "playwright": "^1.55.0",
     "eslint-config-next": "16.2.6",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",

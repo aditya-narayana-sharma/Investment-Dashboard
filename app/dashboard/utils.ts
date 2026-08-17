@@ -580,13 +580,13 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
   ],
 };
 
-export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string; icon: typeof CircleDollarSign }> = [
-  { key: "investment", label: "Investment", note: "Portfolio, macro and research", icon: CircleDollarSign },
-  { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
-  { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
-  { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
-  { key: "builder", label: "Algorithm Canvas", note: "Nested tree and JSON", icon: GitBranch },
-  { key: "strategies", label: "Strategies", note: "NSE strategy library", icon: Library },
+export const workspaces: Array<{ key: WorkspaceKey; label: string; barLabel: string; note: string; icon: typeof CircleDollarSign }> = [
+  { key: "investment", label: "Portfolio Overview", barLabel: "Portfolio", note: "Portfolio, macro and research", icon: CircleDollarSign },
+  { key: "sectors", label: "Sectoral Analytics", barLabel: "Sectors", note: "Sectors, frameworks and earnings", icon: Layers3 },
+  { key: "intelligence", label: "Market Intelligence", barLabel: "Intel", note: "Mail, calendar and podcasts", icon: Newspaper },
+  { key: "health", label: "Health & Wellness", barLabel: "Health", note: "Private local wellness", icon: HeartPulse },
+  { key: "builder", label: "Algorithm Canvas", barLabel: "Canvas", note: "Nested tree and JSON", icon: GitBranch },
+  { key: "strategies", label: "Strategies", barLabel: "Strategies", note: "NSE strategy library", icon: Library },
 ];
 
 export function number(value: number | string | undefined) {

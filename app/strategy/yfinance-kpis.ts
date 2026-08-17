@@ -41,9 +41,13 @@ export type YfinanceSymbolKpis = {
   source: "yfinance";
 };
 
-function resolvePythonBin() {
+export function resolveYfinancePythonBin() {
   return process.env.PORTFOLIO_SECTOR_PYTHON
     ?? (process.env.PORTFOLIO_FLASK_VENV ? path.join(process.env.PORTFOLIO_FLASK_VENV, "bin/python") : flaskPython);
+}
+
+function resolvePythonBin() {
+  return resolveYfinancePythonBin();
 }
 
 function object(value: unknown): Record<string, unknown> {

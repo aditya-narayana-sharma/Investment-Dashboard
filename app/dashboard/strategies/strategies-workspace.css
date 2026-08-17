@@ -71,7 +71,8 @@
   cursor:pointer;
   font:inherit;
   box-shadow:none;
-  transition:box-shadow 140ms ease, border-color 140ms ease;
+  border-radius:var(--radius);
+  transition:box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
 .strategy-card[data-strategy-id="inverse-beta-baller"] { --strategy-tone:#facc15; }
 .strategy-card[data-strategy-id="wooden-arkk"] { --strategy-tone:#22d3ee; }
@@ -89,6 +90,7 @@
   border-color:var(--strategy-tone);
   outline:2px solid var(--strategy-tone);
   outline-offset:3px;
+  transform:translateY(-2px) scale(1.02);
   box-shadow:
     8px 8px 0 #000,
     12px 12px 0 var(--strategy-tone),

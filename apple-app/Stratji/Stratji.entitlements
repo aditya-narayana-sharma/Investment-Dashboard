@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Stratji Mac entitlements — honest helper architecture vs production target.
+
+  CURRENT (local-dev, this file):
+  - App Sandbox is OFF. Flask :5050, Vinext :3000, content digest :3003 (osascript +
+    Calendar/Podcasts SQLite), PDF helper :3002, Kite MCP :8080, launchd trampoline,
+    and iCloud Health ZIP cannot all live inside one sandboxed UI process today.
+  - Stratji.app is the AppKit + WKWebView shell. The data plane is sibling processes.
+  - Full Disk Access may still be required for group-container SQLite until EventKit
+    and user-selected folder bookmarks replace those reads.
+  - TCC parent for helpers may still be Terminal / start-dashboard.command. Production
+    should make Stratji.app the parent so Info.plist usage strings are what the user sees.
+
+  PRODUCTION TARGET (not this file yet):
+  - Sandboxed Stratji.app (network client, Apple Events, user-selected files).
+  - Separate notarized XPC / launchd helper for Flask, Vinext, digest, Kite, Health ZIP.
+  - Do not copy InvestmentDashboard.entitlements (sandboxed WebView client) onto Stratji.app.
+  - Do not add Camera, Microphone, Contacts, Bluetooth, Location, or Accessibility.
+
+  Permissions the product actually uses:
+  - network.client — loopback dashboard + Kite/yfinance/NSE/Tailscale HTTPS
+  - automation.apple-events — Mail, Reminders, Notes, Podcasts
+  - Calendar / Reminders / HealthKit — declared in Info.plist usage strings; HealthKit
+    entitlement stays on the iOS target until the Mac binary imports HealthKit
+  - com.apple.security.personal-information.calendars / reminders — EventKit full-access
+    prompts from Stratji Settings Connect (unsandboxed; usage strings still required)
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+	<key>com.apple.security.personal-information.reminders</key>
+	<true/>
+</dict>
+</plist>

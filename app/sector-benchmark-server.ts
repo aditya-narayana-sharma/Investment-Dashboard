@@ -42,7 +42,7 @@ function runFetcher() {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("Benchmark history fetch timed out."));
-    }, 90_000);
+    }, 120_000);
     child.stdout.on("data", (chunk) => { stdout += String(chunk); });
     child.stderr.on("data", (chunk) => { stderr += String(chunk); });
     child.on("error", reject);

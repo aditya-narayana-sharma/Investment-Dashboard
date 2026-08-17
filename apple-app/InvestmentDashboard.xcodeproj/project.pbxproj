@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E610377C30338CDF00472B3C /* Auth0 in Frameworks */ = {isa = PBXBuildFile; productRef = A57A84033006D000007787CF /* Auth0 */; };
+		E610377D30338CDF00472B3C /* Auth0 in Frameworks */ = {isa = PBXBuildFile; productRef = A57A84043006D000007787CF /* Auth0 */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		E65EBECA3006C51B007787CF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,14 +29,58 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A57A71013006C600007787CF /* Stratji.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Stratji.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65EBEBA3006C519007787CF /* InvestmentDashboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InvestmentDashboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65EBEC93006C51B007787CF /* InvestmentDashboardTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InvestmentDashboardTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65EBED33006C51B007787CF /* InvestmentDashboardUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InvestmentDashboardUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A57A710A3006C600007787CF /* Exceptions for "Stratji" folder in "Stratji" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A57A71063006C600007787CF /* Stratji */;
+		};
+		A57A710B3006C600007787CF /* Exceptions for "InvestmentDashboard" folder in "InvestmentDashboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E65EBEB93006C519007787CF /* InvestmentDashboard */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A57A71023006C600007787CF /* Stratji */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A57A710A3006C600007787CF /* Exceptions for "Stratji" folder in "Stratji" target */,
+			);
+			path = Stratji;
+			sourceTree = "<group>";
+		};
+		A57A72103006C600007787CF /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		A57A73013006C900007787CF /* Outline */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Outline;
+			sourceTree = "<group>";
+		};
+		A57A84013006D000007787CF /* Auth */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Auth;
+			sourceTree = "<group>";
+		};
 		E65EBEBC3006C519007787CF /* InvestmentDashboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A57A710B3006C600007787CF /* Exceptions for "InvestmentDashboard" folder in "InvestmentDashboard" target */,
+			);
 			path = InvestmentDashboard;
 			sourceTree = "<group>";
 		};
@@ -48,10 +97,19 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A57A71033006C600007787CF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E610377D30338CDF00472B3C /* Auth0 in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E65EBEB73006C519007787CF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E610377C30338CDF00472B3C /* Auth0 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,6 +134,10 @@
 			isa = PBXGroup;
 			children = (
 				E65EBEBC3006C519007787CF /* InvestmentDashboard */,
+				A57A71023006C600007787CF /* Stratji */,
+				A57A72103006C600007787CF /* Shared */,
+				A57A84013006D000007787CF /* Auth */,
+				A57A73013006C900007787CF /* Outline */,
 				E65EBECC3006C51B007787CF /* InvestmentDashboardTests */,
 				E65EBED63006C51B007787CF /* InvestmentDashboardUITests */,
 				E65EBEBB3006C519007787CF /* Products */,
@@ -86,6 +148,7 @@
 			isa = PBXGroup;
 			children = (
 				E65EBEBA3006C519007787CF /* InvestmentDashboard.app */,
+				A57A71013006C600007787CF /* Stratji.app */,
 				E65EBEC93006C51B007787CF /* InvestmentDashboardTests.xctest */,
 				E65EBED33006C51B007787CF /* InvestmentDashboardUITests.xctest */,
 			);
@@ -95,6 +158,32 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A57A71063006C600007787CF /* Stratji */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A57A71093006C600007787CF /* Build configuration list for PBXNativeTarget "Stratji" */;
+			buildPhases = (
+				A57A71043006C600007787CF /* Sources */,
+				A57A71033006C600007787CF /* Frameworks */,
+				A57A71053006C600007787CF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A57A71023006C600007787CF /* Stratji */,
+				A57A72103006C600007787CF /* Shared */,
+				A57A73013006C900007787CF /* Outline */,
+				A57A84013006D000007787CF /* Auth */,
+			);
+			name = Stratji;
+			packageProductDependencies = (
+				A57A84043006D000007787CF /* Auth0 */,
+			);
+			productName = Stratji;
+			productReference = A57A71013006C600007787CF /* Stratji.app */;
+			productType = "com.apple.product-type.application";
+		};
 		E65EBEB93006C519007787CF /* InvestmentDashboard */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E65EBEDD3006C51B007787CF /* Build configuration list for PBXNativeTarget "InvestmentDashboard" */;
@@ -108,10 +197,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				A57A73013006C900007787CF /* Outline */,
+				A57A84013006D000007787CF /* Auth */,
 				E65EBEBC3006C519007787CF /* InvestmentDashboard */,
 			);
 			name = InvestmentDashboard;
 			packageProductDependencies = (
+				A57A84033006D000007787CF /* Auth0 */,
 			);
 			productName = InvestmentDashboard;
 			productReference = E65EBEBA3006C519007787CF /* InvestmentDashboard.app */;
@@ -173,6 +265,9 @@
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
+					A57A71063006C600007787CF = {
+						CreatedOnToolsVersion = 26.6;
+					};
 					E65EBEB93006C519007787CF = {
 						CreatedOnToolsVersion = 26.6;
 						SystemCapabilities = {
@@ -200,12 +295,16 @@
 			);
 			mainGroup = E65EBEB13006C519007787CF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A57A84023006D000007787CF /* XCRemoteSwiftPackageReference "Auth0.swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E65EBEBB3006C519007787CF /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				E65EBEB93006C519007787CF /* InvestmentDashboard */,
+				A57A71063006C600007787CF /* Stratji */,
 				E65EBEC83006C51B007787CF /* InvestmentDashboardTests */,
 				E65EBED23006C51B007787CF /* InvestmentDashboardUITests */,
 			);
@@ -213,6 +312,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A57A71053006C600007787CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E65EBEB83006C519007787CF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -237,6 +343,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A57A71043006C600007787CF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E65EBEB63006C519007787CF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -274,6 +387,76 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		A57A71073006C600007787CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Stratji/Stratji.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 202608172145;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
+				INFOPLIST_FILE = Stratji/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Stratji;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adityasharma.Stratji;
+				PRODUCT_NAME = Stratji;
+				SDKROOT = macosx;
+				STRATJI_REPO_ROOT = "$(SRCROOT)/..";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A57A71083006C600007787CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Stratji/Stratji.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 202608172145;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
+				INFOPLIST_FILE = Stratji/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Stratji;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adityasharma.Stratji;
+				PRODUCT_NAME = Stratji;
+				SDKROOT = macosx;
+				STRATJI_REPO_ROOT = "$(SRCROOT)/..";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		E65EBEDB3006C51B007787CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -393,20 +576,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = InvestmentDashboard/InvestmentDashboard.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = InvestmentDashboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Portfolio Intelligence";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoadsInWebContent = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence connects privately to the dashboard running on your Mac.";
+				INFOPLIST_KEY_NSBonjourServices = _stratji._tcp;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads operational-day Apple Health aggregates to keep your private dashboard current.";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence finds Stratji on your Mac over the local network. Tailscale is not required.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -417,6 +603,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -442,20 +629,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = InvestmentDashboard/InvestmentDashboard.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "InvestmentDashboard/InvestmentDashboard-iOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = InvestmentDashboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Portfolio Intelligence";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoadsInWebContent = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence connects privately to the dashboard running on your Mac.";
+				INFOPLIST_KEY_NSBonjourServices = _stratji._tcp;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Portfolio Intelligence reads operational-day Apple Health aggregates to keep your private dashboard current.";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Portfolio Intelligence finds Stratji on your Mac over the local network. Tailscale is not required.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -466,6 +656,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -492,6 +683,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -516,6 +708,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -539,6 +732,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -562,6 +756,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QT4TY54XRH;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -583,6 +778,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A57A71093006C600007787CF /* Build configuration list for PBXNativeTarget "Stratji" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A57A71073006C600007787CF /* Debug */,
+				A57A71083006C600007787CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E65EBEB53006C519007787CF /* Build configuration list for PBXProject "InvestmentDashboard" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -620,6 +824,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A57A84023006D000007787CF /* XCRemoteSwiftPackageReference "Auth0.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/auth0/Auth0.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.18.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A57A84033006D000007787CF /* Auth0 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A57A84023006D000007787CF /* XCRemoteSwiftPackageReference "Auth0.swift" */;
+			productName = Auth0;
+		};
+		A57A84043006D000007787CF /* Auth0 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A57A84023006D000007787CF /* XCRemoteSwiftPackageReference "Auth0.swift" */;
+			productName = Auth0;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E65EBEB23006C519007787CF /* Project object */;
 }

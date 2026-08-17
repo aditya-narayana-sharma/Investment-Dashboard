@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { YFINANCE_NSE_ALIASES } from "../../../strategy/yfinance-tickers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,28 +9,6 @@ export const dynamic = "force-dynamic";
 /** Bundled routes live in dist/server; resolve the repo root from cwd (same as sector-live-server). */
 const ROOT = process.cwd();
 const PYTHON = join(ROOT, ".venv-flask", "bin", "python");
-
-/**
- * Axis PDF/mail sometimes emits truncated company-name tokens as symbols.
- * Map those to Yahoo NSE tickers for quote fetch; response keys stay on the Axis symbol.
- * Verified NSE identities: RAINBOW = Rainbow Children's Medicare, KSL = Kalyani Steels
- * (both trade as RAINBOW.NS / KSL.NS — no remap). LTIM = LTIMindtree → LTIM.NS.
- */
-const YFINANCE_NSE_ALIASES: Record<string, string> = {
-  MAXHEALTHCARE: "MAXHEALTH",
-  CREDITACCESSGR: "CREDITACC",
-  GRASIMINDUSTRI: "GRASIM",
-  HINDUSTANAERON: "HAL",
-  JKLAKSHMICEMEN: "JKLAKSHMI",
-  ONE97COMMUNICA: "PAYTM",
-  LTIMINDTREE: "LTIM",
-  AVENUESUPERMAR: "DMART",
-  RSYSTEMSINTER: "RSYSTEMS",
-  RAINBOWCHILDRE: "RAINBOW",
-  KALYANISTEELS: "KSL",
-  GLOBALHEALTH: "MEDANTA",
-  BAJAJAUTO: "BAJAJ-AUTO",
-};
 
 /** GET /api/quotes/yfinance?symbols=ETERNAL,ICICIBANK */
 export async function GET(request: Request) {

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Activity, CheckCircle2, ChevronDown, Eye, EyeOff, Footprints, HeartPulse, Moon, Target, Utensils, Wind } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Activity, CheckCircle2, ChevronDown, Eye, EyeOff, Footprints, HeartPulse, Lock, Moon, Target, Utensils, Wind } from "lucide-react";
+import { featureForWorkspace, tierAllows, type LicenseTier } from "../license";
+import { useLicenseSnapshot } from "../license-snapshot";
 import type { HealthAveragePeriod, HealthMetric } from "../health-data";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { LiveHolding } from "../live-types";
@@ -292,29 +294,64 @@ function workspaceOrbitalBadge(
   }
 }
 
-export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthIncognito, healthStatus }: { active: WorkspaceKey; onChange: (workspace: WorkspaceKey) => void; kiteLive: boolean; contentLive: boolean; healthIncognito: boolean; healthStatus: HealthLiveSnapshot["status"] }) {
+export function DemoSensitive({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={className} data-demo-sensitive="">{children}</span>;
+}
+
+export function DemoCaptionBar() {
+  const [caption, setCaption] = useState("");
+  useEffect(() => {
+    const read = () => setCaption(document.documentElement.getAttribute("data-demo-caption") ?? "");
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-demo-caption"] });
+    return () => observer.disconnect();
+  }, []);
+  const [title, ...rest] = caption.split("\n");
+  const body = rest.join("\n").trim();
+  if (!title?.trim()) return null;
+  return <aside id="demo-caption-bar" className="demo-caption-bar" aria-live="polite">
+    <b>{title}</b>
+    {body ? <span>{body}</span> : null}
+  </aside>;
+}
+
+export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthIncognito, healthStatus, hideHealth = false, licenseTier }: { active: WorkspaceKey | null; onChange: (workspace: WorkspaceKey) => void; kiteLive: boolean; contentLive: boolean; healthIncognito: boolean; healthStatus: HealthLiveSnapshot["status"]; hideHealth?: boolean; licenseTier?: LicenseTier }) {
+  const { license } = useLicenseSnapshot();
+  const resolvedTier = licenseTier ?? license.tier;
   const tabsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const visibleWorkspaces = useMemo(
+    () => (hideHealth ? workspaces.filter((workspace) => workspace.key !== "health") : workspaces),
+    [hideHealth],
+  );
+  const activeIndex = Math.max(0, visibleWorkspaces.findIndex((workspace) => workspace.key === active));
   const selectByIndex = (index: number) => {
-    const normalized = (index + workspaces.length) % workspaces.length;
-    const workspace = workspaces[normalized];
+    const normalized = (index + visibleWorkspaces.length) % visibleWorkspaces.length;
+    const workspace = visibleWorkspaces[normalized];
+    if (!workspace) return;
     tabsRef.current[normalized]?.focus();
     onChange(workspace.key);
   };
   useEffect(() => {
-    const activeIndex = workspaces.findIndex((workspace) => workspace.key === active);
     const timer = window.setTimeout(() => {
       const tab = tabsRef.current[activeIndex];
       const tabList = tab?.parentElement;
       if (tab && tabList) tabList.scrollLeft = Math.max(0, tab.offsetLeft - (tabList.clientWidth - tab.clientWidth) / 2);
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [active]);
+  }, [activeIndex]);
 
-  return <nav className="workspace-navigation mode-dial" aria-label="Dashboard workspaces">
-    <div className="workspace-tabs" role="tablist" aria-orientation="horizontal">
-      {workspaces.map((workspace, index) => {
-        const Icon = workspace.icon;
+  return <nav className="workspace-navigation mode-dial glass-bar liquid-glass" aria-label="Dashboard workspaces">
+    <div
+      className="workspace-tabs"
+      role="tablist"
+      aria-orientation="horizontal"
+      data-count={visibleWorkspaces.length}
+      style={{ "--glass-count": visibleWorkspaces.length, "--glass-index": activeIndex } as CSSProperties}
+    >
+      {visibleWorkspaces.map((workspace, index) => {
         const badge = workspaceOrbitalBadge(workspace.key, kiteLive, contentLive, healthIncognito, healthStatus);
+        const locked = !tierAllows(resolvedTier, featureForWorkspace(workspace.key));
         return <button
           ref={(node) => { tabsRef.current[index] = node; }}
           id={`workspace-tab-${workspace.key}`}
@@ -322,19 +359,22 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
           type="button"
           role="tab"
           data-mode={workspace.key}
+          data-locked={locked ? "1" : undefined}
           aria-selected={active === workspace.key}
           aria-controls="dashboard-workspace-panel"
-          tabIndex={active === workspace.key ? 0 : -1}
-          className={`vo-pop${active === workspace.key ? " active" : ""}`}
+          aria-label={locked ? `${workspace.label} (locked)` : `${workspace.label} · ${badge}`}
+          tabIndex={active === workspace.key || (active === null && index === 0) ? 0 : -1}
+          className={active === workspace.key ? "active" : ""}
           onClick={() => onChange(workspace.key)}
           onKeyDown={(event) => {
-            if (event.key === "ArrowRight") { event.preventDefault(); selectByIndex(index + 1); }
-            if (event.key === "ArrowLeft") { event.preventDefault(); selectByIndex(index - 1); }
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); selectByIndex(index + 1); }
+            if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); selectByIndex(index - 1); }
             if (event.key === "Home") { event.preventDefault(); selectByIndex(0); }
-            if (event.key === "End") { event.preventDefault(); selectByIndex(workspaces.length - 1); }
+            if (event.key === "End") { event.preventDefault(); selectByIndex(visibleWorkspaces.length - 1); }
           }}
         >
-          <span className="mode-silhouette" aria-hidden="true"><Icon size={18}/></span><span><b>{workspace.label}</b><small>{workspace.note}</small></span><em className="orbital-badge">{badge}</em>
+          <b>{workspace.barLabel}</b>
+          {locked ? <em className="orbital-badge" aria-hidden="true"><Lock size={11}/></em> : null}
         </button>;
       })}
     </div>
@@ -356,6 +396,18 @@ export function expandDashboardSection(number: string) {
   window.dispatchEvent(new CustomEvent("dashboard-expand-section", { detail: { number } }));
 }
 
+/** Honor a `?section=` route: expand the collapsible and scroll it into view. */
+export function revealDashboardSection(navId: string, scrollId: string) {
+  if (typeof document === "undefined") return;
+  expandDashboardSection(dashboardSectionNumberFromNavId(navId));
+  document.getElementById(scrollId)?.scrollIntoView({ behavior: "auto", block: "start" });
+}
+
+/** Hide sibling collapsibles when the URL selected a section (`?section=` / `?page=`). */
+export function nativeChromeHidesSection(activeId: string | null, sectionId: string): boolean {
+  return activeId != null && activeId !== sectionId;
+}
+
 export function CollapsibleSection({ number, title, note, children, headerAction, defaultOpen = false }: { number: string; title: string; note: string; children: ReactNode; headerAction?: ReactNode; defaultOpen?: boolean }) {
   // v2 keys default missing → collapsed unless defaultOpen; ignore legacy portfolio-section-*-open expands.
   const storageKey = `portfolio-section-v2-${number}-open`;
@@ -365,13 +417,19 @@ export function CollapsibleSection({ number, title, note, children, headerAction
   const contentId = `dashboard-section-${number}`;
 
   useEffect(() => {
+    if (!defaultOpen) return;
+    expandRequestedRef.current = true;
+    setOpen(true);
+  }, [defaultOpen]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem(storageKey);
       setOpen((current) => {
-        if (expandRequestedRef.current) return true;
+        if (expandRequestedRef.current || defaultOpen) return true;
         if (stored === "true") return true;
         if (stored === "false") return false;
-        return defaultOpen || current;
+        return current;
       });
       setOpenStateHydrated(true);
     }, 0);
@@ -404,7 +462,7 @@ export function CollapsibleSection({ number, title, note, children, headerAction
         <ChevronDown size={18}/><span className="sr-only">{open ? "Collapse" : "Expand"} {title}</span>
       </button>
     </div>
-    {open && <div className="collapsible-content" id={contentId}>{children}</div>}
+    <div className="collapsible-content" id={contentId} hidden={!open}>{children}</div>
   </section>;
 }
 

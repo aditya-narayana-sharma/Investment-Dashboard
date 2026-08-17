@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iOS companion (Portfolio Intelligence). Sandboxed HealthKit client.
+  Reads operational-day Activity, Sleep, Heart, Respiratory, Mobility, Nutrition.
+  Does not write HealthKit, does not request clinical records, Body Measurements, or Hearing.
+  Calendar, Reminders, Mail, and Notes are refreshed on the Mac data plane, not in this binary.
+  Do not add Camera, Microphone, Contacts, or Bluetooth keys.
+-->
 <plist version="1.0">
 <dict>
 	<key>com.apple.developer.healthkit</key>

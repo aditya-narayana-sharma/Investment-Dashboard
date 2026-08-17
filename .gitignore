@@ -45,6 +45,8 @@ next-env.d.ts
 /work/
 /tmp/
 /artifacts/private/
+/artifacts/demo/*.webm
+/artifacts/demo/*.mp4
 
 # local Flask gateway runtime
 /.venv-flask/
@@ -55,3 +57,6 @@ __pycache__/
 **/xcuserdata/
 **/*.xcuserstate
 /apple-app/DerivedData/
+/apple-app/DerivedDataIOS/
+/apple-app/DerivedDataIOS2/
+/apple-app/build/

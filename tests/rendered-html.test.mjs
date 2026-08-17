@@ -69,10 +69,23 @@ test("Kite ticker orders require an exact reviewed confirmation before place_ord
   assert.match(workspace, />Create NSE order<\/button>/);
   assert.match(workspace, /disabled=\{!isLive\}/);
   assert.match(ticket, /reviewed && confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
+  assert.match(ticket, /kiteSessionLive/);
+  assert.match(ticket, /readKiteTicketResponse/);
+  assert.match(ticket, /Kite session required/);
   assert.match(ticket, /`Place \$\{side\} order`/);
+  assert.match(ticket, /INSUFFICIENT_BUY_FUNDS_MESSAGE/);
+  assert.match(ticket, /buyOrderFundsState/);
+  assert.match(ticket, /funds\.insufficient/);
+  assert.doesNotMatch(ticket, /!funds\.(blocked|insufficient)/);
+  assert.match(ticket, /kite-order-funds/);
+  assert.match(workspace, /equityMargin=\{portfolio\.equityMargin\}/);
+  assert.match(workspace, /marginsKnown=\{isLive && !unavailable\.has\("margins"\)\}/);
   assert.match(route, /expectedConfirmation = `\$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("place_order"/);
+  assert.match(server, /annotateKiteWriteError/);
   assert.match(server, /requireKiteCashInstrument\(symbol, "NSE"\)/);
+  assert.match(server, /assertBuyOrderFunds/);
+  assert.match(server, /order\.side === "BUY"/);
   assert.match(ticket, /useKiteInstrumentLookup\(normalizedSymbol, "NSE"\)/);
   assert.match(page, /orders, GTTs\/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation/);
 });
@@ -90,6 +103,8 @@ test("Portfolio activity GTT and TSL creates require reviewed confirmation befor
   assert.match(workspace, /setGttSelection\(\{ kind: "tsl" \}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`Create \$\{label\}`/);
+  assert.match(ticket, /readKiteTicketResponse/);
+  assert.match(ticket, /kiteSessionLive/);
   assert.match(ticket, /fetch\("\/api\/kite\/gtt"/);
   assert.match(route, /expectedConfirmation = `\$\{label\} \$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("create_gtt"/);
@@ -111,6 +126,8 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
   assert.match(workspace, /setAlertSelection\(\{\}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`ALERT \$\{directionLabel\(direction\)\} \$\{normalizedSymbol\} \$\{triggerText\}`/);
+  assert.match(ticket, /readKiteTicketResponse/);
+  assert.match(ticket, /kiteSessionLive/);
   assert.match(ticket, /fetch\("\/api\/kite\/alert"/);
   assert.match(ticket, /Create price alert/);
   assert.match(route, /expectedConfirmation = `\$\{label \? `ALERT \$\{label\}` : "ALERT"\} \$\{symbol\} \$\{triggerPrice\}`/);
@@ -120,13 +137,68 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
   assert.match(page, /"alerts"/);
 });
 
+test("focused I-2 keeps ticket entry points and mounts tickets outside exclusive hide", async () => {
+  const [workspace, orderTicket, gttTicket, alertTicket, portal, orderRoute, gttRoute, alertRoute, page, browser, stratjiBrowser, iosShell] = await Promise.all([
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteOrderTicket.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteGttTicket.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteAlertTicket.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/KiteTicketPortal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/kite/order/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/kite/gtt/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/kite/alert/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/DashboardBrowser.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Shared/StratjiDocumentBrowser.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/NativeWorkspaceViews.swift", import.meta.url), "utf8"),
+  ]);
+  const i2Start = workspace.indexOf('id="investment-i2"');
+  const i3Start = workspace.indexOf('id="investment-i3"');
+  const ticketMount = workspace.indexOf("{orderSelection && <KiteOrderTicket");
+  assert.ok(i2Start >= 0 && i3Start > i2Start, "I-2 and I-3 section markers must exist");
+  const i2 = workspace.slice(i2Start, i3Start);
+  assert.match(i2, /hidden=\{nativeChromeHidesSection\(activeSection, "i2"\)\}/);
+  assert.match(i2, />BUY<\/button>/);
+  assert.match(i2, />SELL<\/button>/);
+  assert.match(i2, />Create NSE order<\/button>/);
+  assert.match(i2, />Create GTT<\/button>/);
+  assert.match(i2, />Create TSL<\/button>/);
+  assert.match(i2, />Create price alert<\/button>/);
+  assert.match(i2, /nested-chart-panel/);
+  assert.match(i2, /portfolio-map-panel/);
+  assert.match(i2, /InstrumentGauge/);
+  assert.doesNotMatch(i2, /KiteOrderTicket|KiteGttTicket|KiteAlertTicket/);
+  assert.ok(ticketMount > i3Start, "tickets must mount outside the exclusive I-2 overflow section");
+  assert.match(workspace, /setView\("orders"\); await onKiteRefresh\(\)/);
+  assert.match(workspace, /setView\(gttSelection\.kind === "tsl" \? "tsls" : "gtts"\)/);
+  assert.match(workspace, /setView\("alerts"\); await onKiteRefresh\(\)/);
+  assert.match(portal, /createPortal\(children, document\.body\)/);
+  for (const ticket of [orderTicket, gttTicket, alertTicket]) {
+    assert.match(ticket, /KiteTicketPortal/);
+    assert.match(ticket, /credentials: "same-origin"/);
+    assert.match(ticket, /cache: "no-store"/);
+  }
+  assert.match(orderRoute, /export async function POST/);
+  assert.match(gttRoute, /export async function POST/);
+  assert.match(alertRoute, /export async function POST/);
+  assert.match(orderTicket, /fetch\("\/api\/kite\/order"/);
+  assert.match(gttTicket, /fetch\("\/api\/kite\/gtt"/);
+  assert.match(alertTicket, /fetch\("\/api\/kite\/alert"/);
+  assert.match(page, /refreshKiteAfterTrade/);
+  assert.match(page, /onKiteRefresh=\{refreshKiteAfterTrade\}/);
+  assert.match(browser, /navigationType == \.linkActivated/);
+  assert.match(stratjiBrowser, /navigationType == \.linkActivated/);
+  assert.match(iosShell, /Open workspace outline/);
+  assert.match(iosShell, /compact-outline/);
+});
+
 test("nested portfolio allocation markup remains protected", async () => {
   const investmentWorkspace = await readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8");
   const start = investmentWorkspace.indexOf('<section className="panel chart-panel nested-chart-panel">');
   const end = investmentWorkspace.indexOf('<section className="portfolio-management"', start);
   assert.ok(start >= 0 && end > start, "protected donut JSX boundaries must exist");
   const donutMarkup = investmentWorkspace.slice(start, end).replaceAll("\r\n", "\n");
-  assert.equal(createHash("sha256").update(donutMarkup).digest("hex"), "68d6cfd01caad0bde086d7e973cc1ef820e5475f067954d5ec936bf567a7827b");
+  assert.equal(createHash("sha256").update(donutMarkup).digest("hex"), "07f87df90a723340382884496f8c0a0378e48b1d73f84c1a72712725b19b4097");
 });
 
 test("Podcast sender groups expose collapsible masonry and a Playwright geometry contract", async () => {
@@ -156,6 +228,55 @@ test("Podcast sender groups expose collapsible masonry and a Playwright geometry
   assert.match(geometryTest, /getBoundingClientRect/);
   assert.match(geometryTest, /gap <= gutter \+ 0\.5/);
   assert.match(geometryTest, /current\.index > previous\.index/);
+});
+
+test("M-2 Interrogate LLM is full-width with source-of-truth copy and suggestion chips", async () => {
+  const [intelligenceWorkspace, llmPanel, symphonyEditor, globalCss] = await Promise.all([
+    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/LlmAssistPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/builder/SymphonyEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(intelligenceWorkspace, /title="Interrogate LLM"/);
+  assert.match(intelligenceWorkspace, /titleTone="section"/);
+  assert.match(intelligenceWorkspace, /className="llm-assist-span"/);
+  assert.doesNotMatch(intelligenceWorkspace, /LLM intelligence draft/i);
+  assert.match(
+    intelligenceWorkspace,
+    /Newsletters \+ Axis Research \+ Podcast Transcript Summaries, as Source of Truth/,
+  );
+  assert.match(
+    intelligenceWorkspace,
+    /podcast summaries \(description unless a local transcript was available\)/,
+  );
+  assert.match(intelligenceWorkspace, /hasLocalPodcastTranscript/);
+  assert.match(intelligenceWorkspace, /LIVE_INTELLIGENCE_LLM_SUGGESTIONS/);
+  assert.match(intelligenceWorkspace, /Overnight newsletter themes/);
+  assert.match(intelligenceWorkspace, /Axis conviction vs holdings/);
+  assert.match(intelligenceWorkspace, /Podcast vs Axis overlap/);
+  assert.match(intelligenceWorkspace, /What changed since last digest/);
+  assert.match(intelligenceWorkspace, /Axis result updates/);
+  assert.match(intelligenceWorkspace, /Cautionary notes across sources/);
+  assert.match(intelligenceWorkspace, /\[\$\{evidence\}\/\$\{item\.summaryStatus/);
+  assert.match(llmPanel, /Smart Suggestions/);
+  assert.match(llmPanel, /setPrompt\(item\.prompt\)/);
+  assert.match(llmPanel, /\/api\/llm\/complete/);
+  assert.match(llmPanel, /settingsHref/);
+  assert.match(llmPanel, /if \(payload\.disabled\)/);
+  assert.doesNotMatch(llmPanel, /if \(payload\.settingsHref\)/);
+  assert.match(llmPanel, /enabled && error/);
+  assert.match(llmPanel, /llm-assist-error[\s\S]*Settings/);
+  assert.match(llmPanel, /title = "Interrogate LLM"/);
+  assert.match(llmPanel, /titleTone = "section"/);
+  assert.match(llmPanel, /applyLabel \?\? "Interrogate LLM"/);
+  assert.doesNotMatch(llmPanel, /Draft with LLM/i);
+  assert.match(symphonyEditor, /applyLabel="Interrogate LLM"/);
+  assert.doesNotMatch(symphonyEditor, /Apply drafted tree/);
+  assert.match(globalCss, /\.llm-assist-span\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
+  assert.match(globalCss, /\.llm-assist header h3\s*\{[^}]*text-transform:\s*none/s);
+  assert.match(globalCss, /\.llm-assist-suggestion\s*\{[^}]*text-transform:\s*none/s);
+  assert.match(globalCss, /\.llm-assist-run[^{]*\{[^}]*text-transform:\s*none/s);
 });
 
 test("Market Intelligence digests collapse newsletters by sender and Axis by topic with source links", async () => {
@@ -226,6 +347,18 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.ok(workspace.indexOf("number={SECTION_META.s2.number}") < workspace.indexOf("number={SECTION_META.s3.number}"));
   assert.match(workspace, /<DailyKanbanBoard workspace="sectors"\/>/);
   assert.match(workspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\}/);
+  assert.match(workspace, /benchmarks=\{benchmarks\}/);
+  assert.match(analytics, /task="industry"/);
+  assert.match(analytics, /industryAnalyticsSuggestions/);
+  assert.match(analytics, /not Mail or Podcasts/);
+  assert.match(analytics, /<LlmAssistPanel/);
+  assert.match(analytics, /llm-assist-span/);
+  assert.doesNotMatch(analytics, /Newsletter digest|Podcast summaries|axisResearch/);
+  assert.doesNotMatch(decisionLab, /title="LLM framework draft"/i);
+  assert.doesNotMatch(decisionLab, /LLM FRAMEWORK DRAFT/i);
+  assert.match(decisionLab, /Comments on supplied EOD benchmarks only/);
+  assert.match(decisionLab, /does not replace composite scores or invent index levels/);
+  assert.match(decisionLab, /const \[sectorId, setSectorId\] = useState\("pharma"\)/);
   assert.match(workspace, /<SectorDecisionLab page=\{activePages\.s3 as SectorDecisionPage\}/);
   assert.doesNotMatch(workspace, /S-4|s4|Earnings|EarningsMonthCalendar|EarningsCalendarWorkbench/);
   assert.match(workspace, /SECTOR_TOP_SECTIONS/);
@@ -250,6 +383,7 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.match(globalCss, /\.sector-workspace-shell\.sector-full-workspace\s*\{[^}]*height:auto;[^}]*overflow:visible;/s);
   assert.match(globalCss, /\.sector-full-workspace > \.workspace-section\s*\{[^}]*max-height:none;[^}]*overflow:visible;/s);
   assert.match(globalCss, /@media\(max-width:760px\)[\s\S]*?\.sector-full-section-body \.macro-decision-chart-layout\s*\{[^}]*grid-template-columns:1fr;/s);
+  assert.match(globalCss, /\.sector-full-section-body \.sector-overview > \.llm-assist\s*\{[^}]*width:\s*100%/s);
 
   assert.match(analytics, /data-sector-filter=\{filterActive \? selectedIds\.join/);
   assert.match(decisionLab, /const \[sectorId, setSectorId\] = useState\("pharma"\)/);
@@ -301,30 +435,171 @@ test("server-renders the portfolio dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>Portfolio Intelligence<\/title>/i);
   assert.match(html, /Investment Brief/);
-  assert.match(html, /All sources · 5 min/);
-  assert.match(html, /Kite snapshot/);
+  assert.match(html, /On request/);
+  assert.doesNotMatch(html, /<span>Kite snapshot<\/span>/);
+  assert.doesNotMatch(html, /aria-label="Open Integrations settings"/);
   assert.match(html, /Dashboard workspaces/);
+  assert.match(html, /id="workspace-tab-investment"/);
+  assert.match(html, /id="workspace-tab-sectors"/);
+  assert.match(html, /id="workspace-tab-intelligence"/);
+  assert.match(html, /id="workspace-tab-health"/);
+  assert.match(html, /id="workspace-tab-builder"/);
+  assert.match(html, /id="workspace-tab-strategies"/);
+  assert.equal(
+    [...html.matchAll(/id="workspace-tab-(investment|sectors|intelligence|health|builder|strategies)"/g)].length,
+    6,
+  );
   assert.match(html, /Sectoral Analytics/);
-  assert.match(html, /Health incognito/);
-  assert.match(html, /Hide health statistics/);
-  assert.match(html, /Dashboard appearance/);
-  assert.match(html, />Black</);
-  assert.match(html, />Dark</);
-  assert.match(html, />Sepia</);
-  // Sections start collapsed: headings + Expand controls remain, body content stays unmounted.
+  assert.doesNotMatch(html, /<b>Health incognito<\/b>/);
+  assert.doesNotMatch(html, /aria-label="Hide health statistics"/);
+  assert.doesNotMatch(html, /aria-label="Dashboard appearance"/);
+  assert.doesNotMatch(html, /aria-label="Open Integrations settings"/);
+  // I-1 opens from the default section; I-2/I-3/I-4 stay collapsed on first paint.
   assert.match(html, /collapsible-section collapsed/);
   assert.match(html, /Investment action board/);
-  assert.match(html, /Expand Investment action board/);
+  assert.match(html, /Collapse Investment action board|Collapse<!-- --> <!-- -->Investment action board/);
   assert.match(html, /Expand Portfolio/);
   assert.match(html, /Expand Risk/);
   assert.match(html, /Expand Axis picks/);
   assert.doesNotMatch(html, /Collapse Portfolio/);
-  assert.doesNotMatch(html, /Top-two concentration/);
-  assert.doesNotMatch(html, /Nested portfolio allocation/);
-  assert.doesNotMatch(html, /Macro scenario lab/);
-  assert.doesNotMatch(html, /Analyst call matrix/);
-  assert.doesNotMatch(html, /Company composition and performance/);
   assert.doesNotMatch(html, /Read-only wellness view/);
+});
+
+test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections", async () => {
+  const [page, routing, globalCss, layout, visual, sharedUi, iosShell, iosBrowser] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/NativeWorkspaceViews.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/DashboardBrowser.swift", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(routing, /case "1":/);
+  assert.match(routing, /case "true":/);
+  assert.match(routing, /function nativeChromeFromPageSearch/);
+  assert.match(routing, /function detectNativeChrome/);
+  assert.match(page, /detectNativeChrome/);
+  assert.match(page, /showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.match(page, /!nativeChrome && \([\s\S]*className="masthead"/);
+  assert.doesNotMatch(page, /nativeChrome && <AppearanceToggle/);
+  assert.doesNotMatch(page, /HealthIncognitoToggle/);
+  assert.doesNotMatch(page, /Open Integrations settings/);
+  assert.match(page, /nativeChrome && showPdfLink && <a className="masthead-pdf" href=\{pdfHref\}/);
+  assert.match(page, /sourceFreshness\.length > 0 && \([\s\S]*<PulseConstellation/);
+  assert.doesNotMatch(page, /!nativeChrome && <PulseConstellation/);
+  assert.match(page, /\{showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.doesNotMatch(page, /\{showWorkspaceShell && <DashboardTabs/);
+  assert.doesNotMatch(page, /!nativeChrome && <DailyKanbanBoard/);
+  assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
+  assert.match(page, /showWorkspaceShell && \(workspace === "investment" \|\| stayMounted\)/);
+  assert.match(page, /workspace === "sectors"/);
+  assert.match(page, /workspace === "intelligence"/);
+  assert.match(page, /workspace === "health"/);
+  assert.match(page, /workspace === "builder"/);
+  assert.match(page, /workspace === "strategies"/);
+  assert.match(layout, /import "\.\/globals\.css"/);
+  assert.match(layout, /import "\.\/visual-overhaul\.css"/);
+  assert.match(layout, /nativeChromeFoucScript/);
+  assert.match(layout, /nativeChrome\|native/);
+  assert.match(sharedUi, /className="workspace-section-nav"/);
+  assert.match(sharedUi, /className="workspace-navigation mode-dial glass-bar liquid-glass"/);
+  assert.match(sharedUi, /export function AppearanceToggle/);
+  assert.match(visual, /export function PulseConstellation/);
+  assert.match(visual, /export function InstrumentGauge/);
+  assert.match(visual, /export function TriggerDial/);
+  assert.match(visual, /export function SparkFilament/);
+  assert.match(visual, /export function WaveformStrip/);
+  assert.match(globalCss, /html\.native-chrome-embed \.masthead/);
+  assert.match(globalCss, /html\.native-chrome-embed \.workspace-navigation\.mode-dial/);
+  assert.match(globalCss, /padding:0 10px 8px/);
+  assert.match(globalCss, /html\.native-chrome-embed \.health-workspace-shell\.health-full-workspace/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*source-freshness[^\n]*display:\s*none|source-freshness[^\n]*native-chrome[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,180}display:\s*none/);
+  assert.match(globalCss, /\[data-focus-section\]/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*kanban-board[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*collapsible-section[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*pulse-constellation[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*appearance-toggle[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*incognito-toggle[^\n]*display:\s*none/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*workspace-panel[^\n]*overflow:\s*hidden/);
+  assert.doesNotMatch(globalCss, /native-chrome[^\n]*health-workspace-shell[^\n]*overflow:\s*hidden/);
+  assert.doesNotMatch(page, /nativeChrome && <PulseConstellation/);
+  assert.doesNotMatch(page, /!nativeChrome && <InvestmentWorkspace/);
+  const nativeChromeCss = `${globalCss}\n${visual}`.replace(/\/\*[\s\S]*?\*\//g, "");
+  const nativeChromeHideSelectors = [...nativeChromeCss.matchAll(/([^{}]*native-chrome[^{]*)\{([^}]*)\}/g)]
+    .filter(([, , body]) => /display:\s*none/i.test(body))
+    .flatMap(([, selector]) => selector.split(",").map((part) => part.trim()).filter(Boolean));
+  assert.ok(nativeChromeHideSelectors.length >= 2, nativeChromeHideSelectors.join(" | "));
+  for (const selector of nativeChromeHideSelectors) {
+    if (/workspace-navigation/.test(selector)) {
+      assert.match(selector, /native-chrome/);
+      continue;
+    }
+    assert.match(selector, /masthead/);
+    assert.doesNotMatch(selector, /workspace-navigation|workspace-section-nav|footer|skip-link|workspace-panel|kanban|recharts|collapsible|source-freshness|pulse-constellation/);
+  }
+  assert.match(iosShell, /NavigationSplitView/);
+  assert.match(iosShell, /DashboardOutline\.sidebarWidth/);
+  assert.match(iosShell, /DashboardOutlineList\(selectedID:/);
+  assert.match(iosBrowser, /nativeChrome/);
+  assert.match(iosBrowser, /applicationNameForUserAgent = "Stratji\/1"/);
+  assert.match(iosBrowser, /querySelectorAll\('\.masthead'\)/);
+  assert.doesNotMatch(iosBrowser, /workspace-navigation\.mode-dial/);
+
+  const html = await (await render("/?nativeChrome=1")).text();
+  assert.match(html, /data-native-chrome="1"/);
+  assert.match(html, /native-chrome/);
+  assert.doesNotMatch(html, /aria-label="Dashboard workspaces"/);
+  assert.doesNotMatch(html, /id="workspace-tab-investment"/);
+  assert.doesNotMatch(html, /class="masthead"/);
+  assert.doesNotMatch(html, /<h1>Investment Brief<\/h1>/);
+  assert.doesNotMatch(html, /aria-label="Dashboard appearance"/);
+  assert.doesNotMatch(html, /aria-label="Hide health statistics"/);
+  assert.match(html, /Investment action board/);
+  assert.match(html, /On request/);
+  assert.match(html, /collapsible-section collapsed/);
+  const htmlTrue = await (await render("/?nativeChrome=true")).text();
+  assert.match(htmlTrue, /data-native-chrome="1"/);
+  assert.doesNotMatch(htmlTrue, /aria-label="Dashboard appearance"/);
+  assert.doesNotMatch(htmlTrue, /id="workspace-tab-investment"/);
+  const htmlNativeAlias = await (await render("/?native=1")).text();
+  assert.match(htmlNativeAlias, /data-native-chrome="1"/);
+  assert.doesNotMatch(htmlNativeAlias, /id="workspace-tab-investment"/);
+
+  const distinctiveViews = [
+    ["investment", [/<span>I-1<\/span>/, /<span>I-3<\/span>/]],
+    ["sectors", [/<span>S-2<\/span>/, /<span>S-1<\/span>/]],
+    ["intelligence", [/<span>M-3<\/span>|license-gate/, /<span>M-1<\/span>|Market Intelligence/]],
+    ["health", [/<span>H-3<\/span>|license-gate/, /<span>H-1<\/span>|Health &amp; Wellness|license-gate/]],
+    ["builder", [/id="builder-canvas"|license-gate/, /symphony-editor|Algorithm Canvas/]],
+    ["strategies", [/class="strategy-card"|license-gate/, /strategies-gallery|Strategies/]],
+  ];
+  const [investmentSource, sectorsSource] = await Promise.all([
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(investmentSource, /ResponsiveContainer/);
+  assert.match(sectorsSource, /ResponsiveContainer/);
+  for (const [view, needles] of distinctiveViews) {
+    const [webHtml, nativeHtml] = await Promise.all([
+      (await render(`/?view=${view}`)).text(),
+      (await render(`/?view=${view}&nativeChrome=1`)).text(),
+    ]);
+    for (const needle of needles) {
+      assert.match(webHtml, needle, `${view} web missing ${needle}`);
+      assert.match(nativeHtml, needle, `${view} nativeChrome missing ${needle}`);
+    }
+    assert.match(webHtml, /class="masthead"/);
+    assert.match(webHtml, /aria-label="Dashboard workspaces"/);
+    assert.doesNotMatch(nativeHtml, /class="masthead"/);
+    assert.doesNotMatch(nativeHtml, /aria-label="Dashboard workspaces"/);
+    assert.doesNotMatch(nativeHtml, /id="workspace-tab-investment"/);
+    assert.match(nativeHtml, /data-native-chrome="1"/);
+    assert.match(nativeHtml, /workspace-section-nav|license-gate/);
+  }
 });
 
 test("CollapsibleSection defaults to collapsed with v2 open-only persistence", async () => {
@@ -347,6 +622,28 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
   for (const workspace of [investment, sectors, intelligence, health, strategies]) {
     assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(/);
   }
+});
+
+test("workspaces honor section/page from the URL on first paint and popstate", async () => {
+  const [sharedUi, investment, sectors, intelligence, health, page] = await Promise.all([
+    readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(sharedUi, /export function revealDashboardSection/);
+  assert.match(investment, /function investmentSectionFromUrl/);
+  assert.match(investment, /useState<string>\(investmentSectionFromUrl\)/);
+  assert.match(investment, /revealDashboardSection\(section, `investment-\$\{section\}`\)/);
+  assert.match(investment, /hidden=\{nativeChromeHidesSection\(activeSection, "i3"\)\}/);
+  assert.match(intelligence, /function intelligenceSectionFromUrl/);
+  assert.match(intelligence, /useState<string>\(intelligenceSectionFromUrl\)/);
+  assert.match(sectors, /useState<SectorTopSection>\(\(\) => sectionFromUrl\(\)\.topSection\)/);
+  assert.match(health, /useState<HealthRoute>\(healthRouteFromUrl\)/);
+  assert.match(page, /__stratjiApplyNativeRoute/);
+  assert.match(page, /addEventListener\("popstate"/);
 });
 
 test("collapsed section preview is not constrained by the section-number badge", async () => {
@@ -455,11 +752,12 @@ test("all four workspaces share consistent cyan section navigation bars", async 
   assert.match(health, /id="health-h3"/);
   assert.match(strategies, /id="strategies-y1"/);
   assert.match(strategies, /id="strategies-y2"/);
-  assert.match(health, /searchParams\.set\("focus"/);
+  assert.match(health, /searchParams\.set\("section", "h1"\)/);
   assert.doesNotMatch(health, /id="health-h4"|\{ id: "h4"|number="H-4"|Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
   assert.doesNotMatch(sectors, /S-4|s4|EarningsMonthCalendar|sector-intelligence-filter|sector-dimmed/);
   assert.doesNotMatch(health, /health-overview-console|<HealthThumbnail/);
-  assert.match(health, /health-full-workspace/);
+  assert.doesNotMatch(health, /sector-detail-shell|health-detail-shell/);
+  assert.match(health, /className="health-workspace-shell"/);
 });
 
 test("sector market route uses yfinance live quotes without creating a Kite session", async () => {
@@ -558,7 +856,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /\.portfolio-activity-mobile\s*\{\s*display:none/);
   assert.match(globalCss, /@media \(max-width:620px\)[\s\S]*\.portfolio-activity-table\s*\{\s*display:none;\s*\}[\s\S]*\.portfolio-activity-mobile\s*\{\s*display:grid/);
   assert.doesNotMatch(reportPage, /Portfolio concentration map/);
-  assert.match(page, /5 \* 60 \* 1000/);
+  assert.doesNotMatch(page, /5 \* 60 \* 1000/);
   assert.match(page, /\/api\/kite\/snapshot/);
   assert.match(page, /\/api\/content\/refresh/);
   assert.match(page, /force=1/);
@@ -570,6 +868,16 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /hasPortfolio = isLive \|\| isPartial \|\| isSnapshot/);
   assert.match(page, /React\.lazy|lazy\(\(\) => import\("\.\/SectoralAnalytics"\)\)/);
   assert.match(page, /function DashboardTabs/);
+  assert.match(page, /hideHealth=\{demoMode\}/);
+  assert.match(page, /className="workspace-navigation mode-dial glass-bar liquid-glass"/);
+  assert.match(page, /barLabel/);
+  assert.match(page, /data-count=\{visibleWorkspaces\.length\}/);
+  assert.match(page, /event\.key === "ArrowDown"/);
+  assert.match(page, /selectByIndex\(visibleWorkspaces\.length - 1\)/);
+  assert.match(page, /function DemoCaptionBar/);
+  assert.match(page, /data-demo-sensitive/);
+  assert.match(globalCss, /html\[data-demo="1"\] \[data-demo-sensitive\]/);
+  assert.match(packageJson, /demo:record/);
   assert.match(page, /role="tablist"/);
   assert.match(page, /event\.key === "Home"/);
   assert.match(page, /event\.key === "End"/);
@@ -579,9 +887,9 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /window\.dispatchEvent\(new Event\("resize"\)\)/);
   assert.match(page, /loadSectorMarket/);
   assert.match(page, /\/api\/sectors\/snapshot/);
-  assert.match(page, /visibilitychange/);
-  assert.match(page, /addEventListener\("focus"/);
-  assert.match(page, /addEventListener\("online"/);
+  assert.doesNotMatch(page, /visibilitychange/);
+  assert.doesNotMatch(page, /addEventListener\("focus"/);
+  assert.doesNotMatch(page, /addEventListener\("online"/);
   assert.match(page, /items=\{visibleNewsletters\}/);
   assert.match(page, /items=\{visibleAxis\}/);
   assert.match(page, /visiblePodcasts\.map|podcasts\.map/);
@@ -632,10 +940,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /health-kpi-grid/);
   assert.match(page, /health-kpi-tile/);
   assert.match(page, /new ResizeObserver\(fit\)/);
-  assert.match(page, /workspace === "investment" &&/);
-  assert.match(page, /workspace === "sectors" &&/);
-  assert.match(page, /workspace === "intelligence" &&/);
-  assert.match(page, /workspace === "health" &&/);
+  assert.match(page, /workspace === "investment" \|\| stayMounted/);
+  assert.match(page, /workspace === "sectors" \|\| stayMounted/);
+  assert.match(page, /workspace === "intelligence" \|\| stayMounted/);
+  assert.match(page, /workspace === "health" \|\| stayMounted/);
   assert.match(page, /IntelligenceWorkspace/);
   assert.match(page, /key: "intelligence"/);
   assert.doesNotMatch(page, /onOpenIntelligence/);
@@ -722,8 +1030,17 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /digest-panel-podcasts/);
   assert.match(globalCss, /topic-feed-check/);
   assert.match(page, /topic-feed-completed[\s\S]*?topic-feed-scheduled[\s\S]*?topic-feed-work/);
-  // Market Intelligence order: Newsletters | Axis → Podcasts → Calendar + action feeds
-  assert.match(page, /Newsletter digest[\s\S]*?Axis Research[\s\S]*?digest-panel-podcasts[\s\S]*?digest-panel-span/);
+  // Market Intelligence M-2 order: Interrogate LLM (full width) → Newsletters | Axis → Podcasts; M-4 Calendar + action feeds
+  assert.match(page, /Interrogate LLM[\s\S]*?Newsletter digest[\s\S]*?Axis Research[\s\S]*?digest-panel-podcasts[\s\S]*?digest-panel-span/);
+  assert.doesNotMatch(page, /LLM intelligence draft/i);
+  assert.doesNotMatch(page, /LLM framework draft/i);
+  assert.doesNotMatch(page, /LLM composite commentary/i);
+  assert.doesNotMatch(page, /LLM earnings narrative/i);
+  assert.doesNotMatch(page, /LLM strategy assist/i);
+  assert.match(page, /task="industry"/);
+  assert.match(page, /industryAnalyticsSuggestions/);
+  assert.match(page, /llm-assist-span/);
+  assert.match(page, /Newsletters \+ Axis Research \+ Podcast Transcript Summaries, as Source of Truth/);
   assert.match(page, /digest-panel-podcasts/);
   assert.match(page, /window\.localStorage\.setItem\(storageKey/);
   assert.match(page, /function CollapsibleSection/);
@@ -777,27 +1094,33 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(reportPage, /yfinance delayed NSE quote/);
   assert.doesNotMatch(reportPage, /Current-position coverage/);
   const yfinanceRoute = await readFile(new URL("../app/api/quotes/yfinance/route.ts", import.meta.url), "utf8");
+  const yfinanceTickers = await readFile(new URL("../app/strategy/yfinance-tickers.ts", import.meta.url), "utf8");
   assert.match(yfinanceRoute, /process\.cwd\(\)/);
   assert.match(yfinanceRoute, /status: "public_delayed"/);
   assert.match(yfinanceRoute, /yf\.download/);
   assert.match(yfinanceRoute, /YFINANCE_NSE_ALIASES/);
-  assert.match(yfinanceRoute, /MAXHEALTHCARE: "MAXHEALTH"/);
+  assert.match(yfinanceTickers, /MAXHEALTHCARE: "MAXHEALTH"/);
   assert.match(yfinanceRoute, /Prefer history over fast_info/);
   assert.match(yfinanceRoute, /currentTradingPeriod/);
-  assert.match(yfinanceRoute, /RAINBOWCHILDRE: "RAINBOW"/);
-  assert.match(yfinanceRoute, /KALYANISTEELS: "KSL"/);
+  assert.match(yfinanceTickers, /RAINBOWCHILDRE: "RAINBOW"/);
+  assert.match(yfinanceTickers, /KALYANISTEELS: "KSL"/);
   assert.match(page, /data-label="What matters"/);
   assert.match(page, /thesisBullets\(/);
   assert.match(page, /ThesisBulletList/);
   assert.match(page, /archive calls/);
   assert.match(page, /mail-window/);
-  assert.match(page, /PDF-archive policy/);
+  assert.match(page, /every active analyst-call category the matrix exposes/);
   assert.match(page, /last trading day/);
   assert.match(globalCss, /\.thesis-bullet-list/);
   assert.match(globalCss, /\.analyst-matrix/);
   assert.match(globalCss, /grid-template-areas:[\s\S]*"stock call"[\s\S]*"cmp cmp"[\s\S]*"target target"/);
   assert.match(globalCss, /\.analyst-table td:nth-child\(4\) \{ grid-area:cmp; \}/);
   assert.match(page, /function AxisRecommendationWorkbench/);
+  assert.match(page, /mergeActiveMatrixRowsIntoWorkbench/);
+  assert.match(page, /axis-pick-group/);
+  assert.match(page, /every active analyst-call category the matrix exposes/);
+  assert.doesNotMatch(page, /role="tablist" aria-label="Axis recommendation categories"/);
+  assert.doesNotMatch(page, /setActiveCategory/);
   assert.match(page, /formatAxisTargetLine/);
   assert.match(page, /TARGET - \$\{label\} \(\$\{sourceLabel\}\)/);
   assert.match(page, /function axisProgressToTarget/);
@@ -818,6 +1141,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /ETERNAL|ICICIBANK|JSWENERGY|BHARTIARTL/);
   assert.match(globalCss, /\.axis-pick-list button \{[^}]*flex-direction:column/);
   assert.match(globalCss, /\.axis-visual-grid \{[^}]*grid-template-columns:1fr/);
+  assert.match(globalCss, /\.axis-pick-group/);
+  assert.match(globalCss, /\.axis-pick-group-title/);
   assert.match(globalCss, /\.axis-pick-backdrop/);
   assert.match(globalCss, /\.analyst-matrix-controls/);
   assert.match(globalCss, /\.axis-target-line/);
@@ -870,7 +1195,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /refreshInFlightRef/);
   assert.match(page, /macro-event-tabs/);
   assert.match(page, /SELECTED \{event\.label\.toUpperCase\(\)\} RANGE/);
-  assert.match(page, /mailItems\.length/);
+  assert.match(page, /assembleScenarioEvidence\(candidateItems, eventKey, bandKey, event\)/);
+  assert.match(page, /selectedEvidenceItems\.length/);
   assert.match(reportPage, /overflowingPages/);
   assert.match(reportPage, /pdfOverflow|scrollHeight - page\.clientHeight/);
   assert.match(flaskGateway, /_authorized_health_post/);
@@ -896,10 +1222,11 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(reportPage, /anchor\.download = filename/);
   assert.match(reportPage, /window\.location\.assign\(downloadUrl\)/);
   assert.match(reportPage, /Download prepared PDF/);
-  assert.match(reportPage, /Export Report/);
+  assert.match(reportPage, /Generate Report PDF/);
   assert.doesNotMatch(reportPage, /Refresh & Export/);
   assert.doesNotMatch(reportPage, /Saved to Downloads as/);
-  assert.match(page, /Export Report/);
+  assert.match(page, /Generate Report PDF/);
+  assert.match(page, /tierAllows\(license\.tier, "pdf"\) \|\| license\.author/);
   assert.doesNotMatch(page, /Refresh & Export/);
   assert.match(reportDownloadRoute, /Content-Disposition/);
   assert.match(reportDownloadRoute, /attachment; filename=/);
@@ -973,6 +1300,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(contentServer, /filter\(isAxisResearchMail\)/);
   assert.match(contentServer, /extractAxisRecommendations/);
   assert.match(contentServer, /macroEvidence/);
+  assert.match(contentServer, /digestItemEvidenceText/);
+  assert.match(contentServer, /matched\.slice\(0, 16\)/);
+  assert.match(page, /assembleScenarioEvidence\(candidateItems, eventKey, bandKey, event\)/);
+  assert.match(page, /evidenceCardLabel/);
   assert.match(page, /Investment evidence refreshed from Mail for \{analysisWindowLabel\(content\)\}/);
   assert.match(page, /Axis Mail calls as-of \{axisAsOfLabel\} are prioritised/);
   assert.match(contentServer, /ZMTEPISODE/);
@@ -1034,9 +1365,18 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.doesNotMatch(healthWorkspace, /health-source-panel/);
     assert.doesNotMatch(healthWorkspace, /healthSnapshot\.sources/);
     const optimismAt = healthWorkspace.indexOf('number="H-2" title="Daily Optimism"');
-    const guidanceAt = healthWorkspace.indexOf('<HealthGuidanceWorkbench page="optimism"', optimismAt);
+    const guidanceAt = healthWorkspace.indexOf("<HealthGuidanceWorkbench", optimismAt);
     const masonryAt = healthWorkspace.indexOf("<HealthMasonryGrid categories={healthSnapshot.categories}/>", optimismAt);
     assert.ok(optimismAt >= 0 && guidanceAt >= 0 && masonryAt >= 0 && optimismAt < guidanceAt && guidanceAt < masonryAt, "Daily Optimism with rich guidance must render above Vital cadence / HealthMasonryGrid");
+    assert.match(healthWorkspace, /id="health-h2-insights"/);
+    assert.match(healthWorkspace, /id="health-h2-guidance"/);
+    assert.match(healthWorkspace, /id="health-h2-guardrails"/);
+    assert.match(healthWorkspace, /<h3>Insights<\/h3>/);
+    assert.match(healthWorkspace, /<h3>Guidance<\/h3>/);
+    assert.match(healthWorkspace, /route\.section === "h3" && pages\.length > 1/);
+    assert.doesNotMatch(healthWorkspace, /\{ id: "insights", label: "Insights" \}/);
+    assert.doesNotMatch(healthWorkspace, /\{ id: "guidance", label: "Guidance" \}/);
+    assert.doesNotMatch(healthWorkspace, /\{ id: "guardrails", label: "Guardrails" \}/);
     assert.match(healthWorkspace, /HEALTH_TOP_SECTIONS/);
     assert.match(healthWorkspace, /<WorkspaceSectionNav[\s\S]*label="Health & Wellness sections"/);
     assert.match(healthWorkspace, /HealthWorkspaceSection = "h2" \| "h3"/);
@@ -1046,11 +1386,16 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.doesNotMatch(healthWorkspace, /health-overview-console/);
     assert.doesNotMatch(healthWorkspace, /<HealthThumbnail/);
     assert.doesNotMatch(healthWorkspace, /Health Status|Daily Guidance|number="H-4"|HealthStatusOverview|HealthStatusWorkbench|id="health-h4"|\{ id: "h4"/);
+    assert.doesNotMatch(healthWorkspace, /Health Daily|sector-detail-shell|health-detail-shell/);
     assert.match(healthWorkspace, /number="H-2" title="Daily Optimism"/);
     assert.match(healthWorkspace, /number="H-3" title="Vital Metrics"/);
     assert.match(healthWorkspace, /<HealthMasonryGrid categories=\{healthSnapshot\.categories\}\/>/);
-    assert.match(healthWorkspace, /nutrition-1/);
-    assert.match(healthWorkspace, /nutrition-2/);
+    assert.match(healthWorkspace, /\{ id: "nutrition", label: "Nutrition" \}/);
+    assert.match(healthWorkspace, /parseHealthH3Page/);
+    const routingSource = await readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8");
+    assert.match(routingSource, /case "nutrition-1":/);
+    assert.match(routingSource, /case "nutrition-2":/);
+    assert.match(routingSource, /return "nutrition"/);
     assert.match(healthWorkspace, /HealthIncognitoGate/);
     assert.match(globalCss, /\.health-metrics-overview/);
     assert.match(globalCss, /\.health-direction-grid/);
@@ -1211,19 +1556,32 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(sectorData, /US tariff path/);
   assert.match(sectorData, /Blinkit daily orders/);
   assert.match(await readFile(new URL("../app/sector-news-server.ts", import.meta.url), "utf8"), /economic_times/);
+  assert.match(await readFile(new URL("../app/sector-news-server.ts", import.meta.url), "utf8"), /PER_SOURCE_ITEM_CEILING = 100/);
+  assert.match(await readFile(new URL("../app/sector-news-server.ts", import.meta.url), "utf8"), /parseItems\(xml, feed, PER_SOURCE_ITEM_CEILING\)/);
+  assert.doesNotMatch(await readFile(new URL("../app/sector-news-server.ts", import.meta.url), "utf8"), /parseItems\(xml, feed, 8\)/);
   assert.match(await readFile(new URL("../app/api/sectors/news/route.ts", import.meta.url), "utf8"), /getSectorNewsSnapshot/);
   assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /News \+ sentiment/);
   assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /sector-news-sentiment-grid/);
-  assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /\.slice\(0, 3\)/);
+  assert.match(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /newsItems\.filter\(\(item\) => item\.sentiment === "Positive"\)/);
+  assert.doesNotMatch(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /sentiment === "Positive"\)\.slice\(0, 3\)/);
+  assert.doesNotMatch(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /sentiment === "Neutral"\)\.slice\(0, 3\)/);
+  assert.doesNotMatch(await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"), /sentiment === "Negative"\)\.slice\(0, 3\)/);
   assert.match(globalCss, /\.sector-news-sentiment-grid/);
   assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(globalCss, /\.workspace-navigation\s*\{/);
   assert.match(globalCss, /position:\s*sticky/);
+  assert.match(globalCss, /\.workspace-tabs\s*\{[^}]*grid-template-columns:repeat\(var\(--glass-count\)/);
+  assert.match(globalCss, /\.workspace-tabs::after/);
+  assert.match(globalCss, /\.workspace-tabs::before/);
+  assert.match(globalCss, /--glass-count:6/);
+  assert.match(globalCss, /border-radius:999px !important/);
+  assert.doesNotMatch(globalCss, /\.workspace-tabs\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.doesNotMatch(globalCss, /\.viewport-console-active\s+\.workspace-tabs\{[^}]*repeat\(3,/);
   assert.match(globalCss, /\.sector-rank-grid/);
 });
 
 test("native iPhone shell exposes complete workspace, freshness, pairing and offline contracts", async () => {
-  const [contentView, configuration, browser, status, shell, pairing, healthKit, flaskGateway, page] = await Promise.all([
+  const [contentView, configuration, browser, status, shell, pairing, healthKit, flaskGateway, models, workspaces, actions] = await Promise.all([
     readFile(new URL("../apple-app/InvestmentDashboard/ContentView.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/InvestmentDashboard/PortfolioDashboardConfiguration.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/InvestmentDashboard/DashboardBrowser.swift", import.meta.url), "utf8"),
@@ -1232,27 +1590,46 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
     readFile(new URL("../apple-app/InvestmentDashboard/HealthPairing.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/InvestmentDashboard/HealthKitSync.swift", import.meta.url), "utf8"),
     readFile(new URL("../flask_gateway.py", import.meta.url), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/NativeDashboardModels.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/NativeWorkspaceViews.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/InvestmentDashboard/NativeActionBoard.swift", import.meta.url), "utf8"),
   ]);
 
   assert.match(configuration, /case investment[\s\S]*case sectors[\s\S]*case intelligence[\s\S]*case health[\s\S]*case builder[\s\S]*case strategies/);
-  assert.match(configuration, /URLQueryItem\(name: "view", value: rawValue\)/);
-  assert.match(browser, /private\(set\) lazy var webView/);
-  assert.match(browser, /portfolio-native-refresh/);
-  assert.match(browser, /WKDownloadDelegate/);
+  assert.match(configuration, /Portfolio Overview/);
+  assert.match(configuration, /URLQueryItem\(name: "view", value: view\)/);
+  assert.match(configuration, /URLQueryItem\(name: "nativeChrome", value: "1"\)/);
+  assert.match(configuration, /integrationsURL/);
+  assert.match(contentView, /NativeRootShell/);
+  assert.match(contentView, /NativeRefreshProgressView/);
+  assert.match(contentView, /NativeOfflineScreen/);
+  assert.match(contentView, /HealthKitSyncCoordinator/);
+  assert.match(contentView, /showingInspector|showingDebugDashboard/);
+  assert.match(contentView, /browser: browser/);
+  assert.match(contentView, /PortfolioDashboardWebView/);
+  assert.match(workspaces, /NavigationSplitView/);
+  assert.match(workspaces, /DashboardOutlineList\(selectedID:/);
+  assert.match(browser, /nativeChrome/);
+  assert.match(actions, /To Do Today/);
+  assert.match(actions, /Completed Today/);
+  assert.match(actions, /To Do Today/);
+  assert.match(actions, /Completed Today/);
+  assert.match(models, /FreshnessLabel/);
+  assert.match(models, /"snapshot"/);
+  assert.match(status, /\/api\/dashboard\/freshness/);
+  assert.match(status, /\/api\/dashboard\/refresh/);
+  assert.match(status, /\/api\/kite\/snapshot/);
+  assert.match(status, /\/api\/integrations/);
   assert.match(status, /\/_flask\/health/);
   assert.match(status, /\/_startup\/audit/);
-  assert.match(shell, /NativeWorkspacePicker/);
-  assert.match(shell, /NativeFreshnessStrip/);
-  assert.match(shell, /DashboardOfflineOverlay/);
   assert.match(shell, /DashboardOnboardingView/);
-  assert.match(contentView, /HealthKitSyncCoordinator/);
+  assert.match(shell, /npm run iphone:pair/);
+  assert.match(browser, /private\(set\) lazy var webView/);
   assert.match(pairing, /kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly/);
   assert.match(healthKit, /HealthCredentialStore\.token\(\)/);
   assert.doesNotMatch(healthKit, /portfolio-local-health-token/);
   assert.match(flaskGateway, /@app\.post\("\/_health\/pair\/code"\)/);
   assert.match(flaskGateway, /@app\.post\("\/_health\/pair"\)/);
-  assert.match(page, /portfolio-native-refresh/);
 });
 
 test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", async () => {
@@ -1267,7 +1644,7 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(sharedUi, /export function AppearanceToggle/);
   assert.match(sharedUi, /Dashboard appearance/);
   assert.match(sharedUi, /Black[\s\S]*Dark[\s\S]*Sepia/);
-  assert.match(page, /AppearanceToggle/);
+  assert.doesNotMatch(page, /AppearanceToggle/);
   assert.match(page, /dashboard-appearance/);
   assert.match(page, /document\.documentElement\.dataset\.appearance/);
   assert.match(page, /appearanceHydrated/);
@@ -1278,6 +1655,9 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(globalCss, /--bg-page/);
   assert.match(globalCss, /--btn-bg/);
   assert.match(globalCss, /--brutalist-shadow-lg/);
+  assert.match(globalCss, /--radius:\s*12px/);
+  assert.match(globalCss, /\*\s*\{\s*box-sizing:border-box;\s*border-radius:\s*var\(--radius\)\s*!important/);
+  assert.doesNotMatch(globalCss, /\*\s*\{\s*box-sizing:border-box;\s*border-radius:\s*0\s*!important/);
   assert.match(globalCss, /html\[data-appearance="dark"\]/);
   assert.match(globalCss, /html\[data-appearance="sepia"\]/);
   assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--bg-page:#0d1117/);
@@ -1340,6 +1720,10 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /\.vo-pop/);
   assert.match(visualCss, /@keyframes vo-pop-press/);
   assert.match(visualCss, /--brutalist-shadow-lg/);
+  assert.match(visualCss, /translateY\(-2px\)\s*scale\(1\.02\)/);
+  assert.match(visualCss, /border-radius:\s*var\(--radius\)/);
+  assert.match(visualCss, /Last-wins rounded brutalist clip/);
+  assert.match(visualCss, /\.collapsible-content[\s\S]*border-radius:\s*var\(--radius\)\s*!important/);
   assert.match(visualCss, /\.collapsible-content[\s\S]*vo-magnetic/);
   assert.match(visualCss, /prefers-reduced-motion:\s*reduce/);
   assert.match(visualCss, /\.digest-panel\.briefing-rail \.evidence-chip:not\(\.focused\)[\s\S]*?opacity:\s*1/);
@@ -1362,8 +1746,10 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /button\[data-mode="health"\]/);
   assert.match(visualCss, /button\[data-mode="builder"\]/);
   assert.match(visualCss, /button\[data-mode="strategies"\]/);
-  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="builder"\][\s\S]*--vo-canvas/);
-  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="strategies"\][\s\S]*--vo-strategies/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="builder"\]/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\][\s\S]*button\[data-mode="strategies"\]/);
+  assert.match(visualCss, /--vo-canvas:\s*#d97706/);
+  assert.match(visualCss, /--vo-strategies:\s*#65a30d/);
   assert.match(globalCss, /button\.active\[data-mode="builder"\]/);
   assert.match(globalCss, /button\.active\[data-mode="strategies"\]/);
 });
@@ -1412,10 +1798,92 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
 
 test("builder and strategies query strings SSR their workspace chrome", async () => {
   const builder = await (await render("/?view=builder&section=canvas")).text();
-  assert.match(builder, /Algorithm Builder/);
+  assert.match(builder, /Algorithm Builder|Algorithm Canvas/);
   assert.match(builder, /data-workspace="builder"/);
-  assert.match(builder, /kpi-registry-panel|KPI registry/);
+  assert.match(builder, /kpi-registry-panel|KPI registry|license-gate/);
   const strategies = await (await render("/?view=strategies&section=y2")).text();
   assert.match(strategies, /data-workspace="strategies"/);
-  assert.match(strategies, /strategy-card|simons-kmlm|NSE ETF/);
+  assert.match(strategies, /strategy-card|simons-kmlm|NSE ETF|license-gate/);
+});
+
+test("Integrations is Settings chrome, not a seventh DailyKanbanBoard workspace", async () => {
+  const [page, utils, types, workspace, routing, globalCss] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/IntegrationsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(utils, /key: "investment", label: "Portfolio Overview"/);
+  const workspaceKeys = [...utils.matchAll(/\{ key: "(investment|sectors|intelligence|health|builder|strategies|integrations)"/g)].map((match) => match[1]);
+  assert.deepEqual(workspaceKeys, ["investment", "sectors", "intelligence", "health", "builder", "strategies"]);
+  assert.match(types, /type WorkspaceKey = "investment" \| "sectors" \| "intelligence" \| "health" \| "builder" \| "strategies"/);
+  assert.match(routing, /case "portfolio":/);
+  assert.match(routing, /case "portfolio-overview":/);
+  assert.match(routing, /function isIntegrationsView/);
+  assert.match(page, /IntegrationsWorkspace/);
+  assert.doesNotMatch(page, /integrations-chrome-link/);
+  assert.doesNotMatch(page, /Open Integrations settings/);
+  assert.match(page, /DashboardTabs active=\{workspace\}/);
+  assert.match(page, /nativeChrome/);
+  assert.match(page, /native-chrome/);
+  assert.match(page, /showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
+  assert.match(page, /document\.title = isIntegrationsChrome \? "Settings"/);
+  assert.match(page, /if \(isIntegrationsChrome\) return;/);
+  assert.match(workspace, /id="integrations-chrome-heading">Settings/);
+  assert.match(workspace, /id="integrations-appearance-heading">Appearance/);
+  assert.match(workspace, /AppearanceToggle/);
+  assert.match(workspace, /HealthIncognitoToggle/);
+  assert.match(globalCss, /data-chrome-page="integrations"/);
+  assert.doesNotMatch(workspace, /DailyKanbanBoard/);
+  assert.doesNotMatch(workspace, /sector-dimmed|selectedSectorId|EarningsMonthCalendar/);
+  assert.match(workspace, /data-chrome="integrations"/);
+  assert.match(globalCss, /\.integrations-workspace/);
+  assert.match(globalCss, /\.integrations-appearance/);
+  assert.doesNotMatch(globalCss, /\.integrations-chrome-link/);
+});
+
+test("Settings / Integrations chrome omits dashboard masthead, tiles, and freshness strip", async () => {
+  const [html, nativeHtml, stratjiWorkspace] = await Promise.all([
+    (await render("/?view=integrations")).text(),
+    (await render("/?view=integrations&nativeChrome=1")).text(),
+    readFile(new URL("../apple-app/Shared/StratjiWorkspace.swift", import.meta.url), "utf8"),
+  ]);
+  for (const body of [html, nativeHtml]) {
+    assert.match(body, /data-chrome-page="integrations"/);
+    assert.match(body, /id="integrations-chrome-heading"/);
+    assert.match(body, />Settings</);
+    assert.match(body, /STRATJI CHROME/);
+    assert.match(body, /Zerodha Streak/);
+    assert.doesNotMatch(body, /<h1>Investment Brief<\/h1>/);
+    assert.doesNotMatch(body, /class="masthead"/);
+    assert.doesNotMatch(body, /aria-label="Dashboard workspaces"/);
+    assert.doesNotMatch(body, /id="workspace-tab-investment"/);
+    assert.doesNotMatch(body, /class="live-feed-banner/);
+    assert.doesNotMatch(body, />Generate Report PDF</);
+    assert.doesNotMatch(body, />Export Report</);
+    assert.match(body, /Dashboard appearance/);
+    assert.match(body, /Health incognito/);
+  }
+  assert.match(html, /Back to dashboard/);
+  assert.doesNotMatch(nativeHtml, /Back to dashboard/);
+  assert.match(stratjiWorkspace, /view: "integrations", nativeChrome: true/);
+});
+
+test("S-2 pulse orb cores keep KPI values inside the 12px rounded well", async () => {
+  const visualCss = await readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8");
+  const orb = visualCss.match(/\.pulse-orb \.orb-core\s*\{[\s\S]*?\n\}/);
+  assert.ok(orb, "expected .pulse-orb .orb-core rule");
+  assert.match(orb[0], /min-width:\s*88px/);
+  assert.match(orb[0], /min-height:\s*88px/);
+  assert.match(orb[0], /padding:\s*10px 8px/);
+  assert.match(orb[0], /font-size:\s*clamp\(10px,\s*1\.15vw,\s*12px\)/);
+  assert.match(orb[0], /font-variant-numeric:\s*tabular-nums/);
+  assert.match(orb[0], /overflow-wrap:\s*break-word/);
+  assert.doesNotMatch(orb[0], /width:\s*56px/);
+  assert.doesNotMatch(orb[0], /overflow:\s*hidden/);
+  assert.match(visualCss, /\.pulse-orb \.orb-core,[\s\S]*border-radius:\s*var\(--radius\)\s*!important/);
 });

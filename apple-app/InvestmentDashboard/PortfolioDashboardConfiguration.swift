@@ -4,7 +4,18 @@ enum PortfolioDashboardConfiguration {
     static let serverDefaultsKey = "dashboardServerAddress"
     static let onboardingDefaultsKey = "dashboardOnboardingComplete"
     static let workspaceDefaultsKey = "dashboardSelectedWorkspace"
-    static let defaultServerAddress = "https://adis-mbp.tailfd8d7f.ts.net/"
+    static let lastSuccessDefaultsKey = "dashboardLastSuccessfulRefresh"
+    static let actionBoardDefaultsKey = "dashboardNativeActionBoard"
+    static let defaultServerAddress = ""
+    static let bonjourServiceType = "_stratji._tcp"
+
+    static func isTailscaleAddress(_ value: String) -> Bool {
+        value.lowercased().contains(".ts.net")
+    }
+
+    static func migratedServerAddress(_ value: String) -> String {
+        isTailscaleAddress(value) ? "" : value
+    }
 
     static func normalizedServerURL(from value: String) -> URL? {
         var candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,13 +50,26 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    static var primaryWorkspaces: [DashboardWorkspace] { Array(allCases) }
+
     var title: String {
         switch self {
-        case .investment: "Investment"
-        case .sectors: "Sectoral"
-        case .intelligence: "Market Intel"
+        case .investment: "Portfolio Overview"
+        case .sectors: "Sectoral Analytics"
+        case .intelligence: "Market Intelligence"
+        case .health: "Health & Wellness"
+        case .builder: "Algorithm Builder"
+        case .strategies: "Strategies"
+        }
+    }
+
+    var tabTitle: String {
+        switch self {
+        case .investment: "Portfolio"
+        case .sectors: "Sectors"
+        case .intelligence: "Intel"
         case .health: "Health"
-        case .builder: "Algorithm Canvas"
+        case .builder: "Builder"
         case .strategies: "Strategies"
         }
     }
@@ -62,20 +86,43 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
     }
 
     func dashboardURL(baseURL: URL) -> URL {
+        DashboardOutline.defaultDestination(forView: rawValue).url(baseURL: baseURL, nativeChrome: true)
+    }
+
+    static func integrationsURL(baseURL: URL) -> URL {
+        makeURL(baseURL: baseURL, view: "integrations")
+    }
+
+    private static func makeURL(
+        baseURL: URL,
+        view: String
+    ) -> URL {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             return baseURL
         }
         components.path = "/"
-        var queryItems = [URLQueryItem(name: "view", value: rawValue)]
-        if self == .builder {
-            queryItems.append(URLQueryItem(name: "section", value: "canvas"))
-        }
-        if self == .strategies {
-            queryItems.append(URLQueryItem(name: "section", value: "y2"))
-        }
+        var queryItems = [URLQueryItem(name: "view", value: view)]
+        queryItems.append(URLQueryItem(name: "nativeChrome", value: "1"))
         components.queryItems = queryItems
         components.fragment = nil
         return components.url ?? baseURL
+    }
+
+    static func from(viewValue: String) -> DashboardWorkspace? {
+        switch viewValue {
+        case "market-intelligence":
+            return .intelligence
+        case "algorithm-canvas":
+            return .builder
+        case "strategy-library":
+            return .strategies
+        case "integrations", "settings":
+            return nil
+        case "portfolio", "portfolio-overview":
+            return .investment
+        default:
+            return DashboardWorkspace(rawValue: viewValue)
+        }
     }
 
     static func from(url: URL?) -> DashboardWorkspace? {
@@ -84,15 +131,6 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
               let value = components.queryItems?.first(where: { $0.name == "view" })?.value else {
             return nil
         }
-        if value == "market-intelligence" {
-            return .intelligence
-        }
-        if value == "algorithm-canvas" {
-            return .builder
-        }
-        if value == "strategy-library" {
-            return .strategies
-        }
-        return DashboardWorkspace(rawValue: value)
+        return from(viewValue: value)
     }
 }

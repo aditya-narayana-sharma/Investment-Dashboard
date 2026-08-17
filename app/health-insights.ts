@@ -37,7 +37,7 @@ const SECONDARY_SOURCES = [
   },
   {
     source: "iPhone Mirroring",
-    detail: "Computer Use / iPhone Mirroring was unavailable; HealthKit export and  Health Daily remain the only evidence for this session.",
+    detail: "Computer Use / iPhone Mirroring was unavailable; HealthKit export and Health Shortcut / Health Stats remain the only evidence for this session.",
   },
 ] as const;
 
@@ -217,40 +217,7 @@ export function buildDailyHealthBrief(healthSnapshot: HealthLiveSnapshot): Healt
   return brief.slice(0, 6);
 }
 
-function noteDateGapInsight(
-  healthNote: AppleNoteSnapshot | null,
-  healthNoteSource: ContentSourceState | null | undefined,
-  operationalDate: string,
-): HealthInsight | null {
-  if (!healthNoteSource || healthNoteSource.status === "error" || healthNoteSource.status === "permission_required" || healthNoteSource.status === "stale") {
-    return {
-      tone: "amber",
-      title: " Health Daily note unavailable",
-      text: "The exact  Health Daily note could not be read. Guidance below uses validated HealthKit aggregates only.",
-      evidence: " Health Daily",
-    };
-  }
-  const observed = healthNote?.observedDate || healthNote?.modifiedAt?.slice(0, 10) || "";
-  if (!healthNote?.dailyOptimism?.trim() && observed && observed < operationalDate) {
-    return {
-      tone: "amber",
-      title: "Daily Optimism missing for operational target",
-      text: ` Health Daily was last observed on ${compactHealthDate(observed)}; operational Health target is ${compactHealthDate(operationalDate)}. No Daily Optimism section was present — shortcut stats below are evidence only.`,
-      evidence: " Health Daily",
-    };
-  }
-  if (!healthNote?.dailyOptimism?.trim()) {
-    return {
-      tone: "blue",
-      title: "No Daily Optimism section",
-      text: "The exact  Health Daily note is readable but has no Daily Optimism text. Metric insights remain HealthKit-derived.",
-      evidence: " Health Daily",
-    };
-  }
-  return null;
-}
-
-/** Parse label/value pairs already present in the  Health Daily summary — never invents values. */
+/** Parse label/value pairs already present in a Health Shortcut / Health Stats summary — never invents values. */
 export function parseHealthDailyNoteStats(summary: string | null | undefined): Array<{ label: string; value: string }> {
   if (!summary?.trim()) return [];
   const cleaned = summary
@@ -272,15 +239,13 @@ export function parseHealthDailyNoteStats(summary: string | null | undefined): A
 
 export function buildHealthInsights(
   healthSnapshot: HealthLiveSnapshot,
-  healthNote: AppleNoteSnapshot | null = null,
-  healthNoteSource: ContentSourceState | null = null,
+  _healthNote: AppleNoteSnapshot | null = null,
+  _healthNoteSource: ContentSourceState | null = null,
 ): HealthInsight[] {
+  void _healthNote;
+  void _healthNoteSource;
   const dataDate = healthSnapshot.dataDate;
-  const operationalDate = healthSnapshot.requiredThrough ?? healthSnapshot.targetDate ?? dataDate;
   const insights: HealthInsight[] = [];
-
-  const gap = noteDateGapInsight(healthNote, healthNoteSource, operationalDate);
-  if (gap) insights.push(gap);
 
   const nutrition = nutritionIncompleteInsight(healthSnapshot.categories, dataDate);
   if (nutrition) insights.push(nutrition);
@@ -323,15 +288,6 @@ export function enrichHealthSources(healthSnapshot: HealthLiveSnapshot): HealthS
       status: "Unavailable",
       detail: secondary.detail,
       tone: "amber",
-    });
-  }
-  const notePresent = sources.some((item) => item.source.includes("Health Daily"));
-  if (!notePresent) {
-    sources.push({
-      source: " Health Daily Note",
-      status: "Separate content source",
-      detail: "Optimism and shortcut stats are read from the exact  Health Daily note via the content digest, not from the HealthKit ZIP.",
-      tone: "blue",
     });
   }
   return sources;

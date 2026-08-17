@@ -31,6 +31,7 @@ import {
 } from "../sector-investability";
 import type { SectorBenchmarkSnapshot, SectorMarketSnapshot } from "../sector-live-types";
 import { TriggerDial } from "./visual-components";
+import { LlmAssistPanel } from "./LlmAssistPanel";
 
 export type SectorDecisionPage = "benchmarks" | "investability" | "pestel" | "porter" | "macro";
 
@@ -155,6 +156,12 @@ export function SectorDecisionLab({
           {selectedBenchmarks.map((index) => <article className="panel" key={index.id}><span>{index.officialName}</span><b>{index.level === null ? "Unavailable" : index.level.toLocaleString("en-IN")}</b><div>{(["day", "month", "quarter", "year"] as const).map((period) => <small className={(index.returns[period] ?? 0) >= 0 ? "positive" : "negative"} key={period}>{period}: {index.returns[period] === null ? "—" : `${index.returns[period]! >= 0 ? "+" : ""}${index.returns[period]!.toFixed(2)}%`}</small>)}</div><em>{index.source} · {index.observedAt} · {index.indexedHistory.length} closes</em></article>)}
         </aside>
       </div>
+      <LlmAssistPanel
+        task="framework"
+        hint="Comments on supplied EOD benchmarks only. Delayed series stay delayed; missing levels stay unavailable."
+        context={`Sector ${sector.name}. Benchmarks status ${benchmarks.status}. Selected: ${selectedBenchmarks.map((index) => `${index.officialName} level ${index.level ?? "unavailable"}`).join("; ") || "none"}.`}
+        placeholder="e.g. How does this sector compare to the selected indices?"
+      />
     </section>;
   }
 
@@ -205,6 +212,12 @@ export function SectorDecisionLab({
         <div><b>Invalidation</b><span>Reassess when reported KPIs, breadth or macro conditions move against the current stance.</span></div>
         <small>Confidence: research framework · methodology: six equally weighted factors after each factor&apos;s stated composition. Unsupported evidence remains unavailable.</small>
       </aside>
+      <LlmAssistPanel
+        task="framework"
+        hint="Comments on the rule-based gate. It does not replace composite scores or invent index levels."
+        context={`Sector ${sector.name}. Page ${page}. Gate ${decision.label} ${decisionScore.toFixed(1)}/5. ${decision.action} Evidence: ${sector.summary}. Monitor: ${sector.watch}.`}
+        placeholder="e.g. What would change this from monitor to allocate?"
+      />
     </section>;
   }
 
@@ -259,5 +272,11 @@ export function SectorDecisionLab({
         </div>
       </article>
     </div>
+    <LlmAssistPanel
+      task="framework"
+      hint="Macro commentary only. Trigger distance is not an automatic trade."
+      context={`Sector ${sector.name}. Macro dials: ${macroData.map((dial) => `${dial.name} ${dial.raw}`).join("; ")}.`}
+      placeholder="e.g. Which trigger is closest to a sizing change?"
+    />
   </section>;
 }

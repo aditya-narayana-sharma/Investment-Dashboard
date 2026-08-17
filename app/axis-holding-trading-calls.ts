@@ -2,6 +2,7 @@
  *  Targets come from Axis Morning Note Investment Picks / dedicated PDFs — not invented.
  *  CMP is filled at runtime from Kite first, then yfinance.
  */
+import type { AnalystMatrixRow } from "./analyst-matrix-groups";
 import type { MailRecommendation } from "./content-types";
 
 export const AXIS_HOLDING_TRADING_SYMBOLS = ["ETERNAL", "ICICIBANK", "JSWENERGY", "BHARTIARTL"] as const;
@@ -93,8 +94,79 @@ export function axisCallBucket(item: Pick<MailRecommendation, "bucket" | "call" 
   const call = String(item.call ?? "").toUpperCase();
   const horizon = String(item.horizon ?? "").toLowerCase();
   if (call.includes("TECHNICAL") || horizon.includes("technical")) return "technical";
-  if (call.includes("TRADING") || horizon.includes("punch")) return "trading";
+  if (call.includes("TRADING") || horizon.includes("punch") || horizon.includes("investment picks")) return "trading";
   return "fundamental";
+}
+
+export function workbenchCallKey(item: Pick<MailRecommendation, "symbol" | "bucket" | "call" | "horizon">): string {
+  return `${item.symbol}|${axisCallBucket(item)}`;
+}
+
+export function activeMatrixCallKey(row: Pick<AnalystMatrixRow, "symbol" | "rating">): string {
+  return `${row.symbol}|${axisCallBucket({ call: row.rating, horizon: "", bucket: undefined })}`;
+}
+
+const NEUTRAL_RISK_SCORES: MailRecommendation["scores"] = [3, 3, 3, 3, 3, 3];
+
+function matrixRowToWorkbenchCard(
+  row: AnalystMatrixRow,
+  bucket: AxisCallBucket,
+  namesBySymbol: ReadonlyMap<string, string>,
+  sibling: MailRecommendation | undefined,
+): MailRecommendation {
+  return {
+    symbol: row.symbol,
+    name: namesBySymbol.get(row.symbol) ?? sibling?.name ?? row.symbol,
+    call: row.rating,
+    target: row.target ?? null,
+    cmp: null,
+    upside: "—",
+    horizon: row.house,
+    source: row.house,
+    date: row.date,
+    thesis: row.thesis,
+    color: sibling?.color ?? "#4c8fff",
+    scores: sibling?.scores ?? NEUTRAL_RISK_SCORES,
+    bucket,
+  };
+}
+
+/**
+ * I-4 workbench cards = Axis PDF/mail buckets plus every active analyst-matrix
+ * symbol/category the matrix already exposes. Closed target-achieved rows stay out.
+ * Missing matrix rows are filled from the matrix; existing Axis cards are not overwritten.
+ * Targets are copied from source-backed rows only — never invented.
+ */
+export function mergeActiveMatrixRowsIntoWorkbench(
+  recommendations: MailRecommendation[],
+  matrixRows: AnalystMatrixRow[],
+  namesBySymbol: ReadonlyMap<string, string> = new Map(),
+): MailRecommendation[] {
+  const byKey = new Map<string, MailRecommendation>();
+  const bySymbol = new Map<string, MailRecommendation>();
+  for (const item of recommendations) {
+    if (!item?.symbol) continue;
+    const next = { ...item, bucket: axisCallBucket(item) };
+    const key = workbenchCallKey(next);
+    const prev = byKey.get(key);
+    if (!prev || preferAxisCall(next, prev)) byKey.set(key, next);
+    const known = bySymbol.get(next.symbol);
+    if (!known || preferAxisCall(next, known)) bySymbol.set(next.symbol, next);
+  }
+
+  for (const row of matrixRows) {
+    if (!row?.symbol || row.targetAchieved) continue;
+    const bucket = axisCallBucket({ call: row.rating, horizon: "", bucket: undefined });
+    const key = `${row.symbol}|${bucket}`;
+    if (byKey.has(key)) continue;
+    byKey.set(key, matrixRowToWorkbenchCard(row, bucket, namesBySymbol, bySymbol.get(row.symbol)));
+  }
+
+  return [...byKey.values()].sort(
+    (left, right) => bucketPriority(axisCallBucket(right)) - bucketPriority(axisCallBucket(left))
+      || left.symbol.localeCompare(right.symbol)
+      || String(right.dateKey ?? "").localeCompare(String(left.dateKey ?? "")),
+  );
 }
 
 function normalizeCallFamily(call: string): "technical" | "trading" | "plain" {

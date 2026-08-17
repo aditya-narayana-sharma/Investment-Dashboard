@@ -4,6 +4,7 @@ import { netPositionsFromKitePayload } from "./kite-positions";
 import { nextKiteDailyExpiry, persistKiteSession, readPersistedKiteSession, clearPersistedKiteSession } from "./kite-session-store";
 import type { KiteAuthStatus, KiteSnapshot, LiveAlert, LiveGtt, LiveHolding, LiveOrder, LivePosition } from "./live-types";
 import { sanitizeKiteStatusNote } from "./kite-status-note";
+import { assertBuyOrderFunds } from "./kite-order-funds";
 
 type JsonObject = Record<string, unknown>;
 export type KiteOrderRequest = {
@@ -94,6 +95,53 @@ function number(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function equityNetFromMargins(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object") return null;
+  const equity = (payload as JsonObject).equity;
+  if (!equity || typeof equity !== "object") return null;
+  const net = number((equity as JsonObject).net);
+  return Number.isFinite(net) ? net : null;
+}
+
+function snapshotEquityMarginKnown(snapshot: KiteSnapshot | undefined): boolean {
+  if (!snapshot) return false;
+  const unavailable = snapshot.unavailableSections ?? [];
+  if (unavailable.includes("margins") || unavailable.includes("live Kite")) return false;
+  switch (snapshot.status) {
+    case "live":
+    case "partial":
+    case "snapshot":
+      return Number.isFinite(snapshot.portfolio.equityMargin);
+    case "auth_required":
+    case "unavailable":
+      return false;
+    default: {
+      const _exhaustive: never = snapshot.status;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Live Kite equity net, then last validated snapshot. Never invent a margin figure. */
+async function resolveEquityMargin(): Promise<{ equityMargin: number; marginsKnown: boolean }> {
+  try {
+    const net = equityNetFromMargins(await callKiteTool("get_margins"));
+    if (net !== null) return { equityMargin: net, marginsKnown: true };
+  } catch {
+    // Snapshot fallback only — a failed margins read is not ₹0.
+  }
+  if (snapshotEquityMarginKnown(lastLiveSnapshot) && lastLiveSnapshot) {
+    return { equityMargin: lastLiveSnapshot.portfolio.equityMargin, marginsKnown: true };
+  }
+  return { equityMargin: 0, marginsKnown: false };
+}
+
+function estimatedOrderPrice(order: KiteOrderRequest, symbol: string): number {
+  if (order.price && order.price > 0) return order.price;
+  const holding = lastLiveSnapshot?.holdings.find((item) => item.symbol.toUpperCase() === symbol);
+  return holding?.price && holding.price > 0 ? holding.price : 0;
+}
+
 function string(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
@@ -154,18 +202,39 @@ async function ensureSession() {
   await state.sessionInit;
 }
 
+function kiteToolFailure(name: string, message: string): Error {
+  if (/log in|login|api_key|access_token|invalid[^\n]*token|token[^\n]*expired|authentication required|please log in first/i.test(message)) {
+    return new KiteAuthRequired(message);
+  }
+  return new Error(message || `Kite tool ${name} failed`);
+}
+
+function annotateKiteWriteError(error: unknown): Error {
+  if (error instanceof KiteAuthRequired || error instanceof KiteSessionInvalid) {
+    return new Error(`Kite session required — log in on this Mac. ${error.message}`);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (/^Failed to place order$/i.test(message.trim())) {
+    return new Error("Kite rejected the order without a detailed broker message. Typical causes: expired session (log in on this Mac), regular orders after NSE cash hours, insufficient margin, or an invalid tick/price. The ticket stays open so you can correct it.");
+  }
+  if (/MCP session expired|invalid JSON response|HTTP 401|HTTP 403/i.test(message)) {
+    return new Error(`Kite session required — log in on this Mac. ${message}`);
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 async function invokeKiteTool(name: string, args: JsonObject = {}): Promise<unknown> {
   await ensureSession();
   const { body } = await postMcp({ jsonrpc: "2.0", id: state.requestId++, method: "tools/call", params: { name, arguments: args } });
+  const rpcError = body.error && typeof body.error === "object" ? body.error as JsonObject : undefined;
+  if (rpcError) {
+    throw kiteToolFailure(name, string(rpcError.message) || `Kite tool ${name} failed`);
+  }
   const result = body.result as JsonObject | undefined;
   const content = Array.isArray(result?.content) ? result.content as JsonObject[] : [];
   const text = content.find((item) => item.type === "text")?.text;
   if (result?.isError) {
-    const message = string(text) || `Kite tool ${name} failed`;
-    if (/log in|login|api_key|access_token|invalid[^\n]*token|token[^\n]*expired|authentication required/i.test(message)) {
-      throw new KiteAuthRequired(message);
-    }
-    throw new Error(message);
+    throw kiteToolFailure(name, string(text) || `Kite tool ${name} failed`);
   }
   if (typeof text !== "string") return null;
   try { return JSON.parse(text); } catch { return text; }
@@ -280,21 +349,36 @@ export async function placeKiteOrder(order: KiteOrderRequest) {
 
   await requireKiteCashInstrument(symbol, "NSE");
 
-  const result = await callKiteTool("place_order", {
-    variety: "regular",
-    exchange: "NSE",
-    tradingsymbol: symbol,
-    transaction_type: order.side,
-    quantity: order.quantity,
-    product: order.product,
-    order_type: order.orderType,
-    validity: "DAY",
-    price: order.price ?? 0,
-    trigger_price: order.triggerPrice ?? 0,
-    tag: "PI-DASHBOARD",
-  });
-  lastLiveAt = 0;
-  return result;
+  if (order.side === "BUY") {
+    const { equityMargin, marginsKnown } = await resolveEquityMargin();
+    assertBuyOrderFunds({
+      side: "BUY",
+      quantity: order.quantity,
+      estimatedPrice: estimatedOrderPrice(order, symbol),
+      equityMargin,
+      marginsKnown,
+    });
+  }
+
+  try {
+    const result = await callKiteTool("place_order", {
+      variety: "regular",
+      exchange: "NSE",
+      tradingsymbol: symbol,
+      transaction_type: order.side,
+      quantity: order.quantity,
+      product: order.product,
+      order_type: order.orderType,
+      validity: "DAY",
+      price: order.price ?? 0,
+      trigger_price: order.triggerPrice ?? 0,
+      tag: "PI-DASHBOARD",
+    });
+    lastLiveAt = 0;
+    return result;
+  } catch (error) {
+    throw annotateKiteWriteError(error);
+  }
 }
 
 /**
@@ -719,8 +803,8 @@ async function fetchKiteSnapshot(retried = false): Promise<KiteSnapshot> {
     const margins = marginsRaw as JsonObject;
     const equity = (margins.equity ?? {}) as JsonObject;
     let partialMessage = unavailable.length
-      ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Auto-refreshes every five minutes.`
-      : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Auto-refreshes every five minutes.";
+      ? `Partial Kite snapshot: holdings are live, but ${unavailable.join(", ")} temporarily unavailable. Use Refresh all to update.`
+      : "Live holdings and non-duplicated CNC equity positions from Zerodha Kite Connect. Quantities include settled, T1 and MTF shares; pledged collateral is not double-counted. Use Refresh all to update.";
     if (marginsApiFault) {
       partialMessage = "Partial Kite snapshot: the session is authenticated and holdings are live, but Zerodha's margins endpoint rejected the request. Re-authentication is not required; retry the refresh, and inspect the Kite adapter if margins remains unavailable. PDF export stays locked until margins succeeds.";
     }

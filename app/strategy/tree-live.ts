@@ -42,6 +42,8 @@ export type TreeLivePreview = {
   gtts: TreeGttPreview[];
   alerts: TreeAlertPreview[];
   fundamentals: Record<string, YfinanceFundamentals>;
+  equityMargin: number;
+  marginsKnown: boolean;
 };
 
 export type TreeLiveSources = {
@@ -49,6 +51,7 @@ export type TreeLiveSources = {
   watchlist: WatchlistSnapshot;
   yfinance: YfinanceSymbolKpis[];
   yfinanceError?: string;
+  catalogueInstruments?: TreeInstrument[];
 };
 
 function kiteLiveStatus(snapshot: KiteSnapshot): LiveValueStatus {
@@ -102,7 +105,15 @@ export function buildTreeLivePreview(
   sources: TreeLiveSources,
   extraSymbols: readonly string[] = [],
 ): TreeLivePreview {
-  const instruments = resolveTreeInstruments(sources.kite.holdings, sources.watchlist);
+  const symbols = [...new Set([
+    ...collectTreeSymbols(tree),
+    ...extraSymbols.map((item) => item.trim().toUpperCase()).filter(Boolean),
+  ])];
+  const instruments = resolveTreeInstruments(sources.kite.holdings, sources.watchlist, {
+    positions: sources.kite.positions,
+    nseSymbols: symbols,
+    catalogue: sources.catalogueInstruments,
+  });
   const yfinanceBySymbol = new Map(sources.yfinance.map((row) => [row.symbol, row]));
   const kiteStatus = kiteLiveStatus(sources.kite);
   const kpis: Record<string, TreeKpiLiveValue> = {};
@@ -112,11 +123,6 @@ export function buildTreeLivePreview(
   const universe = sources.yfinance
     .filter((row) => row.ohlcv.length > 0)
     .map((row) => ({ symbol: row.symbol, bars: row.ohlcv }));
-
-  const symbols = [...new Set([
-    ...collectTreeSymbols(tree),
-    ...extraSymbols.map((item) => item.trim().toUpperCase()).filter(Boolean),
-  ])];
 
   for (const symbol of symbols) {
     const yf = yfinanceBySymbol.get(symbol);
@@ -159,6 +165,9 @@ export function buildTreeLivePreview(
     gtts: buildTreeGttPreviews(tree, instruments),
     alerts: buildTreeAlertPreviews(tree, instruments),
     fundamentals,
+    equityMargin: sources.kite.portfolio.equityMargin,
+    marginsKnown: (sources.kite.status === "live" || sources.kite.status === "partial")
+      && !(sources.kite.unavailableSections ?? []).includes("margins"),
   };
   if (sources.kite.authUrl) preview.authUrl = sources.kite.authUrl;
   return preview;

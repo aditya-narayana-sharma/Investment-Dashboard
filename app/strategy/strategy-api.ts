@@ -1,4 +1,4 @@
-import { getKiteSnapshot } from "../kite-live-server";
+import { getKiteSnapshot, searchKiteCashInstruments } from "../kite-live-server";
 import { buildBacktestRequest } from "./backtest-request";
 import { getKiteWatchlist, unavailableWatchlist } from "./kite-watchlist";
 import { importStrategyGraphJson } from "./persist";
@@ -10,7 +10,13 @@ import {
   selectedStrategyStore,
   upsertStrategy,
 } from "./strategy-store";
-import { collectTreeSymbols } from "./tree-instruments";
+import {
+  collectTreeSymbols,
+  findTreeInstrument,
+  instrumentFromCatalogue,
+  resolveTreeInstruments,
+  type TreeInstrument,
+} from "./tree-instruments";
 import { buildTreeLivePreview, parseTreeLiveBody, parseTreeLiveKpiSymbol } from "./tree-live";
 import { buildTradingSinkPreview, listTradingSinkPreviews, stampTradingSinksUnsubmitted } from "./trading-sinks";
 import { validateStrategyGraph } from "./graph-types";
@@ -116,6 +122,21 @@ export async function handleBacktestConfigure(request: Request) {
   }
 }
 
+async function lookupKiteCatalogueInstruments(symbols: readonly string[]): Promise<TreeInstrument[]> {
+  const unique = [...new Set(symbols.map((item) => item.trim().toUpperCase()).filter(Boolean))];
+  if (!unique.length) return [];
+  const rows = await Promise.all(unique.map(async (symbol) => {
+    try {
+      const matches = await searchKiteCashInstruments(symbol, "NSE", 8);
+      const exact = matches.find((item) => item.symbol === symbol && item.exchange === "NSE" && item.series === "EQ");
+      return exact ? instrumentFromCatalogue({ symbol: exact.symbol, name: exact.name, exchange: exact.exchange }) : undefined;
+    } catch {
+      return undefined;
+    }
+  }));
+  return rows.filter((row): row is TreeInstrument => Boolean(row));
+}
+
 export async function handleTreeLivePreview(request: Request) {
   try {
     if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
@@ -128,15 +149,23 @@ export async function handleTreeLivePreview(request: Request) {
     const watchlist = kite.status === "auth_required" || kite.status === "unavailable"
       ? unavailableWatchlist("Unavailable: Kite session is missing. Holdings and watchlist are not live.", false)
       : await getKiteWatchlist();
+    const symbols = [...new Set([...collectTreeSymbols(tree), ...extraSymbols])];
+    const resolved = resolveTreeInstruments(kite.holdings, watchlist, {
+      positions: kite.positions,
+      nseSymbols: symbols,
+    });
+    const unresolved = symbols.filter((symbol) => !findTreeInstrument(resolved, symbol));
+    const kiteLive = kite.status === "live" || kite.status === "partial";
+    const catalogueInstruments = kiteLive ? await lookupKiteCatalogueInstruments(unresolved) : [];
     let yfinance = [] as Awaited<ReturnType<typeof loadYfinanceStrategyKpis>>;
     let yfinanceError: string | undefined;
     try {
-      yfinance = await loadYfinanceStrategyKpis([...new Set([...collectTreeSymbols(tree), ...extraSymbols, "RELIANCE"])]);
+      yfinance = await loadYfinanceStrategyKpis([...new Set([...symbols, "RELIANCE"])]);
     } catch (error) {
       yfinance = [];
       yfinanceError = error instanceof Error ? error.message : "yfinance strategy KPI fetch failed.";
     }
-    const preview = buildTreeLivePreview(tree, { kite, watchlist, yfinance, yfinanceError }, extraSymbols);
+    const preview = buildTreeLivePreview(tree, { kite, watchlist, yfinance, yfinanceError, catalogueInstruments }, extraSymbols);
     return Response.json(preview, { headers: JSON_HEADERS });
   } catch (error) {
     const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;

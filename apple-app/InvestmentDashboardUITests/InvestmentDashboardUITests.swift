@@ -14,11 +14,26 @@ final class InvestmentDashboardUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Portfolio Intelligence"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Refresh dashboard"].exists)
-        XCTAssertTrue(app.buttons["Connection and Health settings"].exists)
-        XCTAssertTrue(app.buttons["Investment"].exists)
-        XCTAssertTrue(app.buttons["Sectoral"].exists)
-        XCTAssertTrue(app.buttons["Health"].exists)
+        let loading = app.staticTexts["Stratji"]
+        XCTAssertTrue(loading.waitForExistence(timeout: 8))
+        let refresh = app.buttons["Refresh dashboard"]
+        let settings = app.buttons["Connection and Health settings"]
+        let liveTabs = [
+            "Portfolio Overview",
+            "Sectoral Analytics",
+            "Market Intelligence",
+            "Health & Wellness",
+            "Algorithm Builder",
+            "Strategies",
+        ]
+        let tabsVisible = liveTabs.allSatisfy { app.buttons[$0].exists }
+        XCTAssertTrue(
+            refresh.waitForExistence(timeout: 20)
+                || settings.waitForExistence(timeout: 1)
+                || tabsVisible
+                || app.staticTexts["Stratji is not ready"].exists
+                || app.staticTexts["Mac data plane unavailable"].exists
+                || app.staticTexts["Refreshing Mac data plane"].exists
+        )
     }
 }

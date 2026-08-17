@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -59,6 +61,22 @@ class FlaskGatewayTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(upstream_request.method, "POST")
         self.assertEqual(upstream_request.data, b'{"pages":[]}')
+
+    @patch("flask_gateway.urlopen")
+    def test_proxies_llm_complete_post(self, mocked_urlopen):
+        mocked_urlopen.return_value = FakeUpstream(
+            b'{"ok":true,"provider":"OpenAI","text":"draft"}',
+            headers={"Content-Type": "application/json"},
+        )
+        body = b'{"task":"composite","prompt":"top picks"}'
+        response = self.client.post("/api/llm/complete", data=body, content_type="application/json")
+        upstream_request = mocked_urlopen.call_args.args[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(upstream_request.method, "POST")
+        self.assertEqual(upstream_request.full_url, "http://127.0.0.1:3000/api/llm/complete")
+        self.assertEqual(upstream_request.data, body)
+        self.assertEqual(response.headers["X-Portfolio-Gateway"], "Flask")
 
     @patch("flask_gateway.urlopen")
     def test_health_reports_upstream_state(self, mocked_urlopen):
@@ -190,6 +208,36 @@ class FlaskGatewayTests(unittest.TestCase):
         response = self.client.post("/_health/pair/code", environ_base={"REMOTE_ADDR": "10.0.0.7"})
         self.assertEqual(response.status_code, 401)
 
+    @patch("flask_gateway.urlopen")
+    def test_lan_clients_need_pairing_token_for_private_routes(self, mocked_urlopen):
+        mocked_urlopen.return_value = FakeUpstream(b'{"holdings":[]}', headers={"Content-Type": "application/json"})
+        blocked = self.client.get("/api/kite/snapshot", environ_base={"REMOTE_ADDR": "192.168.1.40"})
+        self.assertEqual(blocked.status_code, 401)
+
+        health = self.client.get("/_flask/health", environ_base={"REMOTE_ADDR": "192.168.1.40"})
+        self.assertIn(health.status_code, {200, 503})
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", Path(directory) / "pairings.json"):
+                code = self.client.post("/_health/pair/code").get_json()["code"]
+                token = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-lan-install",
+                    "label": "LAN iPhone",
+                }, environ_base={"REMOTE_ADDR": "192.168.1.40"}).get_json()["token"]
+                allowed = self.client.get(
+                    "/api/kite/snapshot",
+                    headers={"Authorization": f"Bearer {token}"},
+                    environ_base={"REMOTE_ADDR": "192.168.1.40"},
+                )
+                self.assertEqual(allowed.status_code, 200)
+                self.client.set_cookie("stratji_device", token)
+                cookie = self.client.get(
+                    "/api/kite/snapshot",
+                    environ_base={"REMOTE_ADDR": "192.168.1.40"},
+                )
+                self.assertEqual(cookie.status_code, 200)
+
     def test_rejects_malformed_or_future_health_dates(self):
         base = {
             "schemaVersion": 1,
@@ -213,6 +261,81 @@ class FlaskGatewayTests(unittest.TestCase):
             )
         self.assertEqual(malformed.status_code, 400)
         self.assertEqual(future.status_code, 400)
+
+    def test_author_session_disabled_without_auth0_domain(self):
+        with patch.dict(os.environ, {"AUTH0_DOMAIN": ""}, clear=False):
+            response = self.client.get("/_auth/session")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "disabled")
+        self.assertFalse(response.get_json()["authenticated"])
+
+    def test_author_session_requires_verified_access_token(self):
+        env = {"AUTH0_DOMAIN": "example.auth0.com", "AUTH0_SESSION_SECRET": "test-secret"}
+        with patch.dict(os.environ, env, clear=False):
+            with patch.object(flask_gateway, "_verify_auth0_access_token", return_value=None):
+                denied = self.client.post("/_auth/session", json={"accessToken": "bad"})
+            self.assertEqual(denied.status_code, 401)
+            with patch.object(
+                flask_gateway,
+                "_verify_auth0_access_token",
+                return_value={"sub": "auth0|1", "email": "owner@example.com", "name": "Aditya"},
+            ):
+                created = self.client.post("/_auth/session", json={"accessToken": "good"})
+            self.assertEqual(created.status_code, 200)
+            self.assertEqual(created.get_json()["email"], "owner@example.com")
+            self.assertIn("HttpOnly", created.headers.get("Set-Cookie", ""))
+            session = self.client.get("/_auth/session")
+            self.assertEqual(session.status_code, 200)
+            self.assertTrue(session.get_json()["authenticated"])
+            logout = self.client.post("/_auth/logout")
+            self.assertEqual(logout.status_code, 200)
+            missing = self.client.get("/_auth/session")
+            self.assertEqual(missing.status_code, 401)
+
+    def test_startup_progress_returns_json_snapshot(self):
+        payload = {
+            "schemaVersion": 1,
+            "stage": "calendar",
+            "state": "start",
+            "label": "Refreshing Apple Calendar…",
+            "fraction": 0,
+            "completed": ["service", "kite", "mail"],
+            "failed": [],
+            "percent": 0.2727,
+            "updatedAt": "2026-08-17T19:50:00Z",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "startup-progress.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with patch.object(flask_gateway, "STARTUP_PROGRESS_PATH", path):
+                response = self.client.get("/_startup/progress")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["stage"], "calendar")
+        self.assertEqual(body["completed"], ["service", "kite", "mail"])
+        self.assertEqual(response.headers["Cache-Control"], "no-store, max-age=0")
+
+    def test_startup_progress_missing_file_is_unknown_not_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "STARTUP_PROGRESS_PATH", Path(directory) / "missing.json"):
+                response = self.client.get("/_startup/progress")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "unknown")
+
+    def test_author_session_rejects_non_author_email(self):
+        env = {
+            "AUTH0_DOMAIN": "example.auth0.com",
+            "AUTH0_AUTHOR_EMAIL": "owner@example.com",
+            "AUTH0_SESSION_SECRET": "test-secret",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch.object(
+                flask_gateway,
+                "_verify_auth0_access_token",
+                return_value={"sub": "auth0|2", "email": "other@example.com"},
+            ):
+                response = self.client.post("/_auth/session", json={"accessToken": "good"})
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

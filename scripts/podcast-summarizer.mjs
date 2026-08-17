@@ -1,3 +1,5 @@
+import { configuredCloudLlm } from "./local-llm-generate.mjs";
+
 const DEFAULT_CHUNK_CHARS = 9000;
 const MIN_TRANSCRIPT_CHARS = 200;
 
@@ -341,25 +343,29 @@ function allowedSummarizerUrl(value, allowRemote) {
  */
 export function configuredPodcastSummarizer(env = process.env, fetchImpl = fetch) {
   const model = String(env.PODCAST_SUMMARIZER_MODEL ?? "").trim();
-  if (!model) return { generate: null, model: null, reason: "PODCAST_SUMMARIZER_MODEL is not configured." };
-  const url = allowedSummarizerUrl(
-    String(env.PODCAST_SUMMARIZER_URL ?? "http://127.0.0.1:11434/api/generate"),
-    env.PODCAST_SUMMARIZER_ALLOW_REMOTE === "1",
-  );
-  if (!url) return { generate: null, model: null, reason: "Podcast summarizer URL is invalid or remote access is not explicitly allowed." };
-  return {
-    model,
-    reason: null,
-    async generate(prompt) {
-      const response = await fetchImpl(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, prompt, stream: false, format: "json", options: { temperature: 0.1 } }),
-        signal: AbortSignal.timeout(180_000),
-      });
-      if (!response.ok) throw new Error(`Local podcast summarizer returned HTTP ${response.status}`);
-      const payload = await response.json();
-      return String(payload.response ?? "");
-    },
-  };
+  if (model) {
+    const url = allowedSummarizerUrl(
+      String(env.PODCAST_SUMMARIZER_URL ?? "http://127.0.0.1:11434/api/generate"),
+      env.PODCAST_SUMMARIZER_ALLOW_REMOTE === "1",
+    );
+    if (!url) return { generate: null, model: null, reason: "Podcast summarizer URL is invalid or remote access is not explicitly allowed." };
+    return {
+      model,
+      reason: null,
+      async generate(prompt) {
+        const response = await fetchImpl(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, prompt, stream: false, format: "json", options: { temperature: 0.1 } }),
+          signal: AbortSignal.timeout(180_000),
+        });
+        if (!response.ok) throw new Error(`Local podcast summarizer returned HTTP ${response.status}`);
+        const payload = await response.json();
+        return String(payload.response ?? "");
+      },
+    };
+  }
+  const cloud = configuredCloudLlm(env, fetchImpl);
+  if (cloud.generate) return cloud;
+  return { generate: null, model: null, reason: "PODCAST_SUMMARIZER_MODEL is not configured and no Claude/OpenAI/Gemini key is present." };
 }

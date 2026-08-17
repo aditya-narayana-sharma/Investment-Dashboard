@@ -10,13 +10,33 @@ import { sortDonutHoldings } from "./portfolio-donut";
 import type { ContentDigestSnapshot, MailRecommendation } from "./content-types";
 import type { EarningsSnapshot } from "./earnings-live-types";
 import type { DashboardRefreshResult, SourceFreshness } from "./dashboard-types";
+import {
+  mergeBenchmarkSnapshot,
+  mergeContentSnapshot,
+  mergeEarningsSnapshot,
+  mergeHealthSnapshot,
+  mergeKiteSnapshot,
+  mergeSectorMarketSnapshot,
+  mergeSectorNewsSnapshot,
+  mergeSourceFreshness,
+  mergeYfinanceQuotes,
+  retainHealthOnFailure,
+  retainKiteOnFailure,
+} from "./dashboard-refresh-merge";
 import { kiteAuthPresentation } from "./kite-auth-presentation";
 import { sanitizeKiteStatusNote } from "./kite-status-note";
 import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseStrategiesSection, workspaceFromPageSearch } from "./dashboard/workspace-routing";
+import {
+  applyCanonicalAppUrl,
+  appViewFromPageSearch,
+  detectNativeChrome,
+  parseBuilderSection,
+  parseStrategiesSection,
+  type AppView,
+} from "./dashboard/workspace-routing";
 import {
   analysisWindowLabel,
   buildExposureDrivers,
@@ -27,20 +47,27 @@ import {
   latestCompletedHealthDateKey,
   missingHealthDateKeys,
 } from "./dashboard/utils";
-import { AppearanceToggle, DashboardTabs, HealthIncognitoToggle, type DashboardAppearance } from "./dashboard/shared-ui";
-import { PulseConstellation } from "./dashboard/visual-components";
+import { DashboardTabs, DemoCaptionBar, type DashboardAppearance } from "./dashboard/shared-ui";
+import { PulseConstellation, resolveSourceWorkspace } from "./dashboard/visual-components";
 import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
 import { HealthWorkspace } from "./dashboard/HealthWorkspace";
 import { BuilderWorkspace } from "./dashboard/BuilderWorkspace";
 import { StrategiesWorkspace } from "./dashboard/StrategiesWorkspace";
+import { IntegrationsWorkspace } from "./dashboard/IntegrationsWorkspace";
+import { LicenseGate } from "./dashboard/LicenseGate";
+import { coercePublicLicense, featureForWorkspace, tierAllows, type PublicLicense } from "./license";
+import { useLicenseSnapshot } from "./license-snapshot";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
 
 type HomeSearchParams = {
   view?: string | string[];
   section?: string | string[];
+  page?: string | string[];
+  nativeChrome?: string | string[];
+  native?: string | string[];
 };
 
 class WorkspaceRenderGuard extends Component<{ label: string; children: ReactNode }, { message: string | null }> {
@@ -67,14 +94,51 @@ class WorkspaceRenderGuard extends Component<{ label: string; children: ReactNod
   }
 }
 
+function defaultKiteAuthStatus(status: KiteSnapshot["status"]): KiteAuthStatus {
+  switch (status) {
+    case "live":
+    case "partial":
+      return "authenticated";
+    case "auth_required":
+      return "unauthenticated";
+    case "snapshot":
+      return "unknown";
+    case "unavailable":
+      return "unavailable";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function withKiteAuth(data: KiteSnapshot): KiteSnapshot {
+  return {
+    ...data,
+    message: sanitizeKiteStatusNote(data.message),
+    authStatus: data.authStatus ?? defaultKiteAuthStatus(data.status),
+  };
+}
+
 export default function Home({ searchParams: searchParamsProp }: { searchParams?: HomeSearchParams } = {}) {
   const searchParams = useSearchParams();
-  const [workspace, setWorkspace] = useState<WorkspaceKey>(() => (
-    workspaceFromPageSearch(
+  const [appView, setAppView] = useState<AppView>(() => (
+    appViewFromPageSearch(
       { view: searchParams.get("view") ?? (Array.isArray(searchParamsProp?.view) ? searchParamsProp.view[0] : searchParamsProp?.view) },
       typeof window !== "undefined" ? window.location.search : null,
     )
   ));
+  const workspace: WorkspaceKey = appView === "integrations" ? "investment" : appView;
+  const nativeChrome = detectNativeChrome({
+    searchParams: {
+      nativeChrome: searchParams.get("nativeChrome")
+        ?? (Array.isArray(searchParamsProp?.nativeChrome) ? searchParamsProp.nativeChrome[0] : searchParamsProp?.nativeChrome),
+      native: searchParams.get("native")
+        ?? (Array.isArray(searchParamsProp?.native) ? searchParamsProp.native[0] : searchParamsProp?.native),
+    },
+    locationSearch: typeof window !== "undefined" ? window.location.search : null,
+    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+  });
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
   const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
@@ -85,7 +149,8 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const [earningsError, setEarningsError] = useState("");
   const [healthSnapshot, setHealthSnapshot] = useState<HealthLiveSnapshot>(fallbackHealth);
   const [healthError, setHealthError] = useState("");
-  const [refreshing, setRefreshing] = useState(true);
+  const [refreshing, setRefreshing] = useState(() => !nativeChrome);
+  const [stayMounted, setStayMounted] = useState(false);
   const [sourceFreshness, setSourceFreshness] = useState<SourceFreshness[]>([]);
   const [portfolioRisk, setPortfolioRisk] = useState("ICICIBANK");
   const [axisRisk, setAxisRisk] = useState("RSYSTEMS");
@@ -94,13 +159,22 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const [appearanceHydrated, setAppearanceHydrated] = useState(false);
   const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
   const [clockMs, setClockMs] = useState(0);
+  const demoMode = searchParams.get("demo") === "1";
+  const isIntegrationsChrome = appView === "integrations";
+  const showWorkspaceShell = !isIntegrationsChrome;
   const [sectorMarket, setSectorMarket] = useState<SectorMarketSnapshot>(() => emptySectorSnapshot("pharma"));
   const [sectorMarketById, setSectorMarketById] = useState<Record<string, SectorMarketSnapshot>>({});
   const [sectorNews, setSectorNews] = useState<SectorNewsSnapshot>(() => emptySectorNewsSnapshot());
   const [sectorBenchmarks, setSectorBenchmarks] = useState<SectorBenchmarkSnapshot>(emptyBenchmarkSnapshot);
   const [yfinanceBySymbol, setYfinanceBySymbol] = useState<Map<string, number>>(new Map());
+  const { license, setLicense } = useLicenseSnapshot();
   const selectedSectorRef = useRef<string[]>([]);
+  const sectorMarketByIdRef = useRef<Record<string, SectorMarketSnapshot>>({});
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const startupRefreshCompletedRef = useRef(false);
+  const autoRefreshStartedRef = useRef(false);
+  const hasUsableSectorMarket = isUsableSectorMarketStatus(sectorMarket.status)
+    || Object.values(sectorMarketById).some((item) => isUsableSectorMarketStatus(item.status));
   const { asOf } = snapshot;
   const isLive = snapshot.status === "live";
   const isPartial = snapshot.status === "partial";
@@ -246,7 +320,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         for (const entries of settled) {
           for (const [symbol, price] of entries) next.set(symbol, price);
         }
-        setYfinanceBySymbol(next);
+        setYfinanceBySymbol((current) => mergeYfinanceQuotes(current, next));
       } catch {
         // Retain prior quotes on transient failure; never invent prices.
       }
@@ -303,7 +377,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   }, [portfolioRiskProfiles, snapshot.holdings]);
 
   const applyHealthSnapshot = useCallback((data: HealthLiveSnapshot) => {
-    setHealthSnapshot(data);
+    setHealthSnapshot((current) => mergeHealthSnapshot(current, data));
     setHealthError("");
   }, []);
 
@@ -320,20 +394,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         if (!response.ok) throw new Error(data.message || `Kite refresh returned ${response.status}`);
         // Harden older/partial payloads that omit authStatus so the UI cannot
         // keep claiming Authenticated from a bare `status: "live"` cache.
-        setSnapshot({
-          ...data,
-          message: sanitizeKiteStatusNote(data.message),
-          authStatus: data.authStatus
-            ?? (data.status === "live"
-              ? "authenticated"
-              : data.status === "partial"
-                ? "authenticated"
-                : data.status === "auth_required"
-                  ? "unauthenticated"
-                  : data.status === "snapshot"
-                    ? "unknown"
-                    : "unavailable"),
-        });
+        setSnapshot((current) => mergeKiteSnapshot(current, withKiteAuth(data)));
         return;
       } catch (error) {
         lastError = error;
@@ -343,22 +404,22 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
 
     // Downgrade live/partial → snapshot + unknown auth so a failed refresh cannot
     // leave the "Kite authenticated" badge stuck on after the session dies.
-    setSnapshot((current) => current.status === "live" || current.status === "partial" || current.status === "snapshot"
-      ? {
-          ...current,
-          status: "snapshot",
-          authStatus: "unknown",
-          message: sanitizeKiteStatusNote(current.message),
-        }
-      : { ...emptySnapshot, message: lastError instanceof Error ? lastError.message : "Could not load live Kite data." });
+    setSnapshot((current) => retainKiteOnFailure(
+      current,
+      lastError instanceof Error ? lastError.message : "Could not load live Kite data.",
+    ));
   }, []);
+
+  const refreshKiteAfterTrade = useCallback(async () => {
+    await loadKite();
+  }, [loadKite]);
 
   const loadContent = useCallback(async () => {
     try {
       const response = await fetch(`/api/content/refresh?force=1&refresh=${Date.now()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Content refresh returned ${response.status}`);
       const data = await response.json() as ContentDigestSnapshot;
-      setContent(data);
+      setContent((current) => mergeContentSnapshot(current, data));
       setContentError("");
     } catch (error) {
       setContentError(error instanceof Error ? error.message : "Mail and Podcasts refresh failed.");
@@ -370,12 +431,11 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       const response = await fetch(`/api/earnings/snapshot?refresh=${Date.now()}`, { cache: "no-store" });
       const data = await response.json() as EarningsSnapshot;
       if (!response.ok || !Array.isArray(data.events)) throw new Error(data.message || `Earnings refresh returned ${response.status}`);
-      setEarningsSnapshot(data);
+      setEarningsSnapshot((current) => mergeEarningsSnapshot(current, data));
       setEarningsError("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Earnings refresh failed.";
       setEarningsError(message);
-      setEarningsSnapshot((current) => ({ ...current, status: "stale", message: `${current.message} Latest refresh failed: ${message}` }));
     }
   }, []);
 
@@ -385,8 +445,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       const data = await response.json() as HealthLiveSnapshot & { message?: string };
       if (!response.ok) {
         if (response.status === 404) {
-          setHealthSnapshot(fallbackHealth);
-          setHealthError("");
+          setHealthSnapshot((current) => mergeHealthSnapshot(current, fallbackHealth));
           return;
         }
         throw new Error(data.message || `Health sync returned ${response.status}`);
@@ -395,13 +454,10 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       applyHealthSnapshot(data);
     } catch (error) {
       setHealthError(error instanceof Error ? error.message : "HealthKit sync is unavailable.");
-      setHealthSnapshot((current) => ({
-        ...current,
-        status: "stale",
-        message: current === fallbackHealth
-          ? fallbackHealth.message
-          : "The latest HealthKit refresh failed; retaining the last validated snapshot.",
-      }));
+      setHealthSnapshot((current) => retainHealthOnFailure(
+        current,
+        error instanceof Error ? error.message : "HealthKit sync is unavailable.",
+      ));
     }
   }, [applyHealthSnapshot]);
 
@@ -410,22 +466,32 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       const response = await fetch(`/api/sectors/snapshot?sector=${encodeURIComponent(sectorId)}&refresh=${Date.now()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Sector refresh returned ${response.status}`);
       const data = await response.json() as SectorMarketSnapshot;
-      setSectorMarketById((current) => ({ ...current, [data.sectorId]: data }));
+      setSectorMarketById((current) => {
+        const next = { ...current, [data.sectorId]: mergeSectorMarketSnapshot(current[data.sectorId], data) };
+        sectorMarketByIdRef.current = next;
+        return next;
+      });
       const primary = selectedSectorRef.current[selectedSectorRef.current.length - 1];
       if (primary) {
-        if (data.sectorId === primary) setSectorMarket(data);
+        if (data.sectorId === primary) {
+          setSectorMarket((existing) => mergeSectorMarketSnapshot(existing.sectorId === primary ? existing : sectorMarketByIdRef.current[primary], data));
+        }
         return;
       }
       // Unfiltered S-2: keep any usable snapshot for header context; never let a late failure wipe live quotes.
-      if (isUsableSectorMarketStatus(data.status)) {
-        setSectorMarket((existing) => (existing.status === "live" && data.status !== "live" ? existing : data));
-      }
+      setSectorMarket((existing) => mergeSectorMarketSnapshot(existing, data));
     } catch (error) {
       const failed = { ...emptySectorSnapshot(sectorId), message: error instanceof Error ? error.message : "Sector market refresh failed." };
-      setSectorMarketById((current) => ({ ...current, [sectorId]: failed }));
+      setSectorMarketById((current) => {
+        const next = { ...current, [sectorId]: mergeSectorMarketSnapshot(current[sectorId], failed) };
+        sectorMarketByIdRef.current = next;
+        return next;
+      });
       const primary = selectedSectorRef.current[selectedSectorRef.current.length - 1];
       // Only pin failures onto the header when that industry is explicitly selected.
-      if (primary && sectorId === primary) setSectorMarket(failed);
+      if (primary && sectorId === primary) {
+        setSectorMarket((existing) => mergeSectorMarketSnapshot(existing, failed));
+      }
     }
   }, []);
 
@@ -436,21 +502,12 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       if (!response.ok || !Array.isArray(data.items) || !Array.isArray(data.sources)) {
         throw new Error(data.message || `Sector news refresh returned ${response.status}`);
       }
-      setSectorNews(data);
+      setSectorNews((current) => mergeSectorNewsSnapshot(current, data));
     } catch (error) {
-      setSectorNews((current) => {
-        if (current.items.length) {
-          return {
-            ...current,
-            status: current.status === "unavailable" ? "partial" : current.status,
-            message: `${current.message} Latest refresh failed: ${error instanceof Error ? error.message : String(error)}`,
-          };
-        }
-        return {
-          ...emptySectorNewsSnapshot(),
-          message: error instanceof Error ? error.message : "Sector news refresh failed.",
-        };
-      });
+      setSectorNews((current) => mergeSectorNewsSnapshot(current, {
+        ...emptySectorNewsSnapshot(),
+        message: error instanceof Error ? error.message : "Sector news refresh failed.",
+      }));
     }
   }, []);
 
@@ -460,28 +517,20 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       if (!response.ok) throw new Error(`Benchmark refresh returned ${response.status}`);
       const data = await response.json() as SectorBenchmarkSnapshot;
       if (!Array.isArray(data.indices)) throw new Error("Benchmark refresh returned an invalid snapshot");
-      setSectorBenchmarks(data);
+      setSectorBenchmarks((current) => mergeBenchmarkSnapshot(current, data));
     } catch (error) {
-      setSectorBenchmarks((current) => {
-        if (current.indices.some((index) => index.level !== null || index.indexedHistory.length)) {
-          return {
-            ...current,
-            status: current.status === "unavailable" ? "cached" : current.status,
-            message: `${current.message} Latest dedicated benchmark refresh failed: ${error instanceof Error ? error.message : String(error)}`,
-          };
-        }
-        return {
-          ...emptyBenchmarkSnapshot(),
-          message: error instanceof Error ? error.message : "Benchmark refresh failed.",
-        };
-      });
+      setSectorBenchmarks((current) => mergeBenchmarkSnapshot(current, {
+        ...emptyBenchmarkSnapshot(),
+        message: error instanceof Error ? error.message : "Benchmark refresh failed.",
+      }));
     }
   }, []);
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (forceContent = false, options?: { silent?: boolean }) => {
     if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const silent = options?.silent === true;
     const run = (async () => {
-      setRefreshing(true);
+      if (!silent) setRefreshing(true);
       // Surface Kite, S-2 yfinance quotes, S-3 benchmarks, and sector news quickly;
       // the bundled refresh can wait on Mail/content.
       const kiteEarly = loadKite();
@@ -498,30 +547,37 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       );
       try {
         try {
-          const response = await fetch(`/api/dashboard/refresh?refresh=${Date.now()}`, {
+          const params = new URLSearchParams({ refresh: String(Date.now()) });
+          if (forceContent) params.set("force", "1");
+          const response = await fetch(`/api/dashboard/refresh?${params.toString()}`, {
             cache: "no-store",
-            signal: AbortSignal.timeout(90_000),
+            signal: AbortSignal.timeout(forceContent ? 300_000 : 90_000),
           });
           const result = await response.json() as DashboardRefreshResult;
           if (!response.ok) throw new Error(`Complete refresh returned ${response.status}`);
-          setSourceFreshness(result.sources);
+          setSourceFreshness((current) => mergeSourceFreshness(current, result.sources));
           if (result.kite) {
-            setSnapshot({
-              ...result.kite,
-              message: sanitizeKiteStatusNote(result.kite.message),
-            });
+            setSnapshot((current) => mergeKiteSnapshot(current, withKiteAuth(result.kite)));
           }
-          if (result.content) { setContent(result.content); setContentError(""); }
-          if (result.earnings) { setEarningsSnapshot(result.earnings); setEarningsError(""); }
+          if (result.content) {
+            setContent((current) => mergeContentSnapshot(current, result.content));
+            setContentError("");
+          }
+          if (result.earnings) {
+            setEarningsSnapshot((current) => mergeEarningsSnapshot(current, result.earnings));
+            setEarningsError("");
+          }
           if (result.health) applyHealthSnapshot(result.health);
-          if (result.benchmarks) setSectorBenchmarks(result.benchmarks);
+          if (result.benchmarks) setSectorBenchmarks((current) => mergeBenchmarkSnapshot(current, result.benchmarks));
         } catch (error) {
           setContentError(error instanceof Error ? error.message : "Complete refresh failed; source adapters are retrying.");
           await Promise.allSettled([kiteEarly, benchmarksEarly, sectorNewsEarly, loadContent(), loadEarnings(), loadHealth(), loadBenchmarks()]);
         }
         await Promise.allSettled([kiteEarly, healthEarly, benchmarksEarly, sectorNewsEarly, primarySectorEarly, allSectorsEarly]);
       } finally {
-        setRefreshing(false);
+        if (!silent) setRefreshing(false);
+        setStayMounted(true);
+        startupRefreshCompletedRef.current = true;
         refreshInFlightRef.current = null;
       }
     })();
@@ -530,7 +586,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   }, [applyHealthSnapshot, loadBenchmarks, loadContent, loadEarnings, loadHealth, loadKite, loadSectorMarket, loadSectorNews]);
 
   const selectWorkspace = useCallback((next: WorkspaceKey, historyMode: "push" | "replace" = "push") => {
-    setWorkspace(next);
+    setAppView(next);
     const url = new URL(window.location.href);
     url.searchParams.set("view", next);
     if (next === "builder") {
@@ -540,6 +596,8 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       url.searchParams.set("section", parseStrategiesSection(url.searchParams.get("section")));
       url.searchParams.delete("page");
       url.searchParams.delete("tree");
+    } else {
+      url.searchParams.delete("section");
     }
     window.history[historyMode === "push" ? "pushState" : "replaceState"]({ view: next }, "", url);
   }, []);
@@ -552,7 +610,12 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       selectedSectorRef.current = next;
       const primary = next[next.length - 1];
       if (primary) {
-        setSectorMarket((existing) => existing.sectorId === primary ? existing : emptySectorSnapshot(primary));
+        setSectorMarket((existing) => {
+          if (existing.sectorId === primary && isUsableSectorMarketStatus(existing.status)) return existing;
+          const retained = sectorMarketByIdRef.current[primary];
+          if (retained && isUsableSectorMarketStatus(retained.status)) return retained;
+          return existing;
+        });
         void loadSectorMarket(primary);
       } else {
         void Promise.allSettled(Object.keys(sectorCompanies).map((id) => loadSectorMarket(id)));
@@ -572,15 +635,28 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     const fromUrl = () => {
       const url = new URL(window.location.href);
       const value = url.searchParams.get("view");
-      const { view: next, rewritten } = applyCanonicalWorkspaceUrl(url);
-      setWorkspace(next);
-      if (value === "market-intelligence" || value === "algorithm-canvas" || value === "strategy-library" || rewritten) {
+      const { appView: next, rewritten } = applyCanonicalAppUrl(url);
+      setAppView(next);
+      if (
+        value === "market-intelligence"
+        || value === "algorithm-canvas"
+        || value === "strategy-library"
+        || value === "portfolio"
+        || value === "portfolio-overview"
+        || value === "settings"
+        || rewritten
+      ) {
         window.history.replaceState({ view: next }, "", url);
       }
     };
     fromUrl();
     window.addEventListener("popstate", fromUrl);
-    return () => window.removeEventListener("popstate", fromUrl);
+    (window as Window & { __stratjiApplyNativeRoute?: () => void }).__stratjiApplyNativeRoute = fromUrl;
+    return () => {
+      window.removeEventListener("popstate", fromUrl);
+      const holder = window as Window & { __stratjiApplyNativeRoute?: () => void };
+      if (holder.__stratjiApplyNativeRoute === fromUrl) delete holder.__stratjiApplyNativeRoute;
+    };
   }, []);
 
   useEffect(() => {
@@ -598,6 +674,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem("dashboard-appearance");
       if (stored === "black" || stored === "dark" || stored === "sepia") setAppearance(stored);
+      setHealthIncognito(window.localStorage.getItem("dashboard-health-incognito") === "1");
       setAppearanceHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -610,46 +687,121 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   }, [appearance, appearanceHydrated]);
 
   useEffect(() => {
-    const initial = window.setTimeout(() => void refreshAll(), 0);
-    const interval = window.setInterval(() => void refreshAll(), 5 * 60 * 1000);
-    const refreshWhenActive = () => {
-      if (document.visibilityState === "visible") void refreshAll();
+    if (!appearanceHydrated) return;
+    window.localStorage.setItem("dashboard-health-incognito", healthIncognito ? "1" : "0");
+  }, [appearanceHydrated, healthIncognito]);
+
+  useEffect(() => {
+    const onPreferences = (event: Event) => {
+      const detail = (event as CustomEvent<{ appearance?: string; healthIncognito?: boolean }>).detail;
+      if (detail?.appearance === "black" || detail?.appearance === "dark" || detail?.appearance === "sepia") {
+        setAppearance(detail.appearance);
+      }
+      if (typeof detail?.healthIncognito === "boolean") setHealthIncognito(detail.healthIncognito);
     };
-    document.addEventListener("visibilitychange", refreshWhenActive);
-    window.addEventListener("focus", refreshWhenActive);
-    window.addEventListener("online", refreshWhenActive);
-    window.addEventListener("portfolio-native-refresh", refreshWhenActive);
+    window.addEventListener("stratji-preferences-changed", onPreferences);
+    return () => window.removeEventListener("stratji-preferences-changed", onPreferences);
+  }, []);
+
+  useEffect(() => {
+    if (!demoMode) {
+      delete document.documentElement.dataset.demo;
+      return;
+    }
+    document.documentElement.dataset.demo = "1";
     return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshWhenActive);
-      window.removeEventListener("focus", refreshWhenActive);
-      window.removeEventListener("online", refreshWhenActive);
-      window.removeEventListener("portfolio-native-refresh", refreshWhenActive);
+      delete document.documentElement.dataset.demo;
+      delete document.documentElement.dataset.demoCaption;
     };
-  }, [refreshAll]);
+  }, [demoMode]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("native-chrome-embed", nativeChrome);
+    if (nativeChrome) document.documentElement.dataset.nativeChrome = "1";
+    else delete document.documentElement.dataset.nativeChrome;
+    return () => {
+      document.documentElement.classList.remove("native-chrome-embed");
+      delete document.documentElement.dataset.nativeChrome;
+    };
+  }, [nativeChrome]);
+
+  useEffect(() => {
+    document.title = isIntegrationsChrome ? "Settings" : "Portfolio Intelligence";
+    return () => {
+      document.title = "Portfolio Intelligence";
+    };
+  }, [isIntegrationsChrome]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/license", { cache: "no-store" })
+      .then((response) => response.json() as Promise<PublicLicense>)
+      .then((payload) => {
+        const next = coercePublicLicense(payload);
+        if (!cancelled && next) setLicense(next);
+      })
+      .catch(() => {
+        /* Keep the SSR snapshot. Never flash Basic over author Ultra. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setLicense]);
+
+  useEffect(() => {
+    if (demoMode && (appView === "health" || appView === "integrations")) selectWorkspace("investment", "replace");
+  }, [demoMode, appView, selectWorkspace]);
+
+  useEffect(() => {
+    if (isIntegrationsChrome) return;
+    const onUserRefresh = () => {
+      void refreshAll(true);
+    };
+    window.addEventListener("portfolio-native-refresh", onUserRefresh);
+
+    if (autoRefreshStartedRef.current) {
+      return () => window.removeEventListener("portfolio-native-refresh", onUserRefresh);
+    }
+    autoRefreshStartedRef.current = true;
+
+    if (nativeChrome) {
+      // Splash already ran the complete refresh. Hydrate React from that snapshot
+      // without the "Refreshing complete dashboard" banner or another force=1 pass.
+      void refreshAll(false, { silent: true });
+    } else if (!startupRefreshCompletedRef.current) {
+      void refreshAll(true);
+    }
+
+    return () => window.removeEventListener("portfolio-native-refresh", onUserRefresh);
+  }, [isIntegrationsChrome, nativeChrome, refreshAll]);
+
+  const pdfAllowed = tierAllows(license.tier, "pdf") || license.author;
+  const showPdfLink = pdfAllowed || license.source !== "default";
+  const pdfHref = pdfAllowed ? "/report?export=1" : "/?view=integrations";
+  const pdfLabel = pdfAllowed ? "Generate Report PDF" : "PDF is Pro";
 
   return (
-    <main className="dashboard-app">
-      <a className="skip-link" href="#dashboard-workspace-panel">Skip to workspace content</a>
+    <main className={`dashboard-app${demoMode ? " demo-mode" : ""}${nativeChrome ? " native-chrome" : ""}${isIntegrationsChrome ? " chrome-page" : ""}`} data-native-chrome={nativeChrome ? "1" : undefined} data-chrome-page={isIntegrationsChrome ? "integrations" : undefined} data-license-tier={license.tier} data-license-source={license.source}>
+      {showWorkspaceShell && !nativeChrome && <a className="skip-link" href="#dashboard-workspace-panel">Skip to workspace content</a>}
+      {showWorkspaceShell && !nativeChrome && (
       <header className="masthead">
         <div>
           <div className="eyebrow">PORTFOLIO INTELLIGENCE</div>
           <h1>Investment Brief</h1>
           <p>Quarter outlook, oil/geopolitical exposure, flows and analyst positioning</p>
         </div>
-        <div className="status-panel">
-          <div><Activity size={16}/><span>Kite snapshot</span><b className={snapshot.status}>{isLive ? "Live" : isPartial ? "Partial" : isSnapshot ? "Snapshot" : snapshot.status === "auth_required" ? "Authenticate" : "Unavailable"}</b></div>
-          <small>As of {asOf}</small>
-          <AppearanceToggle value={appearance} onChange={setAppearance}/>
-          <HealthIncognitoToggle active={healthIncognito} onChange={setHealthIncognito}/>
-          <a href="/report?export=1"><FileText size={15}/> Export Report</a>
-        </div>
+        {showPdfLink && (
+          <div className="masthead-actions">
+            <a className="masthead-pdf" href={pdfHref}><FileText size={15}/> {pdfLabel}</a>
+          </div>
+        )}
       </header>
-
-      <section className={`live-feed-banner ${snapshot.status}`}>
-        <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite snapshot" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{sanitizeKiteStatusNote(snapshot.message)}</small></span></div>
+      )}
+      {showWorkspaceShell && !nativeChrome && <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status} hideHealth={demoMode} licenseTier={license.tier}/>}
+      {showWorkspaceShell && <section className={`live-feed-banner ${snapshot.status}`}>
+        <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite data" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{sanitizeKiteStatusNote(snapshot.message)}</small></span></div>
         <div className="live-feed-actions">
+          {nativeChrome && showPdfLink && <a className="masthead-pdf" href={pdfHref}><FileText size={15}/> {pdfLabel}</a>}
           {kiteAuthControl === "authenticated"
             ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
             : kiteAuthControl === "partial"
@@ -657,25 +809,38 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
               : kiteAuthControl === "authenticate" && showAuthAction
                 ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
                 : kiteAuthControl === "cached"
-                  ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
+                  ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing retained Kite data; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
                   : <button className="kite-auth-control unavailable" type="button" disabled title="Kite is unavailable; inspect the displayed source failure before attempting authentication"><Activity size={15}/><span>Kite unavailable</span></button>}
           {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
-          <button onClick={()=>void refreshAll()} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
-          <em>All sources · 5 min</em>
+          <button onClick={()=>void refreshAll(true)} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
+          <em>On request</em>
         </div>
-      </section>
-      {sourceFreshness.length > 0 && (
+      </section>}
+      {showWorkspaceShell && sourceFreshness.length > 0 && (
         <PulseConstellation
-          sources={sourceFreshness}
-          onNavigate={(next) => selectWorkspace(next)}
+          sources={demoMode ? sourceFreshness.filter((source) => resolveSourceWorkspace(source.source) !== "health") : sourceFreshness}
+          onNavigate={(next) => {
+            if (demoMode && next === "health") return;
+            selectWorkspace(next);
+          }}
         />
       )}
 
-      <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status}/>
+      {showWorkspaceShell && demoMode && <DemoCaptionBar />}
 
-      <section id="dashboard-workspace-panel" className="workspace-panel" role="tabpanel" aria-labelledby={`workspace-tab-${workspace}`}>
+      <section
+        id="dashboard-workspace-panel"
+        className="workspace-panel"
+        role={nativeChrome || isIntegrationsChrome ? "region" : "tabpanel"}
+        aria-labelledby={isIntegrationsChrome ? "integrations-chrome-heading" : nativeChrome ? undefined : `workspace-tab-${workspace}`}
+        aria-label={nativeChrome ? "Workspace content" : undefined}
+      >
 
-      {workspace === "investment" && <InvestmentWorkspace
+      {isIntegrationsChrome && <IntegrationsWorkspace showDashboardExit={!nativeChrome} />}
+
+      {showWorkspaceShell && (workspace === "investment" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "investment"} data-workspace="investment">
+      <InvestmentWorkspace
         snapshot={snapshot}
         content={content}
         view={view}
@@ -702,30 +867,51 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         currentBySymbol={axisCompleteCurrentBySymbol}
         kiteBySymbol={kiteBySymbol}
         yfinanceBySymbol={yfinanceBySymbol}
-        onKiteRefresh={loadKite}
-      />}
+        onKiteRefresh={refreshKiteAfterTrade}
+      />
+      </div>
+      )}
 
-      {workspace === "sectors" && <SectorsWorkspace
+      {showWorkspaceShell && (workspace === "sectors" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "sectors"} data-workspace="sectors">
+      <SectorsWorkspace
         selectedSectorIds={selectedSectorIds}
         onToggleSector={toggleSector}
         sectorMarket={sectorMarket}
         sectorMarketById={sectorMarketById}
         sectorNews={sectorNews}
-        sectorMarketsLoading={refreshing || Object.keys(sectorMarketById).length < Object.keys(sectorCompanies).length}
+        sectorMarketsLoading={!hasUsableSectorMarket}
         holdings={snapshot.holdings}
         benchmarks={sectorBenchmarks}
-      />}
+        s3Locked={!tierAllows(license.tier, "sectorsS3")}
+        license={license}
+      />
+      </div>
+      )}
 
-      {workspace === "intelligence" && <IntelligenceWorkspace
+      {showWorkspaceShell && (workspace === "intelligence" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "intelligence"} data-workspace="intelligence">
+      {tierAllows(license.tier, featureForWorkspace("intelligence"))
+        ? (
+      <IntelligenceWorkspace
         content={content}
         contentError={contentError}
         mailWindow={mailWindow}
         earningsSnapshot={earningsSnapshot}
         earningsError={earningsError}
         holdings={snapshot.holdings}
-      />}
+      />
+        )
+        : <LicenseGate feature="intelligence" license={license} title="Market Intelligence" />}
+      </div>
+      )}
 
-      {workspace === "health" && <HealthWorkspace
+      {showWorkspaceShell && !demoMode && (workspace === "health" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "health"} data-workspace="health">
+      {tierAllows(license.tier, featureForWorkspace("health"))
+        ? (
+      <HealthWorkspace
+        active={workspace === "health"}
         healthIncognito={healthIncognito}
         setHealthIncognito={setHealthIncognito}
         healthSnapshot={healthSnapshot}
@@ -735,15 +921,33 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         healthMissingDates={healthMissingDates}
         healthNote={content.healthNote}
         healthNoteSource={content.sources.healthNote}
-      />}
+      />
+        )
+        : <LicenseGate feature="health" license={license} title="Health & Wellness" />}
+      </div>
+      )}
 
-      {workspace === "builder" && <WorkspaceRenderGuard label="Algorithm Builder"><BuilderWorkspace /></WorkspaceRenderGuard>}
+      {showWorkspaceShell && (workspace === "builder" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "builder"} data-workspace="builder">
+      {tierAllows(license.tier, featureForWorkspace("builder"))
+        ? <WorkspaceRenderGuard label="Algorithm Builder"><BuilderWorkspace /></WorkspaceRenderGuard>
+        : <LicenseGate feature="builder" license={license} title="Algorithm Canvas" />}
+      </div>
+      )}
 
-      {workspace === "strategies" && <WorkspaceRenderGuard label="Strategies"><StrategiesWorkspace /></WorkspaceRenderGuard>}
+      {showWorkspaceShell && (workspace === "strategies" || stayMounted) && (
+      <div className="workspace-mount" hidden={workspace !== "strategies"} data-workspace="strategies">
+      {tierAllows(license.tier, featureForWorkspace("strategies"))
+        ? <WorkspaceRenderGuard label="Strategies"><StrategiesWorkspace /></WorkspaceRenderGuard>
+        : <LicenseGate feature="strategies" license={license} title="Strategies" />}
+      </div>
+      )}
 
       </section>
 
-      <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice. Kite orders, GTTs/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite snapshot: ${asOf}` : "Kite values unavailable"} · All refresh-capable sources refresh on open, focus and every five minutes · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>
+      {isIntegrationsChrome
+        ? <footer className="integrations-chrome-footer"><p>Settings / Integrations — Stratji chrome, not a workspace. Secrets stay on this Mac. Writes need confirmation. Live strategy execution is only via Zerodha Streak.</p></footer>
+        : <footer><p>Educational portfolio research and private wellness tracking. Not investment or medical advice. Kite orders, GTTs/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation.</p><p>{isLive ? `Live Kite values: ${asOf}` : isPartial ? `Partial Kite values: ${asOf}` : isSnapshot ? `Kite data: ${asOf}` : "Kite values unavailable"} · Sources keep the last validated snapshot until Refresh all · {healthIncognito ? "Health statistics hidden by Incognito." : `HealthKit data through ${healthSnapshot.dataDate} · ${healthSnapshot.targetLabel ?? "operational target"} · ${healthSnapshot.status}.`}</p></footer>}
     </main>
   );
 }

@@ -16,12 +16,14 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var lastSuccessfulLoad: Date?
     @Published private(set) var currentWorkspace: DashboardWorkspace = .investment
+    @Published private(set) var currentDestinationID: String = DashboardOutline.defaultDestination.id
 #if os(iOS)
     @Published var shareURL: URL?
 #endif
 
     private(set) lazy var webView: WKWebView = makeWebView()
     private var requestedURL: URL?
+    private var pendingDestination: DashboardDestination?
     private var downloadDestination: URL?
 
     var hasLastLoadedDashboard: Bool {
@@ -29,8 +31,26 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
     }
 
     func load(baseURL: URL, workspace: DashboardWorkspace, force: Bool = false) {
-        currentWorkspace = workspace
-        load(workspace.dashboardURL(baseURL: baseURL), force: force)
+        load(baseURL: baseURL, destination: DashboardOutline.defaultDestination(forView: workspace.rawValue), force: force)
+    }
+
+    func load(baseURL: URL, destination: DashboardDestination, force: Bool = false) {
+        let target = destination.clickTarget
+        currentWorkspace = DashboardWorkspace(rawValue: target.view) ?? .investment
+        currentDestinationID = target.id
+        pendingDestination = target
+        let url = target.url(baseURL: baseURL, nativeChrome: true)
+        NSLog("[Stratji] webView.load destination=%@ url=%@", target.id, url.absoluteString)
+        applyDeviceCookie(for: baseURL)
+        if !force, canReuseHydratedDashboard(url) {
+            requestedURL = url
+            errorMessage = nil
+            isLoading = false
+            DashboardNativeRoute.apply(in: webView, url: url, destination: target)
+            return
+        }
+        load(url, force: force)
+        DashboardNativeRoute.apply(in: webView, url: url, destination: target)
     }
 
     func load(_ url: URL, force: Bool = false) {
@@ -38,8 +58,16 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         requestedURL = url
         errorMessage = nil
         isLoading = true
-        let policy: URLRequest.CachePolicy = force ? .reloadIgnoringLocalCacheData : .useProtocolCachePolicy
+        let policy: URLRequest.CachePolicy = .reloadIgnoringLocalCacheData
         webView.load(URLRequest(url: url, cachePolicy: policy, timeoutInterval: 45))
+    }
+
+    private func canReuseHydratedDashboard(_ url: URL) -> Bool {
+        guard let current = webView.url ?? requestedURL else { return false }
+        return current.scheme == url.scheme
+            && current.host == url.host
+            && current.port == url.port
+            && current.path == url.path
     }
 
     func retry() {
@@ -66,6 +94,20 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         errorMessage = nil
     }
 
+    func applyDeviceCookie(for baseURL: URL) {
+        guard let token = try? HealthCredentialStore.token(),
+              let host = baseURL.host else { return }
+        var properties: [HTTPCookiePropertyKey: Any] = [
+            .domain: host,
+            .path: "/",
+            .name: "stratji_device",
+            .value: token,
+        ]
+        if let cookie = HTTPCookie(properties: properties) {
+            webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
+        }
+    }
+
     func openReport(baseURL: URL) {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return }
         components.path = "/report"
@@ -77,7 +119,10 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
     private func updateNavigationState() {
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
-        if let workspace = DashboardWorkspace.from(url: webView.url) {
+        if let destination = DashboardOutline.match(url: webView.url) {
+            currentDestinationID = destination.id
+            currentWorkspace = DashboardWorkspace(rawValue: destination.view) ?? .investment
+        } else if let workspace = DashboardWorkspace.from(url: webView.url) {
             currentWorkspace = workspace
         }
     }
@@ -86,6 +131,16 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        let hideChrome = WKUserScript(
+            source: """
+            document.documentElement.classList.add('native-chrome-embed');
+            document.documentElement.dataset.nativeChrome = '1';
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        configuration.userContentController.addUserScript(hideChrome)
+        configuration.applicationNameForUserAgent = "Stratji/1"
 #if os(iOS)
         configuration.allowsInlineMediaPlayback = true
 #endif
@@ -108,7 +163,7 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         let nsError = error as NSError
         guard nsError.code != NSURLErrorCancelled else { return }
         isLoading = false
-        errorMessage = "The Mac dashboard could not be reached. Keep the Mac awake, start Portfolio Intelligence, and confirm Tailscale is connected on both devices."
+        errorMessage = "The Mac dashboard could not be reached. Keep the Mac awake on the same Wi-Fi and start Stratji."
         updateNavigationState()
     }
 
@@ -133,6 +188,19 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
         errorMessage = nil
         lastSuccessfulLoad = Date()
         updateNavigationState()
+        webView.evaluateJavaScript(
+            """
+            document.documentElement.classList.add('native-chrome-embed');
+            document.documentElement.dataset.nativeChrome = '1';
+            document.querySelectorAll('.masthead').forEach((el) => {
+              el.setAttribute('hidden', '');
+            });
+            """
+        )
+        if let url = requestedURL ?? webView.url,
+           let destination = pendingDestination ?? DashboardOutline.match(url: url) {
+            DashboardNativeRoute.apply(in: webView, url: url, destination: destination)
+        }
     }
 
     func webView(
@@ -160,18 +228,27 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
             decisionHandler(.cancel)
             return
         }
-
-        if navigationAction.targetFrame == nil, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            webView.load(navigationAction.request)
+        let scheme = url.scheme?.lowercased() ?? ""
+        // fetch/XHR POSTs often arrive with targetFrame == nil. Reloading them as
+        // document navigations drops the body, so only intercept actual new-window links.
+        if navigationAction.targetFrame == nil {
+            if navigationAction.navigationType == .linkActivated, ["http", "https"].contains(scheme) {
+                webView.load(navigationAction.request)
+                decisionHandler(.cancel)
+                return
+            }
+            if ["http", "https", "about", "blob", "data"].contains(scheme) {
+                decisionHandler(.allow)
+                return
+            }
+            openExternally(url)
             decisionHandler(.cancel)
             return
         }
-
-        if ["http", "https", "about", "blob", "data"].contains(url.scheme?.lowercased() ?? "") {
+        if ["http", "https", "about", "blob", "data"].contains(scheme) {
             decisionHandler(.allow)
             return
         }
-
         openExternally(url)
         decisionHandler(.cancel)
     }

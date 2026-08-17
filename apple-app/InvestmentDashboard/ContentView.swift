@@ -9,14 +9,17 @@ struct ContentView: View {
     private var workspaceRawValue = DashboardWorkspace.investment.rawValue
 
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var browser = PortfolioDashboardBrowserModel()
+    @StateObject private var auth = AuthenticationService()
+    @StateObject private var session = NativeRefreshCoordinator()
     @StateObject private var statusModel = DashboardStatusModel()
     @StateObject private var pairing = HealthPairingModel()
+    @StateObject private var browser = PortfolioDashboardBrowserModel()
 #if os(iOS)
     @StateObject private var healthSync = HealthKitSyncCoordinator()
 #endif
     @State private var showingSettings = false
     @State private var showingOnboarding = false
+    @State private var showingInspector = false
 
     private var serverURL: URL? {
         PortfolioDashboardConfiguration.normalizedServerURL(from: serverAddress)
@@ -25,50 +28,74 @@ struct ContentView: View {
     private var workspace: Binding<DashboardWorkspace> {
         Binding(
             get: {
-                if workspaceRawValue == "market-intelligence" {
-                    return .intelligence
-                }
-                if workspaceRawValue == "algorithm-canvas" {
-                    return .builder
-                }
-                if workspaceRawValue == "strategy-library" {
-                    return .strategies
-                }
-                return DashboardWorkspace(rawValue: workspaceRawValue) ?? .investment
+                DashboardWorkspace.from(viewValue: workspaceRawValue) ?? .investment
             },
             set: { workspaceRawValue = $0.rawValue }
         )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            nativeHeader
-
-            NativeWorkspacePicker(selection: workspace)
-            NativeFreshnessStrip(model: statusModel)
-
-            ZStack {
-                Color.black.ignoresSafeArea()
-                PortfolioDashboardWebView(model: browser)
-                    .ignoresSafeArea(edges: .bottom)
-
-                if let message = browser.errorMessage {
-                    DashboardOfflineOverlay(
-                        message: message,
-                        hasLastLoadedDashboard: browser.hasLastLoadedDashboard,
-                        lastSuccessfulLoad: browser.lastSuccessfulLoad,
-                        retry: retryConnection,
-                        continueOffline: browser.continueWithLastLoadedDashboard,
+        ZStack {
+            Color(white: 0.07).ignoresSafeArea()
+            if !auth.isAuthenticated {
+                AuthorLoginView(auth: auth) {
+                    if let serverURL {
+                        Task { await auth.establishWebSession(baseURL: serverURL) }
+                    }
+                }
+            } else {
+                switch session.phase {
+            case .idle, .loading:
+                NativeRefreshProgressView(session: session)
+            case .offline:
+                NativeOfflineScreen(
+                    message: session.offlineMessage,
+                    lastSuccessfulLoad: session.lastSuccessfulRefresh,
+                    hasCachedSnapshot: session.hasCachedSnapshot,
+                    retry: retryConnection,
+                    viewLastSnapshot: { session.viewLastSnapshot() },
+                    settings: { showingSettings = true }
+                )
+            case .ready:
+                if let serverURL {
+#if os(iOS)
+                    NativeRootShell(
+                        workspace: workspace,
+                        session: session,
+                        browser: browser,
+                        serverURL: serverURL,
+                        healthSync: healthSync,
+                        refresh: refreshAll,
                         settings: { showingSettings = true }
                     )
+#else
+                    NativeRootShell(
+                        workspace: workspace,
+                        session: session,
+                        browser: browser,
+                        serverURL: serverURL,
+                        refresh: refreshAll,
+                        settings: { showingSettings = true }
+                    )
+#endif
                 }
             }
+            }
         }
+        .environmentObject(auth)
         .sheet(isPresented: $showingSettings) {
             DashboardSettingsView(
                 serverAddress: $serverAddress,
                 statusModel: statusModel,
-                pairing: pairing
+                pairing: pairing,
+                session: session,
+                openDashboard: { showingInspector = true },
+                openIntegrations: {
+                    showingSettings = false
+                    if let serverURL {
+                        browser.load(DashboardWorkspace.integrationsURL(baseURL: serverURL), force: true)
+                    }
+                }
             )
         }
         .sheet(isPresented: $showingOnboarding) {
@@ -78,6 +105,31 @@ struct ContentView: View {
                 statusModel: statusModel,
                 pairing: pairing
             )
+        }
+        .sheet(isPresented: $showingInspector) {
+            NavigationStack {
+                Group {
+                    if let serverURL {
+                        PortfolioDashboardWebView(model: browser)
+                            .ignoresSafeArea()
+                            .onAppear {
+                                browser.load(baseURL: serverURL, workspace: workspace.wrappedValue, force: true)
+                            }
+                    } else {
+                        Text("Set the Mac LAN address in Settings before inspecting the data plane.")
+                            .padding()
+                    }
+                }
+                .navigationTitle("Inspect Data Plane")
+#if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+#endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { showingInspector = false }
+                    }
+                }
+            }
         }
 #if os(iOS)
         .sheet(
@@ -91,15 +143,13 @@ struct ContentView: View {
             }
         }
 #endif
-        .onChange(of: workspaceRawValue) { _, _ in
-            loadSelectedWorkspace()
-        }
         .onChange(of: serverAddress) { _, _ in
             startSession()
         }
         .onChange(of: scenePhase) { _, phase in
+            guard auth.isAuthenticated else { return }
             guard phase == .active else {
-                if phase == .background { statusModel.stopMonitoring() }
+                if phase == .background { session.stopMonitoring() }
                 return
             }
             startSession()
@@ -107,9 +157,29 @@ struct ContentView: View {
             syncHealth()
 #endif
         }
-        .task {
-            showingOnboarding = !onboardingComplete
+        .onChange(of: auth.isAuthenticated) { _, authenticated in
+            showingOnboarding = authenticated && !onboardingComplete
+            guard authenticated else {
+                session.stopMonitoring()
+                return
+            }
+            if let serverURL {
+                Task { await auth.establishWebSession(baseURL: serverURL) }
+            }
             if onboardingComplete {
+                startSession()
+#if os(iOS)
+                syncHealth()
+#endif
+            }
+        }
+        .task {
+            if PortfolioDashboardConfiguration.isTailscaleAddress(serverAddress) {
+                serverAddress = ""
+                onboardingComplete = false
+            }
+            showingOnboarding = auth.isAuthenticated && !onboardingComplete
+            if auth.isAuthenticated && onboardingComplete {
                 startSession()
 #if os(iOS)
                 syncHealth()
@@ -119,37 +189,10 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
     }
 
-    @ViewBuilder
-    private var nativeHeader: some View {
-#if os(iOS)
-        NativeDashboardHeader(
-            browser: browser,
-            statusModel: statusModel,
-            healthSync: healthSync,
-            refresh: refreshAll,
-            report: openReport,
-            settings: { showingSettings = true }
-        )
-#else
-        NativeDashboardHeader(
-            browser: browser,
-            statusModel: statusModel,
-            refresh: refreshAll,
-            report: openReport,
-            settings: { showingSettings = true }
-        )
-#endif
-    }
-
     private func startSession() {
-        guard onboardingComplete, let serverURL else { return }
+        guard auth.isAuthenticated, onboardingComplete, let serverURL else { return }
+        session.startMonitoring(baseURL: serverURL)
         statusModel.startMonitoring(baseURL: serverURL)
-        loadSelectedWorkspace()
-    }
-
-    private func loadSelectedWorkspace(force: Bool = false) {
-        guard let serverURL else { return }
-        browser.load(baseURL: serverURL, workspace: workspace.wrappedValue, force: force)
     }
 
     private func retryConnection() {
@@ -157,29 +200,21 @@ struct ContentView: View {
             showingSettings = true
             return
         }
-        Task {
-            await statusModel.check(baseURL: serverURL)
-            loadSelectedWorkspace(force: true)
-        }
+        Task { await session.retry(baseURL: serverURL) }
     }
 
     private func refreshAll() {
         guard let serverURL else { return }
-        Task { await statusModel.check(baseURL: serverURL) }
+        Task { await session.retry(baseURL: serverURL) }
         browser.refreshDashboard()
 #if os(iOS)
         syncHealth()
 #endif
     }
 
-    private func openReport() {
-        guard let serverURL else { return }
-        browser.openReport(baseURL: serverURL)
-    }
-
 #if os(iOS)
     private func syncHealth() {
-        guard let serverURL, onboardingComplete else { return }
+        guard auth.isAuthenticated, let serverURL, onboardingComplete else { return }
         Task {
             await healthSync.sync(to: serverURL)
             await statusModel.check(baseURL: serverURL)
