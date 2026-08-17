@@ -48,10 +48,7 @@ const LEGACY_STATUS_PAGES = ["summary", "coverage", "archive"] as const;
 
 const SECTION_PAGES: Record<HealthWorkspaceSection, Array<{ id: HealthSectionPage; label: string }>> = {
   h2: [
-    { id: "optimism", label: "Optimism" },
-    { id: "insights", label: "Insights" },
-    { id: "guidance", label: "Guidance" },
-    { id: "guardrails", label: "Guardrails" },
+    { id: "optimism", label: "Daily Optimism" },
   ],
   h3: [
     { id: "metrics-overview", label: "Overview" },
@@ -122,9 +119,11 @@ function healthRouteFromUrl() {
   const rawSection = search.get("section");
   const rawPage = search.get("page");
   const section = resolveHealthSection(rawSection, rawPage);
-  const page = section && SECTION_PAGES[section].some((item) => item.id === rawPage)
-    ? rawPage as HealthSectionPage
-    : section ? SECTION_PAGES[section][0]!.id : null;
+  const page = section === "h2" && GUIDANCE_PAGES.includes(rawPage as typeof GUIDANCE_PAGES[number])
+    ? "optimism"
+    : section && SECTION_PAGES[section].some((item) => item.id === rawPage)
+      ? rawPage as HealthSectionPage
+      : section ? SECTION_PAGES[section][0]!.id : null;
   const rawFocus = search.get("focus");
   const focus = section
     ? section
@@ -152,13 +151,11 @@ function HealthIncognitoGate({
 }
 
 function HealthGuidanceWorkbench({
-  page,
   healthSnapshot,
   healthCurrent,
   healthNote,
   healthNoteSource,
 }: {
-  page: "optimism" | "insights" | "guidance" | "guardrails";
   healthSnapshot: HealthLiveSnapshot;
   healthCurrent: boolean;
   healthNote: AppleNoteSnapshot | null;
@@ -178,13 +175,13 @@ function HealthGuidanceWorkbench({
       : "Last validated guidance; sync the iPhone before relying on it";
   const attentionCount = guidanceItems.filter((item) => item.tone === "red" || item.tone === "amber").length;
 
-  if (page === "optimism") {
-    return <article className={`panel health-optimism-panel morning-light viewport ${optimismText ? "has-entry" : ""}`} aria-label="Daily Optimism">
+  return <div className="health-full-section-stack" aria-label="Daily Optimism">
+    <article className={`panel health-optimism-panel morning-light ${optimismText ? "has-entry" : ""}`}>
       <div className="panel-title"><div><h3>Daily Optimism</h3><p>{optimismSubtitle}</p></div><Sparkles size={18}/></div>
       {optimismText ? <p className="health-optimism-text">{optimismText}</p> : null}
       <section className="health-daily-brief" aria-label="Today’s prioritised health suggestions">
         <header><div><small>TODAY’S HEALTH BRIEF</small><b>{attentionCount ? `${attentionCount} items deserve attention` : "No priority exception detected"}</b></div><span>{guidanceItems.length} suggestions · critical first</span></header>
-        <div className="health-action-list viewport health-brief-list">
+        <div className="health-action-list health-brief-list">
           {guidanceItems.map((item) => <div key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
         </div>
       </section>
@@ -197,11 +194,10 @@ function HealthGuidanceWorkbench({
               ? `Written optimism was last observed ${compactHealthDate(optimismDate)}; the brief uses the ${compactHealthDate(operationalDate)} operational Health target.`
               : "No written Daily Optimism entry was present; the brief uses validated HealthKit aggregates only."}
       </p>
-    </article>;
-  }
+    </article>
 
-  if (page === "insights") {
-    return <section className="health-insights-page" aria-label="Health insights">
+    <section className="panel health-insights-page" aria-label="Health insights">
+      <div className="panel-title"><div><h3>Insights</h3><p>Mirroring status and  Health Daily shortcut evidence</p></div><ShieldAlert size={18}/></div>
       <div className="health-mirroring-banner health-insight-crystal" role="status">
         <ShieldAlert size={16}/>
         <div>
@@ -213,25 +209,14 @@ function HealthGuidanceWorkbench({
         <header><b> Health Daily shortcut snapshot</b><span>{optimismDate ? compactHealthDate(optimismDate) : "latest note"} · evidence only · HealthKit takes precedence</span></header>
         <div>{noteStats.map((stat) => <article key={stat.label}><small>{stat.label}</small><b>{stat.value}</b></article>)}</div>
       </div> : null}
-      <div className="health-action-list viewport" aria-label="Metric-derived health insights">
-        {guidanceItems.map((item) => <div className="health-insight-crystal" key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
-      </div>
-    </section>;
-  }
+    </section>
 
-  if (page === "guidance") {
-    return <section className="health-guidance-page">
-      <div className="health-coach-lane" aria-label="HealthKit daily guidance">
-        {guidanceItems.map((item) => <button type="button" className={`coach-item ${item.tone}`} key={item.title}><i/><div><b>{item.title}</b><p>{item.text}</p></div></button>)}
-      </div>
-    </section>;
-  }
-
-  return <article className="panel health-caveat-panel health-guardrail-slab viewport">
-    <div className="panel-title"><div><h3>Interpretation guardrails</h3><p>What this snapshot can and cannot support</p></div><ShieldAlert size={18}/></div>
-    <ul>{healthCaveats.map((item) => <li key={item}>{item}</li>)}</ul>
-    <p className="medical-note">Wellness summary only. It is not medical advice and should not be used to diagnose or change treatment.</p>
-  </article>;
+    <article className="panel health-caveat-panel health-guardrail-slab">
+      <div className="panel-title"><div><h3>Interpretation guardrails</h3><p>What this snapshot can and cannot support</p></div><ShieldAlert size={18}/></div>
+      <ul>{healthCaveats.map((item) => <li key={item}>{item}</li>)}</ul>
+      <p className="medical-note">Wellness summary only. It is not medical advice and should not be used to diagnose or change treatment.</p>
+    </article>
+  </div>;
 }
 
 function HealthMetricsWorkbench({
@@ -417,12 +402,7 @@ export function HealthWorkspace({
     <div id="health-h2" className="workspace-section health-full-section health-guidance-full-section" hidden={activeTopSection !== "h2"}>
       <CollapsibleSection number="H-2" title="Daily Optimism" note={healthIncognito ? "Daily Optimism hidden by Incognito" : SECTION_META.h2.note} headerAction={<span className={`pill ${healthIncognito ? "amber" : healthStatusTone}`}>{healthIncognito ? "INCOGNITO" : healthStatusLabel}</span>} defaultOpen>
         <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-          {pages.length > 1 && route.section === "h2" && <nav className="sector-page-nav sector-inline-page-nav" aria-label={`${SECTION_META.h2.title} pages`}>
-            <button type="button" disabled={pageIndex <= 0} onClick={() => changePage(pageIndex - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button>
-            <div role="tablist">{pages.map((item) => <button type="button" role="tab" aria-selected={route.page === item.id} className={route.page === item.id ? "active" : ""} onClick={() => navigate("h2", item.id)} key={item.id}><i/><span>{item.label}</span></button>)}</div>
-            <button type="button" disabled={pageIndex >= pages.length - 1} onClick={() => changePage(pageIndex + 1)} aria-label="Next page"><ChevronRight size={17}/></button>
-          </nav>}
-          <HealthGuidanceWorkbench page={(route.section === "h2" ? route.page : "optimism") as "optimism" | "insights" | "guidance" | "guardrails"} healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
+          <HealthGuidanceWorkbench healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
         </HealthIncognitoGate>
       </CollapsibleSection>
     </div>

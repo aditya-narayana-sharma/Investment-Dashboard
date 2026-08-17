@@ -1954,6 +1954,15 @@ footer { display:flex; justify-content:space-between; gap:16px; margin-top:26px;
   min-height:0;
   overflow:visible;
 }
+.health-full-section-stack .health-insights-page {
+  height:auto;
+  overflow:visible;
+  display:grid;
+  gap:10px;
+}
+.health-full-section-stack .health-caveat-panel {
+  margin-top:0;
+}
 .health-full-section-stack .health-status-cards {
   min-height:150px;
 }
@@ -1974,7 +1983,7 @@ footer { display:flex; justify-content:space-between; gap:16px; margin-top:26px;
   }
 }
 
-/* H-2 overview stays decision-useful; detailed evidence remains on its drill-down pages. */
+/* H-2 Daily Optimism is one combined page: optimism, insights, guidance, and guardrails. */
 .health-status-overview { display:grid; gap:9px; padding:12px 14px; border:1px solid #2d3640; background:#090d11; }
 .health-status-overview-lead { display:flex; align-items:center; gap:10px; padding-bottom:9px; border-bottom:1px solid #29313a; }
 .health-status-overview-lead>svg { flex:none; color:var(--green); }
@@ -2012,8 +2021,8 @@ footer { display:flex; justify-content:space-between; gap:16px; margin-top:26px;
 .health-guidance-full-section .health-action-list b { font-size:12px; line-height:1.35; }
 .health-guidance-full-section .health-action-list p { font-size:12px; line-height:1.55; -webkit-line-clamp:unset; line-clamp:unset; }
 .health-guidance-full-section .health-optimism-footnote { font-size:11px; line-height:1.55; }
-.health-guidance-full-section .health-caveat-panel.viewport li { font-size:12px; line-height:1.5; }
-.health-guidance-full-section .health-caveat-panel.viewport .medical-note { font-size:12px; line-height:1.5; }
+.health-guidance-full-section .health-caveat-panel li { font-size:12px; line-height:1.5; }
+.health-guidance-full-section .health-caveat-panel .medical-note { font-size:12px; line-height:1.5; }
 @media(max-width:760px) {
   .health-daily-brief>header { align-items:flex-start; flex-direction:column; gap:6px; }
   .health-daily-brief>header>span { white-space:normal; }

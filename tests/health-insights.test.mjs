@@ -23,13 +23,21 @@ test("health insights module exposes note parsing and enrichment helpers", () =>
   assert.match(insightsSource, /Recover from a high-output movement day/);
 });
 
-test("Health workspace surfaces Insights page and mirroring blocker honestly", () => {
-  assert.match(workspaceSource, /id: "insights"/);
+test("Health Daily Optimism is one page combining insights, guidance, and guardrails", () => {
+  assert.match(workspaceSource, /health-full-section-stack/);
+  assert.match(workspaceSource, /health-insights-page/);
   assert.match(workspaceSource, /Livity \/ iPhone Mirroring unavailable/);
   assert.match(workspaceSource, /enrichHealthGuidanceActions/);
   assert.match(workspaceSource, /parseHealthDailyNoteStats/);
   assert.match(workspaceSource, /Daily Optimism/);
   assert.match(workspaceSource, /TODAY’S HEALTH BRIEF/);
+  assert.match(workspaceSource, /Interpretation guardrails/);
+  assert.match(workspaceSource, /GUIDANCE_PAGES/);
+  assert.match(workspaceSource, /section === "h2" && GUIDANCE_PAGES.includes/);
+  assert.doesNotMatch(workspaceSource, /id: "insights"/);
+  assert.doesNotMatch(workspaceSource, /id: "guidance"/);
+  assert.doesNotMatch(workspaceSource, /id: "guardrails"/);
+  assert.doesNotMatch(workspaceSource, /route\.section === "h2" && <nav className="sector-page-nav/);
   assert.doesNotMatch(workspaceSource, /No optimism entry available/);
   assert.doesNotMatch(workspaceSource, /Health Daily v2/);
   assert.doesNotMatch(workspaceSource, /Health Status/);

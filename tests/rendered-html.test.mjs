@@ -1044,9 +1044,12 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.doesNotMatch(healthWorkspace, /health-source-panel/);
     assert.doesNotMatch(healthWorkspace, /healthSnapshot\.sources/);
     const optimismAt = healthWorkspace.indexOf('number="H-2" title="Daily Optimism"');
-    const guidanceAt = healthWorkspace.indexOf('<HealthGuidanceWorkbench page="optimism"', optimismAt);
+    const guidanceAt = healthWorkspace.indexOf("<HealthGuidanceWorkbench ", optimismAt);
     const masonryAt = healthWorkspace.indexOf("<HealthMasonryGrid categories={healthSnapshot.categories}/>", optimismAt);
     assert.ok(optimismAt >= 0 && guidanceAt >= 0 && masonryAt >= 0 && optimismAt < guidanceAt && guidanceAt < masonryAt, "Daily Optimism with rich guidance must render above Vital cadence / HealthMasonryGrid");
+    assert.match(healthWorkspace, /health-full-section-stack/);
+    assert.match(healthWorkspace, /Interpretation guardrails/);
+    assert.doesNotMatch(healthWorkspace, /HealthGuidanceWorkbench page=/);
     assert.match(healthWorkspace, /HEALTH_TOP_SECTIONS/);
     assert.match(healthWorkspace, /<WorkspaceSectionNav[\s\S]*label="Health & Wellness sections"/);
     assert.match(healthWorkspace, /HealthWorkspaceSection = "h2" \| "h3"/);
