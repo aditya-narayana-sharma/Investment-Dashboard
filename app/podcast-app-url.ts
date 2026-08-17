@@ -15,8 +15,7 @@ export function applePodcastsAppUrl(value: string | null | undefined): string {
     if (APP_SCHEMES.has(url.protocol)) return url.toString();
     if (url.protocol !== "https:" && url.protocol !== "http:") return "";
     if (!isApplePodcastsHost(url.hostname)) return "";
-    url.protocol = "podcasts:";
-    return url.toString();
+    return `podcasts://${url.host}${url.pathname}${url.search}${url.hash}`;
   } catch {
     return "";
   }
