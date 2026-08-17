@@ -57,6 +57,15 @@ struct InvestmentDashboardTests {
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=unknown")) == nil)
     }
 
+    @Test func applePodcastsLinksAlwaysUseThePodcastsAppScheme() {
+        let web = URL(string: "https://podcasts.apple.com/podcast/id123?i=456")!
+        #expect(ApplePodcastsLink.isPodcastsURL(web))
+        #expect(ApplePodcastsLink.appURL(from: web).absoluteString == "podcasts://podcasts.apple.com/podcast/id123?i=456")
+        #expect(ApplePodcastsLink.isPodcastsURL(URL(string: "podcasts://podcasts.apple.com/podcast/id123?i=456")!))
+        #expect(!ApplePodcastsLink.isPodcastsURL(URL(string: "https://omny.fm/shows/example/ep")!))
+        #expect(ApplePodcastsLink.podcastsBundleIdentifier == "com.apple.podcasts")
+    }
+
     @Test func decodesStartupAuditSemantics() throws {
         let data = Data("""
         {

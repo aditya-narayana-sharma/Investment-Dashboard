@@ -176,6 +176,8 @@ test("Market Intelligence digests collapse newsletters by sender and Axis by top
   assert.match(intelligenceWorkspace, /axis-open-pdf/);
   assert.match(intelligenceWorkspace, /axisResearch && <DigestSourceLinks[\s\S]*?<WaveformStrip/);
   assert.match(intelligenceWorkspace, /Open in Podcasts/);
+  assert.match(intelligenceWorkspace, /applePodcastsAppUrl/);
+  assert.match(intelligenceWorkspace, /opensNativeApp/);
   assert.match(intelligenceWorkspace, /DigestSourceLinks/);
   assert.match(intelligenceWorkspace, /return "Description"/);
   assert.match(intelligenceWorkspace, /keyTakeaways/);

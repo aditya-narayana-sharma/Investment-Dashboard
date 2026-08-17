@@ -16,6 +16,7 @@ import { digestItemBullets, isDigestContentWorthy } from "../digest-bullets";
 import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
 import { findEarningsHolidayConflicts } from "../market-calendar";
+import { applePodcastsAppUrl } from "../podcast-app-url";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
 import { AppleMonthlyCalendar } from "./AppleMonthlyCalendar";
 import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
@@ -201,26 +202,30 @@ function DigestSourceLinks({ item, kind, axisResearch = false }: { item: DigestI
   if (!axisResearch) {
     pdfLinks.forEach((pdf) => links.push({ href: pdf.url, label: "Open PDF", icon: "pdf" }));
   }
-  if (kind === "podcast" && item.episodeUrl) {
-    links.push({ href: item.episodeUrl, label: "Open in Podcasts", icon: "episode" });
+  if (kind === "podcast") {
+    const podcastsHref = applePodcastsAppUrl(item.episodeUrl);
+    if (podcastsHref) links.push({ href: podcastsHref, label: "Open in Podcasts", icon: "episode" });
   }
   if (!links.length) return null;
   return (
     <div className={`digest-item-links${axisResearch ? " axis-research-links" : ""}`} aria-label="Source links">
-      {links.map((link) => (
-        <a
-          key={`${link.label}-${link.href}`}
-          className={`digest-source-link${axisResearch && link.icon === "pdf" ? " axis-open-pdf" : ""}`}
-          href={link.href}
-          target={link.icon === "mail" ? undefined : "_blank"}
-          rel={link.icon === "mail" ? undefined : "noopener noreferrer"}
-        >
-          {link.icon === "mail" ? <Mail size={12} aria-hidden="true" /> : null}
-          {link.icon === "pdf" ? <FileText size={12} aria-hidden="true" /> : null}
-          {link.icon === "episode" ? <ExternalLink size={12} aria-hidden="true" /> : null}
-          {link.label}
-        </a>
-      ))}
+      {links.map((link) => {
+        const opensNativeApp = link.icon === "mail" || link.icon === "episode";
+        return (
+          <a
+            key={`${link.label}-${link.href}`}
+            className={`digest-source-link${axisResearch && link.icon === "pdf" ? " axis-open-pdf" : ""}`}
+            href={link.href}
+            target={opensNativeApp ? undefined : "_blank"}
+            rel={opensNativeApp ? undefined : "noopener noreferrer"}
+          >
+            {link.icon === "mail" ? <Mail size={12} aria-hidden="true" /> : null}
+            {link.icon === "pdf" ? <FileText size={12} aria-hidden="true" /> : null}
+            {link.icon === "episode" ? <ExternalLink size={12} aria-hidden="true" /> : null}
+            {link.label}
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -334,11 +339,15 @@ function DigestMailItem({
         {!axisResearch && <DigestSourceLinks item={item} kind={kind} />}
         {kind === "podcast" && item.contentSource === "transcript" && Boolean(item.timestampLinks?.length) && (
           <div className="podcast-timestamp-links" aria-label="Transcript timestamps">
-            {item.timestampLinks?.map((link) => (
-              <a key={`${link.seconds}-${link.href}`} href={link.href} target="_blank" rel="noopener noreferrer">
-                {link.label}
-              </a>
-            ))}
+            {item.timestampLinks?.map((link) => {
+              const href = applePodcastsAppUrl(link.href);
+              if (!href) return null;
+              return (
+                <a key={`${link.seconds}-${link.href}`} href={href}>
+                  {link.label}
+                </a>
+              );
+            })}
           </div>
         )}
       </div>

@@ -119,6 +119,23 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
         NSWorkspace.shared.open(url)
 #endif
     }
+
+    private func openInApplePodcasts(_ url: URL) {
+        let appURL = ApplePodcastsLink.appURL(from: url)
+#if os(macOS)
+        if let podcastsApp = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ApplePodcastsLink.podcastsBundleIdentifier) {
+            Task {
+                try? await NSWorkspace.shared.open(
+                    [appURL],
+                    withApplicationAt: podcastsApp,
+                    configuration: NSWorkspace.OpenConfiguration()
+                )
+            }
+            return
+        }
+#endif
+        openExternally(appURL)
+    }
 }
 
 extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
@@ -173,6 +190,12 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
             return
         }
 
+        if ApplePodcastsLink.isPodcastsURL(url) {
+            openInApplePodcasts(url)
+            decisionHandler(.cancel)
+            return
+        }
+
         if navigationAction.targetFrame == nil, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             webView.load(navigationAction.request)
             decisionHandler(.cancel)
@@ -208,6 +231,10 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         if isMutatingAPIRequest(navigationAction.request) {
+            return nil
+        }
+        if let url = navigationAction.request.url, ApplePodcastsLink.isPodcastsURL(url) {
+            openInApplePodcasts(url)
             return nil
         }
         webView.load(navigationAction.request)
