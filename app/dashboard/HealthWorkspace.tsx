@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -312,7 +311,11 @@ export function HealthWorkspace({
     : healthSnapshot.status === "stale" || healthSnapshot.status === "unavailable" ? "red"
       : "amber";
   useEffect(() => {
-    const sync = () => setRoute(healthRouteFromUrl());
+    const sync = () => {
+      const next = healthRouteFromUrl();
+      setRoute(next);
+      expandDashboardSection(dashboardSectionNumberFromNavId(next.section ?? next.focus));
+    };
     sync();
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
@@ -360,15 +363,9 @@ export function HealthWorkspace({
   const navigate = useCallback((section: HealthWorkspaceSection | null, page?: HealthSectionPage, replace = false) => {
     const url = new URL(window.location.href);
     if (!section) {
-      const previous = url.searchParams.get("section");
-      url.searchParams.delete("section");
+      url.searchParams.set("section", "h1");
       url.searchParams.delete("page");
-      const focus = previous === "h4"
-        ? "h3"
-        : previous && HEALTH_TOP_SECTIONS.some((item) => item.id === previous)
-          ? previous
-          : null;
-      if (focus) url.searchParams.set("focus", focus);
+      url.searchParams.delete("focus");
     } else {
       url.searchParams.set("section", section);
       url.searchParams.set("page", page ?? SECTION_PAGES[section][0]!.id);
@@ -381,31 +378,13 @@ export function HealthWorkspace({
   const selectTopSection = useCallback((sectionId: string) => {
     const section = sectionId as HealthTopSection;
     if (section === "h1") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("section");
-      url.searchParams.delete("page");
-      url.searchParams.set("focus", "h1");
-      window.history.pushState({}, "", url);
-      setRoute(healthRouteFromUrl());
+      navigate(null);
       expandDashboardSection(dashboardSectionNumberFromNavId(section));
-      window.requestAnimationFrame(() => {
-        document.getElementById("health-h1")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
       return;
     }
-    if (route.section) {
-      navigate(section, SECTION_PAGES[section][0]!.id);
-      return;
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.delete("section");
-    url.searchParams.delete("page");
-    url.searchParams.set("focus", section);
-    window.history.pushState({}, "", url);
-    setRoute(healthRouteFromUrl());
+    navigate(section, SECTION_PAGES[section][0]!.id);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`health-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [navigate, route.section]);
+  }, [navigate]);
 
   const pages = route.section ? SECTION_PAGES[route.section] : [];
   const pageIndex = pages.findIndex((item) => item.id === route.page);
@@ -419,62 +398,52 @@ export function HealthWorkspace({
     if (event.key === "End") { event.preventDefault(); changePage(pages.length - 1); }
   };
   const showHealth = () => setHealthIncognito(false);
-  const activeTopSection = route.section ?? route.focus;
+  const activeTopSection: HealthTopSection = route.section ?? route.focus;
 
-  return <div className={`sector-workspace-shell health-workspace-shell ${route.section ? "" : "health-full-workspace"}`} ref={shellRef} tabIndex={-1} onKeyDown={onKeyDown}>
+  return <div className="sector-workspace-shell health-workspace-shell exclusive-section-workspace" data-active-section={activeTopSection} ref={shellRef} tabIndex={-1} onKeyDown={onKeyDown}>
     <WorkspaceSectionNav
       label="Health & Wellness sections"
       sections={HEALTH_TOP_SECTIONS}
       activeId={activeTopSection}
       onSelect={selectTopSection}
     />
-    {!route.section ? <>
-      <div id="health-h1" className="workspace-section action-board-workspace-section">
-        <CollapsibleSection number="H-1" title="Health action board" note="Clickable daily source, trend and optimisation actions">
-          <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-            <DailyKanbanBoard workspace="health"/>
-          </HealthIncognitoGate>
-        </CollapsibleSection>
-      </div>
-      <div id="health-h2" className="workspace-section health-full-section health-guidance-full-section">
-        <CollapsibleSection number="H-2" title="Daily Optimism" note={healthIncognito ? "Daily Optimism hidden by Incognito" : SECTION_META.h2.note} headerAction={<span className={`pill ${healthIncognito ? "amber" : healthStatusTone}`}>{healthIncognito ? "INCOGNITO" : healthStatusLabel}</span>}>
-          <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-            <div className="health-full-section-stack">
-              <HealthGuidanceWorkbench page="optimism" healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
-              <HealthGuidanceWorkbench page="guardrails" healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
-            </div>
-          </HealthIncognitoGate>
-        </CollapsibleSection>
-      </div>
-      <div id="health-h3" className="workspace-section health-full-section">
-        <CollapsibleSection number="H-3" title="Vital Metrics" note={healthIncognito ? "Vital metrics hidden by Incognito" : SECTION_META.h3.note}>
-          <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-            {missingDates.length > 0 && (
-              <p className="health-missing-ribbon" role="status">
-                Missing Health days: {missingDates.join(", ")}. Refresh those dates before trusting 7-day or 30-day comparisons.
-              </p>
-            )}
-            <HealthMasonryGrid categories={healthSnapshot.categories}/>
-          </HealthIncognitoGate>
-        </CollapsibleSection>
-      </div>
-    </> : <section className={`sector-detail-shell health-detail-shell ${route.section}`} aria-label={SECTION_META[route.section].title}>
-      <header className="sector-detail-header">
-        <button type="button" className="sector-back-button" onClick={() => navigate(null)}><ArrowLeft size={17}/><span>Overview</span></button>
-        <div><span>{SECTION_META[route.section].number}</span><h2>{SECTION_META[route.section].title}</h2><p>{healthIncognito ? "Hidden while Health Incognito is active" : SECTION_META[route.section].note}</p></div>
-        <em className={`pill ${healthIncognito ? "amber" : healthStatusTone}`}>{healthIncognito ? "INCOGNITO" : healthStatusLabel}</em>
-      </header>
-      {pages.length > 1 && <nav className="sector-page-nav" aria-label={`${SECTION_META[route.section].title} pages`}>
-        <button type="button" disabled={pageIndex <= 0} onClick={() => changePage(pageIndex - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button>
-        <div role="tablist">{pages.map((item) => <button type="button" role="tab" aria-selected={route.page === item.id} className={route.page === item.id ? "active" : ""} onClick={() => navigate(route.section!, item.id)} key={item.id}><i/><span>{item.label}</span></button>)}</div>
-        <button type="button" disabled={pageIndex >= pages.length - 1} onClick={() => changePage(pageIndex + 1)} aria-label="Next page"><ChevronRight size={17}/></button>
-      </nav>}
-      <div className="sector-detail-body health-detail-body">
+    <div id="health-h1" className="workspace-section action-board-workspace-section" hidden={activeTopSection !== "h1"}>
+      <CollapsibleSection number="H-1" title="Health action board" note="Clickable daily source, trend and optimisation actions" defaultOpen>
         <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-          {route.section === "h2" && <HealthGuidanceWorkbench page={route.page as "optimism" | "insights" | "guidance" | "guardrails"} healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>}
-          {route.section === "h3" && <HealthMetricsWorkbench page={route.page as "metrics-overview" | "activity" | "sleep" | "heart" | "respiratory" | "mobility" | "nutrition-1" | "nutrition-2"} categories={healthSnapshot.categories} onOpenPage={(page) => navigate("h3", page)}/>}
+          <DailyKanbanBoard workspace="health"/>
         </HealthIncognitoGate>
-      </div>
-    </section>}
+      </CollapsibleSection>
+    </div>
+    <div id="health-h2" className="workspace-section health-full-section health-guidance-full-section" hidden={activeTopSection !== "h2"}>
+      <CollapsibleSection number="H-2" title="Daily Optimism" note={healthIncognito ? "Daily Optimism hidden by Incognito" : SECTION_META.h2.note} headerAction={<span className={`pill ${healthIncognito ? "amber" : healthStatusTone}`}>{healthIncognito ? "INCOGNITO" : healthStatusLabel}</span>} defaultOpen>
+        <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
+          {pages.length > 1 && route.section === "h2" && <nav className="sector-page-nav sector-inline-page-nav" aria-label={`${SECTION_META.h2.title} pages`}>
+            <button type="button" disabled={pageIndex <= 0} onClick={() => changePage(pageIndex - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button>
+            <div role="tablist">{pages.map((item) => <button type="button" role="tab" aria-selected={route.page === item.id} className={route.page === item.id ? "active" : ""} onClick={() => navigate("h2", item.id)} key={item.id}><i/><span>{item.label}</span></button>)}</div>
+            <button type="button" disabled={pageIndex >= pages.length - 1} onClick={() => changePage(pageIndex + 1)} aria-label="Next page"><ChevronRight size={17}/></button>
+          </nav>}
+          <HealthGuidanceWorkbench page={(route.section === "h2" ? route.page : "optimism") as "optimism" | "insights" | "guidance" | "guardrails"} healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
+        </HealthIncognitoGate>
+      </CollapsibleSection>
+    </div>
+    <div id="health-h3" className="workspace-section health-full-section" hidden={activeTopSection !== "h3"}>
+      <CollapsibleSection number="H-3" title="Vital Metrics" note={healthIncognito ? "Vital metrics hidden by Incognito" : SECTION_META.h3.note} defaultOpen>
+        <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
+          {missingDates.length > 0 && (
+            <p className="health-missing-ribbon" role="status">
+              Missing Health days: {missingDates.join(", ")}. Refresh those dates before trusting 7-day or 30-day comparisons.
+            </p>
+          )}
+          {pages.length > 1 && route.section === "h3" && <nav className="sector-page-nav sector-inline-page-nav" aria-label={`${SECTION_META.h3.title} pages`}>
+            <button type="button" disabled={pageIndex <= 0} onClick={() => changePage(pageIndex - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button>
+            <div role="tablist">{pages.map((item) => <button type="button" role="tab" aria-selected={route.page === item.id} className={route.page === item.id ? "active" : ""} onClick={() => navigate("h3", item.id)} key={item.id}><i/><span>{item.label}</span></button>)}</div>
+            <button type="button" disabled={pageIndex >= pages.length - 1} onClick={() => changePage(pageIndex + 1)} aria-label="Next page"><ChevronRight size={17}/></button>
+          </nav>}
+          {route.section === "h3"
+            ? <HealthMetricsWorkbench page={route.page as "metrics-overview" | "activity" | "sleep" | "heart" | "respiratory" | "mobility" | "nutrition-1" | "nutrition-2"} categories={healthSnapshot.categories} onOpenPage={(page) => navigate("h3", page)}/>
+            : <HealthMasonryGrid categories={healthSnapshot.categories}/>}
+        </HealthIncognitoGate>
+      </CollapsibleSection>
+    </div>
   </div>;
 }

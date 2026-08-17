@@ -177,6 +177,7 @@ function SectorWorkspaceShell({
       if (route.section && route.page) {
         setActivePages((current) => ({ ...current, [route.section!]: route.page! }));
       }
+      expandDashboardSection(dashboardSectionNumberFromNavId(route.topSection));
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -204,24 +205,23 @@ function SectorWorkspaceShell({
     window.history.pushState({}, "", url);
     setActiveSection(section);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`sector-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activePages]);
 
-  return <div className="sector-workspace-shell sector-full-workspace">
+  return <div className="sector-workspace-shell exclusive-section-workspace" data-active-section={activeSection}>
     <WorkspaceSectionNav
       label="Sectoral Analytics sections"
       sections={SECTOR_TOP_SECTIONS}
       activeId={activeSection}
       onSelect={selectTopSection}
     />
-    <div id="sector-s1" className="workspace-section action-board-workspace-section">
-      <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions">
+    <div id="sector-s1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "s1"}>
+      <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions" defaultOpen>
         <DailyKanbanBoard workspace="sectors"/>
       </CollapsibleSection>
     </div>
 
-    <div id="sector-s2" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${s2StatusPill}`}>{s2Status}</span>}>
+    <div id="sector-s2" className="workspace-section sector-full-section" hidden={activeSection !== "s2"}>
+      <CollapsibleSection number={SECTION_META.s2.number} title={SECTION_META.s2.title} note={SECTION_META.s2.note} headerAction={<span className={`pill ${s2StatusPill}`}>{s2Status}</span>} defaultOpen>
         <SectionPageNav section="s2" activePage={activePages.s2} onSelect={selectPage}/>
         <div id="sector-s2-panel" className="sector-full-section-body s2" role="tabpanel" aria-labelledby={`sector-s2-tab-${activePages.s2}`}>
           <Suspense fallback={<div className="live-empty compact"><b>Loading industry analytics…</b></div>}>
@@ -231,8 +231,8 @@ function SectorWorkspaceShell({
       </CollapsibleSection>
     </div>
 
-    <div id="sector-s3" className="workspace-section sector-full-section">
-      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</span>}>
+    <div id="sector-s3" className="workspace-section sector-full-section" hidden={activeSection !== "s3"}>
+      <CollapsibleSection number={SECTION_META.s3.number} title={SECTION_META.s3.title} note={SECTION_META.s3.note} headerAction={<span className={`pill ${benchmarks.status === "live" ? "green" : "amber"}`}>{benchmarks.status === "live" ? "EOD" : benchmarks.status}</span>} defaultOpen>
         <SectionPageNav section="s3" activePage={activePages.s3} onSelect={selectPage}/>
         <div id="sector-s3-panel" className="sector-full-section-body s3" role="tabpanel" aria-labelledby={`sector-s3-tab-${activePages.s3}`}>
           <SectorDecisionLab page={activePages.s3 as SectorDecisionPage} benchmarks={benchmarks} marketsBySector={sectorMarketById}/>

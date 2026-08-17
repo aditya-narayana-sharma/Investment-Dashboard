@@ -211,10 +211,14 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(workspace, /className="sector-workspace-shell sector-full-workspace"/);
+  assert.match(workspace, /className="sector-workspace-shell exclusive-section-workspace"/);
+  assert.match(workspace, /hidden=\{activeSection !== "s1"\}/);
+  assert.match(workspace, /hidden=\{activeSection !== "s2"\}/);
+  assert.match(workspace, /hidden=\{activeSection !== "s3"\}/);
+  assert.doesNotMatch(workspace, /scrollIntoView/);
   assert.doesNotMatch(workspace, /SectorThumbnail|sector-overview-grid|sector-thumbnail/);
   assert.doesNotMatch(workspace, /classList\.add\("sector-console-active", "viewport-console-active"\)/);
-  assert.doesNotMatch(workspace, /style\.height|window\.innerHeight|overflow:hidden/);
+  assert.doesNotMatch(workspace, /style\.height|window\.innerHeight/);
 
   for (const [number, title] of [
     ["S-1", "Sectoral action board"],
@@ -248,8 +252,8 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.match(globalCss, /\.collapse-button:focus-visible\s*\{[^}]*outline:/s);
   assert.match(globalCss, /\.sector-inline-page-nav > div button:focus-visible\s*\{[^}]*outline:/s);
 
-  assert.match(globalCss, /\.sector-workspace-shell\.sector-full-workspace\s*\{[^}]*height:auto;[^}]*overflow:visible;/s);
-  assert.match(globalCss, /\.sector-full-workspace > \.workspace-section\s*\{[^}]*max-height:none;[^}]*overflow:visible;/s);
+  assert.match(globalCss, /\.sector-workspace-shell\.exclusive-section-workspace\s*\{[^}]*overflow:hidden;/s);
+  assert.match(globalCss, /\.exclusive-section-workspace > \.workspace-section\[hidden\][^}]*display:none !important;/s);
   assert.match(globalCss, /@media\(max-width:760px\)[\s\S]*?\.sector-full-section-body \.macro-decision-chart-layout\s*\{[^}]*grid-template-columns:1fr;/s);
 
   assert.match(analytics, /data-sector-filter=\{filterActive \? selectedIds\.join/);
@@ -456,11 +460,15 @@ test("all four workspaces share consistent cyan section navigation bars", async 
   assert.match(health, /id="health-h3"/);
   assert.match(strategies, /id="strategies-y1"/);
   assert.match(strategies, /id="strategies-y2"/);
-  assert.match(health, /searchParams\.set\("focus"/);
+  assert.match(health, /searchParams\.set\("section", "h1"/);
   assert.doesNotMatch(health, /id="health-h4"|\{ id: "h4"|number="H-4"|Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
   assert.doesNotMatch(sectors, /S-4|s4|EarningsMonthCalendar|sector-intelligence-filter|sector-dimmed/);
   assert.doesNotMatch(health, /health-overview-console|<HealthThumbnail/);
-  assert.match(health, /health-full-workspace/);
+  assert.match(health, /exclusive-section-workspace/);
+  assert.match(health, /hidden=\{activeTopSection !== "h1"\}/);
+  assert.match(health, /hidden=\{activeTopSection !== "h2"\}/);
+  assert.match(health, /hidden=\{activeTopSection !== "h3"\}/);
+  assert.doesNotMatch(health, /scrollIntoView/);
 });
 
 test("sector market route uses yfinance live quotes without creating a Kite session", async () => {

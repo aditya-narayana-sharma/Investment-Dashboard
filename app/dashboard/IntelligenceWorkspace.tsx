@@ -993,7 +993,9 @@ export function IntelligenceWorkspace({
   useEffect(() => {
     const sync = () => {
       const requested = new URLSearchParams(window.location.search).get("section");
-      if (INTELLIGENCE_SECTIONS.some((section) => section.id === requested)) setActiveSection(requested!);
+      const section = INTELLIGENCE_SECTIONS.some((item) => item.id === requested) ? requested! : "m1";
+      setActiveSection(section);
+      expandDashboardSection(dashboardSectionNumberFromNavId(section));
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -1006,18 +1008,17 @@ export function IntelligenceWorkspace({
     window.history.pushState({}, "", url);
     setActiveSection(section);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`intelligence-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
-    <div className="intelligence-workspace-shell">
+    <div className="intelligence-workspace-shell exclusive-section-workspace" data-active-section={activeSection}>
       <WorkspaceSectionNav
         label="Market Intelligence sections"
         sections={INTELLIGENCE_SECTIONS}
         activeId={activeSection}
         onSelect={selectSection}
       />
-      <div id="intelligence-m1" className="workspace-section action-board-workspace-section">
+      <div id="intelligence-m1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "m1"}>
         <CollapsibleSection
           number="M-1" title="Action Board"
           note="Clickable daily source, evidence and monitoring actions"
@@ -1025,7 +1026,7 @@ export function IntelligenceWorkspace({
           <DailyKanbanBoard workspace="intelligence"/>
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m2" className="workspace-section">
+      <div id="intelligence-m2" className="workspace-section" hidden={activeSection !== "m2"}>
         <CollapsibleSection
           number="M-2" title="Live Intelligence"
           note={
@@ -1039,7 +1040,7 @@ export function IntelligenceWorkspace({
           <SectorIntelligenceDigest content={content} mailWindow={mailWindow} view="live" />
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m3" className="workspace-section">
+      <div id="intelligence-m3" className="workspace-section" hidden={activeSection !== "m3"}>
         <CollapsibleSection
           number="M-3" title="Earnings Calendar"
           note="Complete Apple Calendar schedule plus independently verified reported results"
@@ -1053,7 +1054,7 @@ export function IntelligenceWorkspace({
           <MarketEarningsCalendar content={content} snapshot={earningsSnapshot} holdings={holdings} />
         </CollapsibleSection>
       </div>
-      <div id="intelligence-m4" className="workspace-section">
+      <div id="intelligence-m4" className="workspace-section" hidden={activeSection !== "m4"}>
         <CollapsibleSection
           number="M-4" title="Calendar + Reminders"
           note="Complete non-earnings calendars and the three-group reminders experience"

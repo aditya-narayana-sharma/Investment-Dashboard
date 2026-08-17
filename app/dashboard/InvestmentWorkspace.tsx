@@ -738,7 +738,9 @@ export function InvestmentWorkspace({
   useEffect(() => {
     const sync = () => {
       const requested = new URLSearchParams(window.location.search).get("section");
-      if (INVESTMENT_SECTIONS.some((section) => section.id === requested)) setActiveSection(requested!);
+      const section = INVESTMENT_SECTIONS.some((item) => item.id === requested) ? requested! : "i1";
+      setActiveSection(section);
+      expandDashboardSection(dashboardSectionNumberFromNavId(section));
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -751,23 +753,22 @@ export function InvestmentWorkspace({
     window.history.pushState({}, "", url);
     setActiveSection(section);
     expandDashboardSection(dashboardSectionNumberFromNavId(section));
-    document.getElementById(`investment-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  return <div className="investment-workspace-shell">
+  return <div className="investment-workspace-shell exclusive-section-workspace" data-active-section={activeSection}>
       <WorkspaceSectionNav
         label="Investment sections"
         sections={INVESTMENT_SECTIONS}
         activeId={activeSection}
         onSelect={selectSection}
       />
-      <div id="investment-i1" className="workspace-section action-board-workspace-section">
+      <div id="investment-i1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "i1"}>
       <CollapsibleSection number="I-1" title="Investment action board" note="Clickable daily actions, numeric advantages and strategic rationale">
         <DailyKanbanBoard workspace="investment"/>
       </CollapsibleSection>
       </div>
 
-      <div id="investment-i2" className="workspace-section">
+      <div id="investment-i2" className="workspace-section" hidden={activeSection !== "i2"}>
       <CollapsibleSection number="I-2" title="Portfolio" note="Holdings, orders, positions, GTTs, TSLs, alerts and nested allocation">
       <section className="instrument-cluster" aria-label="Portfolio instrument cluster">
         <InstrumentGauge
@@ -944,7 +945,7 @@ export function InvestmentWorkspace({
       </CollapsibleSection>
       </div>
 
-      <div id="investment-i3" className="workspace-section">
+      <div id="investment-i3" className="workspace-section" hidden={activeSection !== "i3"}>
       <CollapsibleSection number="I-3" title="Risk" note="Risk composition, holdings radar and macro scenario lab">
         <section className="panel macro-scenario-panel" aria-label="Macro scenario lab">
           <div className="panel-title"><div><h3>Macro scenario lab</h3><p>Select an event, its decision range and the matching Mail evidence</p></div><Globe2 size={18}/></div>
@@ -1006,7 +1007,7 @@ export function InvestmentWorkspace({
       </CollapsibleSection>
       </div>
 
-      <div id="investment-i4" className="workspace-section">
+      <div id="investment-i4" className="workspace-section" hidden={activeSection !== "i4"}>
       <CollapsibleSection number="I-4" title="Axis picks" note={`Call matrix · Axis recommended stocks · recommended risk radar · as-of ${axisAsOfLabel}${content.investment.axisUsedLastTradingDay ? " · weekend/holiday fallback" : ""}`}>
         <section className="panel analyst-matrix" data-visual="axis-call-constellation">
           <div className="panel-title"><div><h3>Analyst call matrix</h3><p>Targets are reference points, not quarter forecasts</p></div><Target size={18}/></div>
