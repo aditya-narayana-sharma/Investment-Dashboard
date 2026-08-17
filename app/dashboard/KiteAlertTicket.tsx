@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
+import { KiteTicketPortal } from "./KiteTicketPortal";
+import { postKiteTicket } from "./kite-ticket-request";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
@@ -81,24 +83,18 @@ export function KiteAlertTicket({
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch("/api/kite/alert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: normalizedSymbol,
-          exchange,
-          direction,
-          triggerPrice: trigger,
-          note: note.trim() || undefined,
-          confirmation,
-        }),
-      });
-      const payload = await response.json() as {
+      const payload = await postKiteTicket("/api/kite/alert", {
+        symbol: normalizedSymbol,
+        exchange,
+        direction,
+        triggerPrice: trigger,
+        note: note.trim() || undefined,
+        confirmation,
+      }, "create alert") as {
         status?: string;
         message?: string;
         result?: { uuid?: string; kite_response?: { uuid?: string } } | string;
       };
-      if (!response.ok) throw new Error(payload.message || `Kite alert returned ${response.status}`);
       const nested = payload.result && typeof payload.result === "object" ? payload.result : null;
       const uuid = nested?.uuid || nested?.kite_response?.uuid || "";
       setResult({
@@ -115,7 +111,7 @@ export function KiteAlertTicket({
     }
   }
 
-  return <div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+  return <KiteTicketPortal><div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="kite-order-ticket alert" role="dialog" aria-modal="true" aria-labelledby="kite-alert-title">
       <header>
         <div>
@@ -166,5 +162,5 @@ export function KiteAlertTicket({
         <button type="button" className="alert" onClick={() => void submitAlert()} disabled={!ready || submitting}>{submitting ? "Submitting…" : "Create price alert"}</button>
       </footer>
     </section>
-  </div>;
+  </div></KiteTicketPortal>;
 }

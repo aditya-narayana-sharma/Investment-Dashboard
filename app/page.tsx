@@ -2,7 +2,7 @@
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, RefreshCw } from "lucide-react";
+import { Activity, CheckCircle2, ExternalLink, FileText, LogIn, Plug, RefreshCw } from "lucide-react";
 import { analystCalls, axisRecommendations, portfolioRiskProfiles, type RiskProfile } from "./portfolio-data";
 import type { HealthLiveSnapshot } from "./health-live-types";
 import { emptySnapshot, type KiteAuthStatus, type KiteSnapshot } from "./live-types";
@@ -16,7 +16,7 @@ import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "./sector-news-types";
 import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/types";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseStrategiesSection, workspaceFromPageSearch } from "./dashboard/workspace-routing";
+import { applyCanonicalDashboardUrl, isIntegrationsView, parseBuilderSection, parseStrategiesSection, workspaceFromPageSearch } from "./dashboard/workspace-routing";
 import {
   analysisWindowLabel,
   buildExposureDrivers,
@@ -27,6 +27,7 @@ import {
   latestCompletedHealthDateKey,
   missingHealthDateKeys,
 } from "./dashboard/utils";
+import { IntegrationsChrome } from "./dashboard/IntegrationsChrome";
 import { AppearanceToggle, DashboardTabs, HealthIncognitoToggle, type DashboardAppearance } from "./dashboard/shared-ui";
 import { PulseConstellation } from "./dashboard/visual-components";
 import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
@@ -69,12 +70,19 @@ class WorkspaceRenderGuard extends Component<{ label: string; children: ReactNod
 
 export default function Home({ searchParams: searchParamsProp }: { searchParams?: HomeSearchParams } = {}) {
   const searchParams = useSearchParams();
+  const initialViewParam = searchParams.get("view") ?? (Array.isArray(searchParamsProp?.view) ? searchParamsProp.view[0] : searchParamsProp?.view);
   const [workspace, setWorkspace] = useState<WorkspaceKey>(() => (
     workspaceFromPageSearch(
-      { view: searchParams.get("view") ?? (Array.isArray(searchParamsProp?.view) ? searchParamsProp.view[0] : searchParamsProp?.view) },
+      { view: initialViewParam },
       typeof window !== "undefined" ? window.location.search : null,
     )
   ));
+  const [chrome, setChrome] = useState<"workspace" | "integrations">(() => {
+    if (typeof window !== "undefined" && isIntegrationsView(new URLSearchParams(window.location.search).get("view"))) {
+      return "integrations";
+    }
+    return isIntegrationsView(initialViewParam) ? "integrations" : "workspace";
+  });
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
   const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
@@ -530,6 +538,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   }, [applyHealthSnapshot, loadBenchmarks, loadContent, loadEarnings, loadHealth, loadKite, loadSectorMarket, loadSectorNews]);
 
   const selectWorkspace = useCallback((next: WorkspaceKey, historyMode: "push" | "replace" = "push") => {
+    setChrome("workspace");
     setWorkspace(next);
     const url = new URL(window.location.href);
     url.searchParams.set("view", next);
@@ -542,6 +551,16 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       url.searchParams.delete("tree");
     }
     window.history[historyMode === "push" ? "pushState" : "replaceState"]({ view: next }, "", url);
+  }, []);
+
+  const openIntegrations = useCallback(() => {
+    setChrome("integrations");
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "integrations");
+    url.searchParams.delete("section");
+    url.searchParams.delete("page");
+    url.searchParams.delete("tree");
+    window.history.pushState({ view: "integrations" }, "", url);
   }, []);
 
   const toggleSector = useCallback((sectorId: string) => {
@@ -571,11 +590,11 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   useEffect(() => {
     const fromUrl = () => {
       const url = new URL(window.location.href);
-      const value = url.searchParams.get("view");
-      const { view: next, rewritten } = applyCanonicalWorkspaceUrl(url);
+      const { chrome: nextChrome, view: next, rewritten } = applyCanonicalDashboardUrl(url);
+      setChrome(nextChrome ?? "workspace");
       setWorkspace(next);
-      if (value === "market-intelligence" || value === "algorithm-canvas" || value === "strategy-library" || rewritten) {
-        window.history.replaceState({ view: next }, "", url);
+      if (rewritten) {
+        window.history.replaceState({ view: nextChrome ?? next }, "", url);
       }
     };
     fromUrl();
@@ -592,7 +611,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       window.cancelAnimationFrame(first);
       window.cancelAnimationFrame(second);
     };
-  }, [workspace]);
+  }, [workspace, chrome]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -608,6 +627,37 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     window.localStorage.setItem("dashboard-appearance", appearance);
     document.documentElement.dataset.appearance = appearance;
   }, [appearance, appearanceHydrated]);
+
+  useEffect(() => {
+    if (chrome === "integrations") {
+      document.title = "Integrations";
+      return;
+    }
+    switch (workspace) {
+      case "investment":
+        document.title = "Portfolio Overview";
+        break;
+      case "sectors":
+        document.title = "Sectoral Analytics";
+        break;
+      case "intelligence":
+        document.title = "Market Intelligence";
+        break;
+      case "health":
+        document.title = "Health & Wellness";
+        break;
+      case "builder":
+        document.title = "Algorithm Canvas";
+        break;
+      case "strategies":
+        document.title = "Strategies";
+        break;
+      default: {
+        const _exhaustive: never = workspace;
+        document.title = _exhaustive;
+      }
+    }
+  }, [chrome, workspace]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refreshAll(), 0);
@@ -629,6 +679,35 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     };
   }, [refreshAll]);
 
+  const kiteAuthAction = kiteAuthControl === "authenticated"
+    ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
+    : kiteAuthControl === "partial"
+      ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
+      : kiteAuthControl === "authenticate" && showAuthAction
+        ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
+        : kiteAuthControl === "cached"
+          ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
+          : <button className="kite-auth-control unavailable" type="button" disabled title="Kite is unavailable; inspect the displayed source failure before attempting authentication"><Activity size={15}/><span>Kite unavailable</span></button>;
+
+  if (chrome === "integrations") {
+    return (
+      <IntegrationsChrome
+        kiteStatus={snapshot.status}
+        kiteAsOf={asOf}
+        kiteNote={sanitizeKiteStatusNote(snapshot.message) || "Connect Kite on this Mac. BUY/SELL tickets live on Portfolio Overview, not on this page."}
+        kiteAction={<>
+          {kiteAuthAction}
+          <button onClick={() => void refreshAll()} disabled={refreshing} type="button"><RefreshCw size={15} className={refreshing ? "spin" : ""}/><span>{refreshing ? "Refreshing" : "Refresh Kite"}</span></button>
+        </>}
+        appearance={appearance}
+        onAppearance={setAppearance}
+        healthIncognito={healthIncognito}
+        onHealthIncognito={setHealthIncognito}
+        onBack={() => selectWorkspace("investment")}
+      />
+    );
+  }
+
   return (
     <main className="dashboard-app">
       <a className="skip-link" href="#dashboard-workspace-panel">Skip to workspace content</a>
@@ -643,6 +722,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
           <small>As of {asOf}</small>
           <AppearanceToggle value={appearance} onChange={setAppearance}/>
           <HealthIncognitoToggle active={healthIncognito} onChange={setHealthIncognito}/>
+          <button type="button" className="integrations-open" onClick={openIntegrations}><Plug size={15}/> Integrations</button>
           <a href="/report?export=1"><FileText size={15}/> Export Report</a>
         </div>
       </header>
@@ -650,15 +730,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       <section className={`live-feed-banner ${snapshot.status}`}>
         <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite snapshot" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{sanitizeKiteStatusNote(snapshot.message)}</small></span></div>
         <div className="live-feed-actions">
-          {kiteAuthControl === "authenticated"
-            ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
-            : kiteAuthControl === "partial"
-              ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
-              : kiteAuthControl === "authenticate" && showAuthAction
-                ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
-                : kiteAuthControl === "cached"
-                  ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing a retained Kite snapshot; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
-                  : <button className="kite-auth-control unavailable" type="button" disabled title="Kite is unavailable; inspect the displayed source failure before attempting authentication"><Activity size={15}/><span>Kite unavailable</span></button>}
+          {kiteAuthAction}
           {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
           <button onClick={()=>void refreshAll()} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
           <em>All sources · 5 min</em>

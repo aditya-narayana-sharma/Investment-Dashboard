@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct InvestmentDashboardApp: App {
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Portfolio Intelligence") {
             ContentView()
         }
 #if os(macOS)

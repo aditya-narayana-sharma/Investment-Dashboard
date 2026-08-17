@@ -1,5 +1,6 @@
 import { currentKiteSession, placeKiteAlert, restoreKiteSession, type KiteAlertRequest } from "../../../kite-live-server";
 import { kiteSessionCookie } from "../../../kite-session-store";
+import { kiteWriteErrorResponse } from "../../../kite-write-response";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +9,6 @@ type AlertBody = KiteAlertRequest & { confirmation: string };
 function readCookie(request: Request, name: string) {
   const prefix = `${name}=`;
   return request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix))?.slice(prefix.length);
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : "Kite rejected the alert.";
 }
 
 function directionLabel(direction: string) {
@@ -73,13 +70,14 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const text = message(error);
+    const text = error instanceof Error ? error.message : "Kite rejected the alert.";
     const unavailable = /unavailable|unknown tool|tool not found|not (?:found|registered|available)|failed to create alert/i.test(text);
-    return Response.json({
-      status: unavailable ? "unavailable" : "failed",
-      message: unavailable
-        ? (text.includes("Unavailable") ? text : `Unavailable: ${text}`)
-        : text,
-    }, { status: unavailable ? 503 : 400, headers: { "Cache-Control": "no-store, max-age=0" } });
+    if (unavailable) {
+      return Response.json({
+        status: "unavailable",
+        message: text.includes("Unavailable") ? text : `Unavailable: ${text}`,
+      }, { status: 503, headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+    return kiteWriteErrorResponse(error, "Kite rejected the alert.", "create alert");
   }
 }

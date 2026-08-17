@@ -1,5 +1,6 @@
 import { currentKiteSession, placeKiteGtt, restoreKiteSession, type KiteGttRequest } from "../../../kite-live-server";
 import { kiteSessionCookie } from "../../../kite-session-store";
+import { kiteWriteErrorResponse } from "../../../kite-write-response";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +9,6 @@ type GttBody = KiteGttRequest & { confirmation: string };
 function readCookie(request: Request, name: string) {
   const prefix = `${name}=`;
   return request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix))?.slice(prefix.length);
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : "Kite rejected the GTT.";
 }
 
 function kindLabel(kind: string) {
@@ -29,7 +26,7 @@ export async function POST(request: Request) {
     const body = await request.json() as GttBody;
     const symbol = String(body.symbol ?? "").trim().toUpperCase();
     const side = String(body.side ?? "").toUpperCase();
-    const quantity = Number(body.quantity);
+    const quantity = Math.trunc(Number(body.quantity));
     const kind = String(body.kind ?? "gtt").toLowerCase() === "tsl" ? "tsl" : "gtt";
     const label = kindLabel(kind);
     const expectedConfirmation = `${label} ${side} ${quantity} ${symbol}`;
@@ -56,6 +53,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    return Response.json({ status: "failed", message: message(error) }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } });
+    return kiteWriteErrorResponse(error, "Kite rejected the GTT.", "create GTT");
   }
 }

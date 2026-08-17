@@ -151,6 +151,13 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
         retry()
     }
 
+    private func isMutatingAPIRequest(_ request: URLRequest) -> Bool {
+        let method = (request.httpMethod ?? "GET").uppercased()
+        guard method != "GET", method != "HEAD", method != "OPTIONS" else { return false }
+        guard let url = request.url else { return false }
+        return url.path.hasPrefix("/api/")
+    }
+
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
@@ -158,6 +165,11 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
     ) {
         guard let url = navigationAction.request.url else {
             decisionHandler(.cancel)
+            return
+        }
+
+        if isMutatingAPIRequest(navigationAction.request) {
+            decisionHandler(.allow)
             return
         }
 
@@ -195,9 +207,10 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if let requestURL = navigationAction.request.url {
-            webView.load(URLRequest(url: requestURL))
+        if isMutatingAPIRequest(navigationAction.request) {
+            return nil
         }
+        webView.load(navigationAction.request)
         return nil
     }
 

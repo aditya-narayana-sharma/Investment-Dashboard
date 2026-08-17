@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { LiveHolding } from "../live-types";
+import { KiteTicketPortal } from "./KiteTicketPortal";
+import { postKiteTicket } from "./kite-ticket-request";
 import { inr } from "./utils";
 import { useKiteInstrumentLookup } from "./useKiteInstrumentLookup";
 
@@ -41,32 +43,26 @@ export function KiteOrderTicket({ selection, holdings, onClose, onSubmitted }: {
     setSubmitting(true);
     setResult(null);
     try {
-      const response = await fetch("/api/kite/order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: normalizedSymbol,
-          side,
-          quantity,
-          product,
-          orderType,
-          price: needsPrice ? Number(price) : undefined,
-          triggerPrice: needsTrigger ? Number(triggerPrice) : undefined,
-          confirmation,
-        }),
-      });
-      const payload = await response.json() as { message?: string };
-      if (!response.ok) throw new Error(payload.message || `Kite order returned ${response.status}`);
+      const payload = await postKiteTicket("/api/kite/order", {
+        symbol: normalizedSymbol,
+        side,
+        quantity,
+        product,
+        orderType,
+        price: needsPrice ? Number(price) : undefined,
+        triggerPrice: needsTrigger ? Number(triggerPrice) : undefined,
+        confirmation,
+      }, "place order");
       setResult({ tone: "success", text: payload.message || "Order submitted to Kite." });
       await onSubmitted();
     } catch (error) {
-      setResult({ tone: "error", text: error instanceof Error ? error.message : "Kite rejected the order." });
+      setResult({ tone: "error", text: error instanceof Error ? error.message : "Failed to place order." });
     } finally {
       setSubmitting(false);
     }
   }
 
-  return <div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+  return <KiteTicketPortal><div className="kite-order-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className={`kite-order-ticket ${side.toLowerCase()}`} role="dialog" aria-modal="true" aria-labelledby="kite-order-title">
       <header><div><span>{side} · NSE cash equity</span><h3 id="kite-order-title">{normalizedSymbol || "New order"}</h3><p>{matchedHolding ? `${matchedHolding.name} · Kite holding last ${inr.format(matchedHolding.price)}` : lookup.exact ? `${lookup.exact.name}${lookup.publicPrice ? ` · public delayed ${inr.format(lookup.publicPrice)}` : ""}` : "Search the complete Kite NSE cash-equity catalogue."}</p></div><button type="button" onClick={onClose} disabled={submitting} aria-label="Close order ticket"><X size={18}/></button></header>
       <div className="kite-order-warning"><AlertTriangle size={18}/><span><b>This can place a real market order.</b> Review the symbol, side, quantity, product, type, and estimated value before confirming.</span></div>
@@ -85,5 +81,5 @@ export function KiteOrderTicket({ selection, holdings, onClose, onSubmitted }: {
       {result && <div className={`kite-order-result ${result.tone}`}>{result.tone === "success" && <CheckCircle2 size={17}/>}<span>{result.text}</span></div>}
       <footer><button type="button" className="secondary" onClick={onClose} disabled={submitting}>Cancel</button><button type="button" className={side.toLowerCase()} onClick={() => void submitOrder()} disabled={!ready || submitting}>{submitting ? "Submitting…" : `Place ${side} order`}</button></footer>
     </section>
-  </div>;
+  </div></KiteTicketPortal>;
 }

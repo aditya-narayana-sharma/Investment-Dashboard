@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyCanonicalWorkspaceUrl, parseBuilderSection, parseWorkspaceView, workspaceFromPageSearch } from "../app/dashboard/workspace-routing.ts";
+import { applyCanonicalDashboardUrl, applyCanonicalWorkspaceUrl, parseBuilderSection, parseWorkspaceView, workspaceFromPageSearch } from "../app/dashboard/workspace-routing.ts";
 import {
   DEFAULT_ASSET_CLASSES,
   inferAssetClassForSymbol,
@@ -72,6 +72,10 @@ test("parseWorkspaceView maps builder and algorithm-canvas without breaking exis
   assert.equal(workspaceFromPageSearch(undefined, "?view=builder&section=canvas"), "builder");
   assert.equal(workspaceFromPageSearch(undefined, "?view=strategy-library"), "strategies");
   assert.equal(workspaceFromPageSearch(), "investment");
+
+  const settingsChrome = new URL("http://localhost/?view=settings");
+  assert.deepEqual(applyCanonicalDashboardUrl(settingsChrome), { chrome: "integrations", view: "investment", rewritten: true });
+  assert.equal(settingsChrome.searchParams.get("view"), "integrations");
 });
 
 test("universe defaults to Equity and ETF asset classes", () => {

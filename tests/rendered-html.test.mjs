@@ -73,7 +73,8 @@ test("Kite ticker orders require an exact reviewed confirmation before place_ord
   assert.match(route, /expectedConfirmation = `\$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("place_order"/);
   assert.match(server, /requireKiteCashInstrument\(symbol, "NSE"\)/);
-  assert.match(ticket, /useKiteInstrumentLookup\(normalizedSymbol, "NSE"\)/);
+  assert.match(ticket, /postKiteTicket\("\/api\/kite\/order"/);
+  assert.match(ticket, /KiteTicketPortal/);
   assert.match(page, /orders, GTTs\/TSLs, and price alerts require an explicit reviewed ticket and typed confirmation/);
 });
 
@@ -90,7 +91,7 @@ test("Portfolio activity GTT and TSL creates require reviewed confirmation befor
   assert.match(workspace, /setGttSelection\(\{ kind: "tsl" \}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`Create \$\{label\}`/);
-  assert.match(ticket, /fetch\("\/api\/kite\/gtt"/);
+  assert.match(ticket, /postKiteTicket\("\/api\/kite\/gtt"/);
   assert.match(route, /expectedConfirmation = `\$\{label\} \$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("create_gtt"/);
   assert.match(server, /confirm: true/);
@@ -111,7 +112,7 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
   assert.match(workspace, /setAlertSelection\(\{\}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`ALERT \$\{directionLabel\(direction\)\} \$\{normalizedSymbol\} \$\{triggerText\}`/);
-  assert.match(ticket, /fetch\("\/api\/kite\/alert"/);
+  assert.match(ticket, /postKiteTicket\("\/api\/kite\/alert"/);
   assert.match(ticket, /Create price alert/);
   assert.match(route, /expectedConfirmation = `\$\{label \? `ALERT \$\{label\}` : "ALERT"\} \$\{symbol\} \$\{triggerPrice\}`/);
   assert.match(server, /callKiteTool\("create_alert"/);
@@ -479,6 +480,7 @@ test("server-renders the print report and keeps controls interactive", async () 
     render("/report"),
     Promise.all([
       readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
@@ -641,7 +643,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /onOpenIntelligence/);
   assert.doesNotMatch(page, /intelligence-crosslink/);
   assert.doesNotMatch(page, /number="S-3"/);
-  assert.match(page, /value === "market-intelligence"/);
+  assert.match(page, /market-intelligence/);
   assert.match(page, /number="M-1" title="Action Board"/);
   assert.match(page, /number="M-2" title="Live Intelligence"/);
   assert.match(page, /number="M-3" title="Earnings Calendar"/);
@@ -1395,7 +1397,7 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
   assert.match(page, /workspace === "intelligence"/);
   assert.match(page, /workspace === "health"/);
   assert.match(page, /workspace === "strategies"/);
-  assert.match(page, /value === "market-intelligence"/);
+  assert.match(routing, /market-intelligence/);
   assert.match(chrome, /Algorithm Builder/);
   assert.doesNotMatch(chrome, /BuilderKanbanBoard|AlgorithmKanbanBoard|compact-action-board/);
   if (!workspace.text) {

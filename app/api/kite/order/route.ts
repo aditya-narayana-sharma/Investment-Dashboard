@@ -1,5 +1,6 @@
 import { currentKiteSession, placeKiteOrder, restoreKiteSession, type KiteOrderRequest } from "../../../kite-live-server";
 import { kiteSessionCookie } from "../../../kite-session-store";
+import { kiteWriteErrorResponse } from "../../../kite-write-response";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +9,6 @@ type OrderBody = KiteOrderRequest & { confirmation: string };
 function readCookie(request: Request, name: string) {
   const prefix = `${name}=`;
   return request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix))?.slice(prefix.length);
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : "Kite rejected the order.";
 }
 
 export async function POST(request: Request) {
@@ -25,7 +22,7 @@ export async function POST(request: Request) {
     const body = await request.json() as OrderBody;
     const symbol = String(body.symbol ?? "").trim().toUpperCase();
     const side = String(body.side ?? "").toUpperCase();
-    const quantity = Number(body.quantity);
+    const quantity = Math.trunc(Number(body.quantity));
     const expectedConfirmation = `${side} ${quantity} ${symbol}`;
     if (body.confirmation?.trim().toUpperCase() !== expectedConfirmation) {
       return Response.json({ status: "confirmation_required", message: `Type ${expectedConfirmation} exactly to place this order.` }, { status: 400 });
@@ -49,6 +46,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    return Response.json({ status: "failed", message: message(error) }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } });
+    return kiteWriteErrorResponse(error, "Kite rejected the order.");
   }
 }

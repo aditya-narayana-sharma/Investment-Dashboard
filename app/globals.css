@@ -131,6 +131,7 @@ button:active, a:active { transform:translate(1px, 1px); }
 .status-panel div b.snapshot,.status-panel div b.partial,.status-panel div b.auth_required { color:#eab308; }.status-panel div b.unavailable { color:#ef4444; }
 .status-panel small { color:#71717a; }
 .status-panel a { display:flex; align-items:center; gap:8px; color:var(--ink); font-weight:800; text-decoration:none; margin-top:5px; }
+.status-panel .integrations-open { display:flex; align-items:center; gap:8px; margin-top:5px; border:1px solid #2563eb; border-radius:7px; background:#1d4ed8; color:#fff; font-weight:800; padding:8px 10px; cursor:pointer; }
 .live-feed-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:14px 0; padding:11px 14px; border:2px solid #14532d; border-left:6px solid var(--green); background:#022c22; box-shadow:var(--brutalist-shadow-sm); }
 .live-feed-banner>div { display:flex; align-items:center; gap:9px; }.live-feed-banner b { color:var(--ink); font-size:12px; font-family:var(--font-mono); text-transform:uppercase; }.live-feed-banner small { display:block; color:#86efac; margin-top:2px; font-size:10px; font-family:var(--font-mono); }
 .live-feed-banner.snapshot,.live-feed-banner.partial,.live-feed-banner.auth_required { border-color:#713f12; border-left-color:var(--amber); background:#451a03; }.live-feed-banner.unavailable { border-color:#7f1d1d; border-left-color:var(--red); background:#450a0a; }
@@ -2071,6 +2072,15 @@ footer { display:flex; justify-content:space-between; gap:16px; margin-top:26px;
 .kite-order-ticket>footer button.alert { border-color:#3d6b52; background:#1e4634; color:white; }
 .kite-order-ticket>footer button:disabled { opacity:.35; cursor:not-allowed; }
 @media (max-width:620px) { .kite-order-backdrop { padding:10px; } .kite-order-fields { grid-template-columns:1fr; } }
+
+.integrations-chrome .integrations-panel { display:grid; gap:16px; max-width:720px; padding:8px 0 32px; }
+.integrations-chrome .integrations-panel h2 { margin:0; font-size:22px; }
+.integrations-chrome .integrations-panel p { margin:0; color:#9ca7b1; font-size:14px; line-height:1.45; }
+.integrations-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.integrations-actions .secondary { display:inline-flex; align-items:center; gap:8px; border:1px solid #3a4651; border-radius:7px; padding:10px 15px; background:#171e25; color:#d8dde1; font-weight:850; cursor:pointer; }
+.integrations-safety { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid #8a5a1f; border-radius:10px; background:#24180c; }
+.integrations-safety h3 { margin:0 0 4px; color:#f0c665; font-size:14px; }
+.integrations-safety p { color:#d7c28c; font-size:13px; }
 /* Market Intelligence uses variable-height packing so unequal groups do not
    inherit a shared row height and leave large voids beside shorter cards. */
 .sender-groups.sender-groups-podcasts {

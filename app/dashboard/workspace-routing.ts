@@ -1,6 +1,7 @@
 import type { BuilderSection, StrategiesSection, WorkspaceKey } from "./types";
 
 export const WORKSPACE_VIEW_VALUES = ["investment", "sectors", "intelligence", "health", "builder", "strategies"] as const;
+export const INTEGRATIONS_VIEW = "integrations";
 export const BUILDER_SECTIONS = ["board", "canvas", "json"] as const;
 export const STRATEGIES_SECTIONS = ["y1", "y2"] as const;
 
@@ -33,6 +34,17 @@ export function isStrategiesSection(value: string | null | undefined): value is 
   switch (value) {
     case "y1":
     case "y2":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Integrations is chrome (`?view=integrations`), never a seventh Kanban workspace. `settings` is a legacy alias. */
+export function isIntegrationsView(value: string | null | undefined): boolean {
+  switch (value) {
+    case "integrations":
+    case "settings":
       return true;
     default:
       return false;
@@ -135,6 +147,11 @@ export function workspaceFromPageSearch(
 
 export function applyCanonicalWorkspaceUrl(url: URL): { view: WorkspaceKey; rewritten: boolean } {
   const raw = url.searchParams.get("view");
+  if (isIntegrationsView(raw)) {
+    const rewritten = raw !== INTEGRATIONS_VIEW;
+    if (rewritten) url.searchParams.set("view", INTEGRATIONS_VIEW);
+    return { view: "investment", rewritten };
+  }
   const view = parseWorkspaceView(raw);
   let rewritten = raw !== view;
   if (raw === "algorithm-canvas" && !isBuilderSection(url.searchParams.get("section"))) {
@@ -147,4 +164,19 @@ export function applyCanonicalWorkspaceUrl(url: URL): { view: WorkspaceKey; rewr
   }
   if (rewritten) url.searchParams.set("view", view);
   return { view, rewritten };
+}
+
+export function applyCanonicalDashboardUrl(url: URL): {
+  chrome: "integrations" | null;
+  view: WorkspaceKey;
+  rewritten: boolean;
+} {
+  const raw = url.searchParams.get("view");
+  if (isIntegrationsView(raw)) {
+    const rewritten = raw !== INTEGRATIONS_VIEW;
+    if (rewritten) url.searchParams.set("view", INTEGRATIONS_VIEW);
+    return { chrome: "integrations", view: "investment", rewritten };
+  }
+  const { view, rewritten } = applyCanonicalWorkspaceUrl(url);
+  return { chrome: null, view, rewritten };
 }

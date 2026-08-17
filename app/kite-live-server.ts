@@ -77,7 +77,7 @@ const marketCapColors: Record<string, string> = { "Large cap": "#315f91", "Mid c
 const sectorColors: Record<string, string> = Object.fromEntries(Object.values(securityClassifications).map((holding) => [holding.sector, holding.color]));
 const subSectorColors: Record<string, string> = Object.fromEntries(Object.values(securityClassifications).map((holding) => [holding.subSector, holding.color]));
 
-class KiteAuthRequired extends Error {}
+export class KiteAuthRequired extends Error {}
 class KiteSessionInvalid extends Error {}
 
 function clearAuthUrl() {
