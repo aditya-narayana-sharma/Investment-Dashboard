@@ -1,24 +1,17 @@
----
-name: Stratji On-Device Product
-overview: "Productize the existing macOS-local Investment Dashboard as Stratji: a source-available, on-device GitHub product with BYOK (Kite + Apple data), three yearly INR subscription tiers starting at ₹5,000, marketing/license portal on stratji.co.in, and a phased Pro roadmap for Composer-like white-box strategies with Zerodha Streak execution under SEBI retail algo rules."
-todos:
-  - id: docs-pack
-    content: "Create docs/stratji/ pack: PRD, Pricing, Cost Analysis, Architecture, License, Compliance, GTM, Roadmap, Slide outline + full slide-deck prompt"
-    status: cancelled
-  - id: sanitize-packaging
-    content: Sanitize personal paths/data; config wizard; installer; source-available license; Basic/Plus/Pro entitlement gates
-    status: cancelled
-  - id: license-portal
-    content: stratji.co.in marketing + Razorpay yearly checkout + signed license API/portal
-    status: cancelled
-  - id: beta-launch
-    content: Closed Mac beta (Basic/Plus), then public GitHub + paid launch
-    status: cancelled
-  - id: pro-algo-phases
-    content: Pro A1 Algorithmic Portfolio → A2 White-box Studio → A3 Approval checklist → A4 Streak bridge (compliance-gated)
-    status: cancelled
-isProject: false
----
+# Plan — Stratji On-Device Productization (parked)
+
+**Status:** Deferred 2026-08-17. Do not execute unless this plan is explicitly revived.  
+**Source:** `.cursor/plans/stratji_on-device_product_a8c5ddb6.plan.md`
+
+Parked overview: productize the macOS-local Investment Dashboard as Stratji — source-available, on-device, BYOK (Kite + Apple data), three yearly INR subscription tiers starting at ₹5,000, marketing/license portal on stratji.co.in, and a phased Pro roadmap for Composer-like white-box strategies with Zerodha Streak execution under SEBI retail algo rules.
+
+Parked workstreams (not started):
+
+- Create `docs/stratji/` pack: PRD, Pricing, Cost Analysis, Architecture, License, Compliance, GTM, Roadmap, slide outline + full slide-deck prompt
+- Sanitize personal paths/data; config wizard; installer; source-available license; Basic/Plus/Pro entitlement gates
+- stratji.co.in marketing + Razorpay yearly checkout + signed license API/portal
+- Closed Mac beta (Basic/Plus), then public GitHub + paid launch
+- Pro A1 Algorithmic Portfolio → A2 White-box Studio → A3 Approval checklist → A4 Streak bridge (compliance-gated)
 
 # Stratji B: On-Device Productization Plan
 
