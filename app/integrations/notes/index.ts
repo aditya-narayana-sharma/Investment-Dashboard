@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
-import type { IntegrationsConfig } from "../defaults";
-import type { IntegrationSemanticStatus } from "../registry";
-import { expandUserPath } from "../research";
+import type { IntegrationsConfig } from "../defaults.ts";
+import type { IntegrationSemanticStatus } from "../registry.ts";
+import { expandUserPath } from "../research/index.ts";
 
 export type NotesProbe = {
   id: string;

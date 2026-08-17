@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { parseWorkspaceView } from "../app/dashboard/workspace-routing.ts";
-import { growBrokerAdapter, kiteBrokerAdapter, resolveBrokerAdapter } from "../app/integrations/broker/index.ts";
+import { kiteBrokerAdapter } from "../app/integrations/broker/kite.ts";
+import { growBrokerAdapter } from "../app/integrations/broker/unavailable.ts";
 import { parseHoldingsCsv } from "../app/integrations/broker/csv.ts";
 import { DEFAULT_INTEGRATIONS_CONFIG } from "../app/integrations/defaults.ts";
 import { RESEARCH_CATALOG, researchProviderStatus } from "../app/integrations/research/index.ts";
@@ -56,7 +57,7 @@ test("invalid mailbox mapping stays unavailable without inventing a live source"
 });
 
 test("Kite adapter is live; Grow is unavailable; CSV parse is cached-only", () => {
-  assert.equal(resolveBrokerAdapter("kite").id, "kite");
+  assert.equal(kiteBrokerAdapter.id, "kite");
   assert.equal(kiteBrokerAdapter.snapshotStatus, "live");
   assert.equal(kiteBrokerAdapter.orderPath, "/api/kite/order");
   assert.equal(growBrokerAdapter.snapshotStatus, "unavailable");

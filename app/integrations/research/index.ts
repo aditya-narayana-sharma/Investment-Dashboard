@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
-import type { ResearchProviderConfig } from "../defaults";
-import type { IntegrationSemanticStatus } from "../registry";
+import type { ResearchProviderConfig } from "../defaults.ts";
+import type { IntegrationSemanticStatus } from "../registry.ts";
 
 export type ResearchCatalogEntry = {
   id: string;

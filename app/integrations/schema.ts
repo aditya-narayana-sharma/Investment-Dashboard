@@ -4,7 +4,7 @@ import {
   type IntegrationsConfig,
   type MailboxRef,
   type ResearchProviderConfig,
-} from "./defaults";
+} from "./defaults.ts";
 
 const mailboxSchema = z.object({
   account: z.string().trim().min(1),

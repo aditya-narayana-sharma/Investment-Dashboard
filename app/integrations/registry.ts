@@ -1,7 +1,7 @@
-import { resolveBrokerAdapter, type BrokerAdapter } from "./broker";
-import { DEFAULT_INTEGRATIONS_CONFIG, type IntegrationsConfig } from "./defaults";
-import { testNotesAdapter } from "./notes";
-import { RESEARCH_CATALOG, researchProviderStatus } from "./research";
+import { resolveBrokerAdapter, type BrokerAdapter } from "./broker/index.ts";
+import { DEFAULT_INTEGRATIONS_CONFIG, type IntegrationsConfig } from "./defaults.ts";
+import { testNotesAdapter } from "./notes/index.ts";
+import { RESEARCH_CATALOG, researchProviderStatus } from "./research/index.ts";
 
 export type IntegrationSemanticStatus =
   | "live"

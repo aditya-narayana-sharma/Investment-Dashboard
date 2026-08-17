@@ -1,4 +1,4 @@
-import { isIntegrationGuideId, readIntegrationGuide } from "../../../../../integrations/guides";
+import { isIntegrationGuideId, readIntegrationGuide } from "../../../../integrations/guides";
 
 export const dynamic = "force-dynamic";
 

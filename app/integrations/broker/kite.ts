@@ -1,4 +1,4 @@
-import type { BrokerAdapter } from "./types";
+import type { BrokerAdapter } from "./types.ts";
 
 export const kiteBrokerAdapter: BrokerAdapter = {
   id: "kite",

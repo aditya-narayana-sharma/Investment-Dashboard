@@ -1,6 +1,6 @@
-import { kiteBrokerAdapter } from "./kite";
-import type { BrokerAdapter } from "./types";
-import { growBrokerAdapter, unavailableBrokerAdapter } from "./unavailable";
+import { kiteBrokerAdapter } from "./kite.ts";
+import type { BrokerAdapter } from "./types.ts";
+import { growBrokerAdapter, unavailableBrokerAdapter } from "./unavailable.ts";
 
 const ADAPTERS: Record<string, BrokerAdapter> = {
   kite: kiteBrokerAdapter,

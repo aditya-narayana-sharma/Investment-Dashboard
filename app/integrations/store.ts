@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_INTEGRATIONS_CONFIG, type IntegrationsConfig } from "./defaults";
-import { parseIntegrationsConfig } from "./schema";
+import { DEFAULT_INTEGRATIONS_CONFIG, type IntegrationsConfig } from "./defaults.ts";
+import { parseIntegrationsConfig } from "./schema.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 

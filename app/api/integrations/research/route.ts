@@ -1,5 +1,5 @@
-import { RESEARCH_CATALOG, listLocalPdfs, researchProviderStatus } from "../../../../integrations/research";
-import { loadIntegrationsConfig } from "../../../../integrations/store";
+import { RESEARCH_CATALOG, listLocalPdfs, researchProviderStatus } from "../../../integrations/research";
+import { loadIntegrationsConfig } from "../../../integrations/store";
 
 export const dynamic = "force-dynamic";
 

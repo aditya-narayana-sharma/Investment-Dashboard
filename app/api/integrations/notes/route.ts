@@ -1,5 +1,5 @@
-import { testNotesAdapter } from "../../../../integrations/notes";
-import { loadIntegrationsConfig } from "../../../../integrations/store";
+import { testNotesAdapter } from "../../../integrations/notes";
+import { loadIntegrationsConfig } from "../../../integrations/store";
 
 export const dynamic = "force-dynamic";
 

@@ -90,7 +90,10 @@ test("Portfolio activity GTT and TSL creates require reviewed confirmation befor
   assert.match(workspace, /setGttSelection\(\{ kind: "tsl" \}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`Create \$\{label\}`/);
-  assert.match(ticket, /fetch\("\/api\/kite\/gtt"/);
+  assert.match(ticket, /fetch\(broker\.gttPath/);
+  assert.match(ticket, /useActiveBroker/);
+  const adapter = await readFile(new URL("../app/integrations/broker/kite.ts", import.meta.url), "utf8");
+  assert.match(adapter, /gttPath: "\/api\/kite\/gtt"/);
   assert.match(route, /expectedConfirmation = `\$\{label\} \$\{side\} \$\{quantity\} \$\{symbol\}`/);
   assert.match(server, /callKiteTool\("create_gtt"/);
   assert.match(server, /confirm: true/);
@@ -111,7 +114,10 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
   assert.match(workspace, /setAlertSelection\(\{\}\)/);
   assert.match(ticket, /confirmation\.trim\(\)\.toUpperCase\(\) === expected/);
   assert.match(ticket, /`ALERT \$\{directionLabel\(direction\)\} \$\{normalizedSymbol\} \$\{triggerText\}`/);
-  assert.match(ticket, /fetch\("\/api\/kite\/alert"/);
+  assert.match(ticket, /fetch\(broker\.alertPath/);
+  assert.match(ticket, /useActiveBroker/);
+  const adapter = await readFile(new URL("../app/integrations/broker/kite.ts", import.meta.url), "utf8");
+  assert.match(adapter, /alertPath: "\/api\/kite\/alert"/);
   assert.match(ticket, /Create price alert/);
   assert.match(route, /expectedConfirmation = `\$\{label \? `ALERT \$\{label\}` : "ALERT"\} \$\{symbol\} \$\{triggerPrice\}`/);
   assert.match(server, /callKiteTool\("create_alert"/);

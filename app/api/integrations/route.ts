@@ -1,8 +1,8 @@
-import { catalogCards, publicBroker } from "../../../integrations/registry";
-import { resolveBrokerAdapter } from "../../../integrations/broker";
-import { loadCsvHoldings } from "../../../integrations/broker/csv";
-import { listIntegrationGuides } from "../../../integrations/guides";
-import { loadIntegrationsConfig, saveIntegrationsConfig } from "../../../integrations/store";
+import { catalogCards, publicBroker } from "../../integrations/registry";
+import { resolveBrokerAdapter } from "../../integrations/broker";
+import { loadCsvHoldings } from "../../integrations/broker/csv";
+import { listIntegrationGuides } from "../../integrations/guides";
+import { loadIntegrationsConfig, saveIntegrationsConfig } from "../../integrations/store";
 
 export const dynamic = "force-dynamic";
 

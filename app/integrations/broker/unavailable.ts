@@ -1,4 +1,4 @@
-import type { BrokerAdapter } from "./types";
+import type { BrokerAdapter } from "./types.ts";
 
 export function unavailableBrokerAdapter(id: string, label: string, reason: string): BrokerAdapter {
   return {

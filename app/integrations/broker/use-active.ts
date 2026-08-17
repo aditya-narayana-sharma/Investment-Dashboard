@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { kiteBrokerAdapter } from "./kite";
-import { resolveBrokerAdapter, type BrokerAdapter } from "./index";
+import { kiteBrokerAdapter } from "./kite.ts";
+import { resolveBrokerAdapter, type BrokerAdapter } from "./index.ts";
 
 export function useActiveBroker(): BrokerAdapter {
   const [adapter, setAdapter] = useState<BrokerAdapter>(kiteBrokerAdapter);
