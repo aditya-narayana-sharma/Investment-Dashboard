@@ -10,8 +10,9 @@
   - Stratji.app is the AppKit + WKWebView shell. The data plane is sibling processes.
   - Full Disk Access may still be required for group-container SQLite until EventKit
     and user-selected folder bookmarks replace those reads.
-  - TCC parent for helpers may still be Terminal / start-dashboard.command. Production
-    should make Stratji.app the parent so Info.plist usage strings are what the user sees.
+  - TCC parent for helpers is the LaunchAgent bash trampoline (not Terminal.app).
+    Production should make Stratji.app the parent so Info.plist usage strings are
+    what the user sees.
 
   PRODUCTION TARGET (not this file yet):
   - Sandboxed Stratji.app (network client, Apple Events, user-selected files).

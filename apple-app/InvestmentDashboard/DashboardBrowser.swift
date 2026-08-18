@@ -135,9 +135,11 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
             source: """
             document.documentElement.classList.add('native-chrome-embed');
             document.documentElement.dataset.nativeChrome = '1';
+            \(StratjiAppearanceStore.webBootstrapScript())
             """,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
+            forMainFrameOnly: true,
+            in: .page
         )
         configuration.userContentController.addUserScript(hideChrome)
         configuration.applicationNameForUserAgent = "Stratji/1"
@@ -192,6 +194,7 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
             """
             document.documentElement.classList.add('native-chrome-embed');
             document.documentElement.dataset.nativeChrome = '1';
+            \(StratjiAppearanceStore.applyJavaScript())
             document.querySelectorAll('.masthead').forEach((el) => {
               el.setAttribute('hidden', '');
             });
@@ -229,6 +232,11 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
             return
         }
         let scheme = url.scheme?.lowercased() ?? ""
+        if StratjiKiteAuth.shouldOpenInSystemBrowser(url) {
+            openExternally(url)
+            decisionHandler(.cancel)
+            return
+        }
         // fetch/XHR POSTs often arrive with targetFrame == nil. Reloading them as
         // document navigations drops the body, so only intercept actual new-window links.
         if navigationAction.targetFrame == nil {
@@ -273,6 +281,10 @@ extension PortfolioDashboardBrowserModel: WKNavigationDelegate, WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         if let requestURL = navigationAction.request.url {
+            if StratjiKiteAuth.shouldOpenInSystemBrowser(requestURL) {
+                openExternally(requestURL)
+                return nil
+            }
             webView.load(URLRequest(url: requestURL))
         }
         return nil

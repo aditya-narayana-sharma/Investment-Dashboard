@@ -6,7 +6,7 @@
   z-index:12;
   display:grid;
   gap:16px;
-  margin-bottom:20px;
+  margin-bottom:var(--chrome-stack-gap);
   padding:4px 0 16px;
   background:var(--bg-app);
   border-bottom:1px solid var(--line);
@@ -29,7 +29,7 @@
 .strategies-library-toolbar p {
   margin:0;
   color:var(--muted);
-  font-size:13px;
+  font-size:15px;
   font-weight:500;
   line-height:1.5;
   max-width:64ch;
@@ -44,7 +44,7 @@
 }
 .strategies-mine h3 {
   margin: 0 0 16px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -127,7 +127,7 @@
 .strategy-kpi-grid small,
 .strategy-dialog-stats small {
   color:var(--muted);
-  font:700 10px/1 var(--font-mono);
+  font:700 13px/1.2 var(--font-mono);
   letter-spacing:0.1em;
   text-transform:uppercase;
 }
@@ -136,7 +136,7 @@
 .strategy-card-asof {
   margin:0;
   color:var(--muted);
-  font:600 11px/1.4 var(--font-mono);
+  font:600 14px/1.4 var(--font-mono);
   letter-spacing:0.02em;
 }
 .strategy-card-notes {
@@ -144,11 +144,11 @@
   gap:10px;
   margin:0;
 }
-.strategy-card-notes p { margin:0; font-size:13px; line-height:1.5; color:var(--muted); }
+.strategy-card-notes p { margin:0; font-size:15px; line-height:1.5; color:var(--muted); }
 .strategy-engine-note {
   margin:0;
   color:var(--muted);
-  font-size:13px;
+  font-size:15px;
   font-weight:500;
   line-height:1.5;
 }
@@ -162,13 +162,13 @@
 }
 .strategy-unreconstructed h3 {
   margin:0 0 12px;
-  font-size:12px;
+  font-size:15px;
   font-weight:700;
   letter-spacing:0.14em;
   text-transform:uppercase;
   color:var(--muted);
 }
-.strategy-unreconstructed li { margin:0 0 8px; font-size:13px; color:var(--muted); }
+.strategy-unreconstructed li { margin:0 0 8px; font-size:15px; color:var(--muted); }
 .strategy-readonly-tree {
   max-height:240px;
   overflow-x:hidden;
@@ -243,12 +243,12 @@
 }
 .strategy-vtree-head span {
   color:var(--muted);
-  font:700 10px/1 var(--font-mono);
+  font:700 13px/1.2 var(--font-mono);
   letter-spacing:0.12em;
 }
 .strategy-vtree-head small {
   color:var(--ink);
-  font-size:13px;
+  font-size:15px;
   font-weight:600;
 }
 .strategy-vtree-symbol {
@@ -259,7 +259,7 @@
 .strategy-vtree-empty {
   margin:0;
   color:var(--ink);
-  font-size:13px;
+  font-size:15px;
   font-weight:600;
 }
 .strategy-vtree-empty { color:var(--muted); }
@@ -269,7 +269,7 @@
   border:0;
   background:transparent;
   color:var(--ink);
-  font:700 12px/1 var(--font-mono);
+  font:700 15px/1.2 var(--font-mono);
 }
 .strategy-vtree-well {
   display:flex;
@@ -285,7 +285,7 @@
 .strategy-vtree-well h4 {
   margin:0;
   color:var(--muted);
-  font:700 10px/1 var(--font-mono);
+  font:700 13px/1.2 var(--font-mono);
   letter-spacing:0.12em;
 }
 .strategy-vtree-stack > .strategy-vtree-block {

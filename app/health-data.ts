@@ -21,7 +21,7 @@ export type HealthMetric = {
   context?: string;
   tone?: HealthTone;
   averages?: Partial<Record<HealthAveragePeriod, HealthMetricAverage>>;
-  /** Chronological daily series ending on the health target date (gaps omitted). */
+  /** Chronological daily series ending on the health target date (missing days omitted, never interpolated). */
   history?: Partial<Record<HealthAveragePeriod, HealthMetricHistoryPoint[]>>;
 };
 

@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 struct StratjiSettingsView: View {
     @ObservedObject var session: StratjiSessionModel
@@ -10,26 +9,10 @@ struct StratjiSettingsView: View {
     }
 }
 
-private enum StratjiAppearanceOption: String, CaseIterable, Identifiable {
-    case black
-    case dark
-    case sepia
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .black: "Black"
-        case .dark: "Dark"
-        case .sepia: "Sepia"
-        }
-    }
-}
-
 private struct StratjiNativeSettingsForm: View {
     @ObservedObject var session: StratjiSessionModel
-    @AppStorage("stratji.appearance") private var appearanceRaw = "black"
-    @AppStorage("stratji.healthIncognito") private var healthIncognito = false
+    @AppStorage(StratjiAppearanceStore.defaultsKey) private var appearanceRaw = StratjiAppearanceStore.defaultValue
+    @AppStorage(StratjiAppearanceStore.healthIncognitoKey) private var healthIncognito = false
 
     @State private var licenseKey = ""
     @State private var licenseTier: StratjiLicenseTier = .ultra
@@ -66,6 +49,7 @@ private struct StratjiNativeSettingsForm: View {
             VStack(spacing: 0) {
                 safetyBanner
                 Form {
+                    freshnessSection
                     licenseSection
                     appearanceSection
                     kiteSection
@@ -85,7 +69,9 @@ private struct StratjiNativeSettingsForm: View {
                 .formStyle(.grouped)
                 .scrollContentBackground(.hidden)
             }
-            .background(Color.black)
+            .background(StratjiAppearance(rawValue: appearanceRaw)?.prefersDarkChrome == false
+                ? Color(red: 0.98, green: 0.97, blue: 0.95)
+                : Color.black)
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -97,12 +83,20 @@ private struct StratjiNativeSettingsForm: View {
             }
         }
         .frame(minWidth: 640, minHeight: 720)
+            .preferredColorScheme(StratjiAppearance(rawValue: appearanceRaw)?.colorScheme ?? .dark)
+            .onChange(of: appearanceRaw) { _, _ in
+                applyDashboardPreferences()
+            }
+            .onChange(of: healthIncognito) { _, _ in
+                applyDashboardPreferences()
+            }
             .onAppear {
                 if !didLoad {
                     didLoad = true
                     bootstrap()
                 }
                 appleRows = StratjiApplePermissions.snapshot()
+                applyDashboardPreferences()
                 Task { await StratjiApplePermissionActions.persist(session: session) }
             }
     }
@@ -125,6 +119,17 @@ private struct StratjiNativeSettingsForm: View {
         .background(Color(red: 0.27, green: 0.10, blue: 0.01))
         .overlay(alignment: .leading) {
             Rectangle().fill(Color(red: 0.96, green: 0.76, blue: 0.18)).frame(width: 6)
+        }
+    }
+
+    private var freshnessSection: some View {
+        Section {
+            StratjiFreshnessChipStrip(sources: session.liveFeedSources)
+                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+        } header: {
+            Text("Source freshness")
+        } footer: {
+            Text("Same live-feed strip as the dashboard (`GET /api/dashboard/refresh` sources). Chips wrap inside this window.")
         }
     }
 
@@ -162,7 +167,7 @@ private struct StratjiNativeSettingsForm: View {
     private var appearanceSection: some View {
         Section("Appearance") {
             Picker("Theme", selection: $appearanceRaw) {
-                ForEach(StratjiAppearanceOption.allCases) { option in
+                ForEach(StratjiAppearance.allCases) { option in
                     Text(option.title).tag(option.rawValue)
                 }
             }
@@ -186,6 +191,12 @@ private struct StratjiNativeSettingsForm: View {
                 }
             }
             TextField("Kite MCP project dir", text: $kiteMcpProjectDir)
+            Button(kiteNeedsAuth ? "Authenticate Kite" : "Re-authenticate Kite") {
+                authenticateKite()
+            }
+            Text("Opens Zerodha login in Safari. Complete login there, return here, then Refresh all. This does not place orders.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text("Read-only from the data plane. Writes that place orders still need an explicit ticket and confirmation.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -320,6 +331,21 @@ private struct StratjiNativeSettingsForm: View {
         }
     }
 
+    private var kiteNeedsAuth: Bool {
+        let status = session.kite?.authStatus ?? session.kite?.status ?? "unavailable"
+        switch status {
+        case "authenticated", "live", "partial": return false
+        default: return true
+        }
+    }
+
+    private func authenticateKite() {
+        Task {
+            await StratjiKiteAuth.openFromDashboard(StratjiKiteAuth.loginURL(baseURL: session.baseURL))
+        }
+        statusMessage = "Complete Zerodha login in Safari, then Refresh all on the dashboard."
+    }
+
     private func bootstrap() {
         let seeded = StratjiLicenseStore.ensureAuthorLicense()
         licenseKey = seeded.key
@@ -350,7 +376,9 @@ private struct StratjiNativeSettingsForm: View {
     }
 
     private func apply(_ config: IntegrationsConfigDTO) {
-        if let appearance = config.appearance, StratjiAppearanceOption(rawValue: appearance) != nil {
+        if UserDefaults.standard.object(forKey: StratjiAppearanceStore.defaultsKey) == nil,
+           let appearance = config.appearance,
+           StratjiAppearance(rawValue: appearance) != nil {
             appearanceRaw = appearance
         }
         if let incognito = config.healthIncognito {
@@ -475,21 +503,7 @@ private struct StratjiNativeSettingsForm: View {
     }
 
     private func applyDashboardPreferences() {
-        let appearance = appearanceRaw
-        let incognito = healthIncognito ? "1" : "0"
-        let js = """
-        (function(){
-          try {
-            localStorage.setItem('dashboard-appearance', '\(appearance)');
-            localStorage.setItem('dashboard-health-incognito', '\(incognito)');
-            document.documentElement.dataset.appearance = '\(appearance)';
-            window.dispatchEvent(new CustomEvent('stratji-preferences-changed', {
-              detail: { appearance: '\(appearance)', healthIncognito: \(healthIncognito ? "true" : "false") }
-            }));
-          } catch (e) {}
-        })();
-        """
-        session.document.webView.evaluateJavaScript(js, completionHandler: nil)
+        session.document.applyPreferences()
     }
 
     private func which(_ command: String) -> String {
@@ -511,5 +525,150 @@ private struct StratjiNativeSettingsForm: View {
         } catch {
             return ""
         }
+    }
+}
+
+/// Dashboard `PulseConstellation` chips, wrapping so they stay inside Settings instead of clipping.
+private struct StratjiFreshnessChipStrip: View {
+    let sources: [SourceFreshnessDTO]
+
+    var body: some View {
+        Group {
+            if sources.isEmpty {
+                Text("Waiting for the dashboard refresh payload. Chips bind to live source rows and are not hardcoded.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                StratjiFlowLayout(spacing: 8) {
+                    ForEach(sources) { source in
+                        StratjiFreshnessChip(source: source)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Source freshness")
+    }
+}
+
+private struct StratjiFreshnessChip: View {
+    let source: SourceFreshnessDTO
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 9) {
+            StratjiFreshnessDot(state: source.state)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(source.chipTitle)
+                    .font(.system(size: 14, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(titleColor)
+                    .lineLimit(1)
+                Text(source.chipSubtitle)
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(chipFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(chipBorder, lineWidth: 1.5)
+        }
+        .fixedSize()
+        .help(source.message ?? source.chipSubtitle)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(source.source), \(source.chipSubtitle)")
+    }
+
+    private var chipFill: Color {
+        colorScheme == .dark
+            ? Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
+            : Color(red: 1, green: 253 / 255, blue: 249 / 255)
+    }
+
+    private var chipBorder: Color {
+        colorScheme == .dark
+            ? Color(red: 39 / 255, green: 39 / 255, blue: 42 / 255)
+            : Color.black.opacity(0.22)
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? Color(red: 250 / 255, green: 250 / 255, blue: 250 / 255) : .black
+    }
+
+    private var subtitleColor: Color {
+        colorScheme == .dark ? Color(red: 161 / 255, green: 161 / 255, blue: 170 / 255) : Color.black.opacity(0.72)
+    }
+}
+
+private struct StratjiFreshnessDot: View {
+    let state: StratjiSourceState
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(state.freshnessDotColor.opacity(0.35), lineWidth: 1)
+                .frame(width: 16, height: 16)
+            Circle()
+                .fill(state.freshnessDotColor)
+                .frame(width: 8, height: 8)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Intrinsic-size wrapping row. Caps infinite Form proposals so chips wrap instead of overflowing.
+private struct StratjiFlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(proposal: proposal, subviews: subviews).container
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        for index in subviews.indices {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + result.origins[index].x, y: bounds.minY + result.origins[index].y),
+                proposal: ProposedViewSize(result.sizes[index])
+            )
+        }
+    }
+
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (origins: [CGPoint], sizes: [CGSize], container: CGSize) {
+        let maxWidth = wrappingWidth(from: proposal)
+        var origins: [CGPoint] = []
+        var sizes: [CGSize] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            sizes.append(size)
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+
+        let height = subviews.isEmpty ? 0 : y + rowHeight
+        return (origins, sizes, CGSize(width: maxWidth, height: height))
+    }
+
+    private func wrappingWidth(from proposal: ProposedViewSize) -> CGFloat {
+        if let width = proposal.width, width.isFinite, width > 32, width < 4000 {
+            return width
+        }
+        return 600
     }
 }

@@ -25,6 +25,7 @@ export const currentIstDateKey = () => new Date(Date.now() + 5.5 * 60 * 60 * 100
 export const currentIstDateLabel = () => analysisDay.format(new Date(`${currentIstDateKey()}T12:00:00+05:30`));
 
 export const sectorSearchTerms: Record<string, string[]> = {
+  it: ["it services", "software", "infosys", "tcs", "wipro", "hcl", "tech mahindra", "coforge", "ltts"],
   pharma: ["pharma", "healthcare", "drug", "hospital", "diagnostic", "cipla", "sun pharma", "lupin"],
   power: ["power", "utility", "utilities", "renewable", "electricity", "ntpc", "adani green", "jsw energy"],
   infrastructure: ["infrastructure", "infra", "realty", "construction", "epc", "cement", "larsen", "l&t"],
@@ -35,6 +36,7 @@ export const sectorSearchTerms: Record<string, string[]> = {
   fmcg: ["fmcg", "staples", "consumer goods", "hul", "itc", "nestle", "britannia", "dabur"],
   consumer: ["consumer", "retail", "e-commerce", "ecommerce", "quick commerce", "eternal", "zomato", "titan", "trent"],
   energy: ["energy", "oil", "gas", "refining", "upstream", "ongc", "reliance", "bpcl", "ioc"],
+  metals: ["metal", "steel", "aluminium", "mining", "zinc", "jsw steel", "tata steel", "hindalco", "coal india"],
   defence: ["defence", "defense", "aerospace", "hal", "bel", "mazdock", "bdl", "shipyard", "drone", "missile"],
 };
 

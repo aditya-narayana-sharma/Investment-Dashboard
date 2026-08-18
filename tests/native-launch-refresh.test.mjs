@@ -21,12 +21,14 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
 
   assert.match(session, /includeStartupScript: true/);
   assert.match(session, /runCompleteRefresh/);
+  assert.match(session, /runIncrementalRefresh/);
   assert.match(session, /refreshDashboard\(baseURL: baseURL, force:/);
   assert.match(session, /startupRefreshCompleted/);
-  assert.match(session, /guard !startupRefreshCompleted else \{ return \}/);
+  assert.match(session, /guard startupRefreshCompleted else \{ return \}/);
   assert.match(session, /func refreshOnForeground/);
+  assert.match(session, /func refreshIncremental/);
+  assert.match(session, /Task.sleep\(for: \.seconds\(DashboardRefreshSchedule.interval\)\)/);
   assert.doesNotMatch(session, /NSApp.isActive/);
-  assert.doesNotMatch(session, /Task.sleep\(for: \.seconds\(DashboardRefreshSchedule.interval\)\)/);
   assert.match(session, /applyProgress/);
   assert.match(session, /pollRefreshProgress/);
   assert.match(session, /waitForDocumentReady/);
@@ -37,7 +39,14 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.doesNotMatch(session, /snapshot\.stage = \.health/);
   assert.doesNotMatch(session, /2\.0 \/ 7\.0/);
   assert.match(supervisor, /refresh-dashboard-data\.sh/);
-  assert.match(supervisor, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.match(supervisor, /PORTFOLIO_REFRESH_MODE/);
+  assert.match(supervisor, /completeRefreshTimeout/);
+  assert.match(supervisor, /35 \* 60/);
+  assert.match(supervisor, /runIncrementalRefresh/);
+  assert.match(supervisor, /Health ZIP ingest enabled/);
+  assert.doesNotMatch(supervisor, /PORTFOLIO_SKIP_HEALTH_ZIP"\] = "1"/);
+  assert.doesNotMatch(supervisor, /Health ZIP skipped/);
+  assert.match(supervisor, /removeValue\(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP"\)/);
   assert.match(supervisor, /onProgress/);
   assert.match(supervisor, /latestRefreshProgress/);
   assert.match(client, /URLQueryItem\(name: "force", value: "1"\)/);
@@ -45,6 +54,16 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(client, /_startup\/progress/);
   assert.match(browser, /portfolio-native-refresh/);
   assert.match(browser, /applicationNameForUserAgent = "Stratji\/1"/);
+  assert.match(browser, /StratjiAppearanceStore\.webBootstrapScript/);
+  assert.match(browser, /func applyPreferences/);
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /dataset\.appearance/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /static let defaultsKey = "stratji\.appearance"/,
+  );
   assert.match(appDelegate, /refreshOnForeground/);
   assert.match(appDelegate, /startupRefreshCompleted/);
   assert.match(page, /params.set\("force", "1"\)/);
@@ -96,6 +115,26 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.doesNotMatch(views, /Color\.clear\.frame\(maxWidth: \.infinity\)/);
   assert.doesNotMatch(views, /isFailed \? "exclamationmark\.triangle\.fill"/);
   assert.match(views, /SplashProgressInterpolator.animationDuration/);
+  assert.match(views, /Log in to Kite/);
+  assert.match(views, /Continue without live Kite \(cached\)/);
+  assert.match(views, /splashKiteAuthPrompt/);
+  assert.match(session, /promptKiteLoginIfNeeded/);
+  assert.match(session, /beginKiteLogin/);
+  assert.match(session, /skipKiteLogin/);
+  assert.match(session, /kiteAuthPhase/);
+  assert.match(session, /openKiteLoginFromSplash/);
+  assert.match(client, /api\/kite\/login/);
+  assert.match(client, /extraAcceptedStatusCodes: \[503\]/);
+  assert.match(browser, /shouldOpenInSystemBrowser/);
+  assert.match(browser, /openFromDashboard/);
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiKiteAuth.swift", root), "utf8"),
+    /NSWorkspace\.shared\.open/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiKiteAuth.swift", root), "utf8"),
+    /jsonLoginURL/,
+  );
   assert.match(session, /tickSplashProgress/);
   assert.match(session, /startProgressInterpolator/);
   assert.match(session, /SplashProgressInterpolator.displayedProgress/);
@@ -142,19 +181,44 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(flask, /_startup\/progress/);
 });
 
-test("native splash is the only automatic complete refresh after hydrate", async () => {
-  const [session, coordinator, page, contentView, browser] = await Promise.all([
+test("Mac Stratji starts Flask and Next headlessly without Terminal.app", async () => {
+  const [supervisor, config, install, start] = await Promise.all([
+    readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiConfiguration.swift", root), "utf8"),
+    readFile(new URL("scripts/install-macos-service.sh", root), "utf8"),
+    readFile(new URL("scripts/start-flask-app.sh", root), "utf8"),
+  ]);
+
+  assert.doesNotMatch(supervisor, /\/usr\/bin\/open/);
+  assert.doesNotMatch(supervisor, /open -g -j/);
+  assert.doesNotMatch(config, /open -g -j/);
+  assert.doesNotMatch(install, /open -g -j/);
+  assert.doesNotMatch(start, /open -a Terminal/);
+  assert.match(supervisor, /startHeadlessService/);
+  assert.match(supervisor, /executableURL = URL\(fileURLWithPath: "\/bin\/bash"\)/);
+  assert.match(config, /\/bin\/bash "\$START_SCRIPT"/);
+  assert.match(install, /\/bin\/bash "\\\$START_SCRIPT"/);
+  assert.match(start, /run-dashboard-service\.sh/);
+});
+
+test("native splash runs a complete Health ZIP ingest; later ticks are incremental", async () => {
+  const [session, coordinator, page, contentView, browser, supervisor, script, health] = await Promise.all([
     readFile(new URL("apple-app/Shared/StratjiSessionModel.swift", root), "utf8"),
     readFile(new URL("apple-app/InvestmentDashboard/NativeRefreshCoordinator.swift", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("apple-app/InvestmentDashboard/ContentView.swift", root), "utf8"),
     readFile(new URL("apple-app/Shared/StratjiDocumentBrowser.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
+    readFile(new URL("scripts/refresh-dashboard-data.sh", root), "utf8"),
+    readFile(new URL("scripts/refresh-apple-health.sh", root), "utf8"),
   ]);
 
   assert.match(session, /startupRefreshCompleted = true/);
   assert.match(session, /await waitForDocumentReady\(\)/);
-  assert.doesNotMatch(session, /startPeriodicRefresh\(\)\n        \}/);
-  assert.match(session, /guard !startupRefreshCompleted else \{ return \}/);
+  assert.match(session, /startPeriodicRefresh\(\)/);
+  assert.match(session, /runIncrementalRefresh/);
+  assert.match(session, /incremental: true/);
+  assert.match(session, /guard startupRefreshCompleted else \{ return \}/);
   assert.match(coordinator, /startupRefreshCompleted = true/);
   assert.match(coordinator, /if monitorTask != nil \|\| startupRefreshCompleted/);
   assert.doesNotMatch(coordinator, /onRefreshCompleted\?\(\)/);
@@ -168,6 +232,16 @@ test("native splash is the only automatic complete refresh after hydrate", async
   assert.match(page, /Sources keep the last validated snapshot until Refresh all/);
   assert.match(browser, /canReuseHydratedDashboard/);
   assert.match(session, /document.load\(baseURL: baseURL, destination: target, force: false\)/);
+  assert.match(session, /promptKiteLoginIfNeeded/);
+  assert.match(supervisor, /mode: "complete"/);
+  assert.doesNotMatch(supervisor, /PORTFOLIO_SKIP_HEALTH_ZIP"\] = "1"/);
+  assert.match(script, /PORTFOLIO_REFRESH_MODE:-complete/);
+  assert.match(script, /refresh-apple-health\.sh/);
+  assert.match(script, /--if-changed/);
+  assert.match(health, /--if-changed/);
+  assert.match(health, /import_health_shortcut\.py/);
+  assert.match(health, /prepare_apple_health_export\.py/);
+  assert.match(health, /import_apple_health\.py/);
 });
 
 test("iOS splash refresh does not schedule a second complete refresh on become-active", async () => {
@@ -193,4 +267,30 @@ test("iOS splash refresh does not schedule a second complete refresh on become-a
   assert.match(contentView, /scenePhase == .active|phase == .active/);
   assert.match(contentView, /startSession\(\)/);
   assert.match(contentView, /session.stopMonitoring\(\)/);
+});
+
+test("Settings Black shares stratji.appearance into the WKWebView at document start", async () => {
+  const [store, browser, settings, page, iosBrowser] = await Promise.all([
+    readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    readFile(new URL("apple-app/Shared/StratjiDocumentBrowser.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiSettingsWindow.swift", root), "utf8"),
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("apple-app/InvestmentDashboard/DashboardBrowser.swift", root), "utf8"),
+  ]);
+
+  assert.match(store, /static let defaultsKey = "stratji\.appearance"/);
+  assert.match(store, /static let webStorageKey = "dashboard-appearance"/);
+  assert.match(store, /dataset\.appearance/);
+  assert.match(store, /localStorage.setItem\(/);
+  assert.match(store, /dashboard-appearance/);
+  assert.match(browser, /StratjiAppearanceStore\.webBootstrapScript/);
+  assert.match(browser, /injectionTime: \.atDocumentStart/);
+  assert.match(browser, /func applyPreferences/);
+  assert.match(browser, /applyPreferences\(\)/);
+  assert.match(settings, /@AppStorage\(StratjiAppearanceStore\.defaultsKey\)/);
+  assert.match(settings, /onChange\(of: appearanceRaw\)/);
+  assert.match(settings, /session\.document\.applyPreferences/);
+  assert.match(iosBrowser, /StratjiAppearanceStore\.webBootstrapScript/);
+  assert.match(page, /stratji-preferences-changed/);
+  assert.match(page, /fromDom = document\.documentElement\.dataset\.appearance/);
 });

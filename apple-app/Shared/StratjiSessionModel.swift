@@ -29,6 +29,8 @@ final class StratjiSessionModel: ObservableObject {
     @Published var needsFullDiskAccess = false
     @Published var completedIds: Set<String> = []
     @Published var showingInspector = false
+    @Published var kiteAuthPhase: StratjiKiteAuthPhase = .idle
+    @Published var kiteAuthMessage = ""
 
     let document = StratjiDocumentBrowser()
     var baseURL: URL
@@ -41,7 +43,7 @@ final class StratjiSessionModel: ObservableObject {
     nonisolated(unsafe) private var periodicTask: Task<Void, Never>?
     nonisolated(unsafe) private var interpolatorTask: Task<Void, Never>?
     private var refreshInFlight = false
-    /// Splash finished one complete refresh. Automatic open/focus/5-minute ticks stay off until the user asks.
+    /// Splash finished one complete refresh. Later ticks are incremental only.
     private var startupRefreshCompleted = false
     /// Last Health snapshot session day (`YYYY-MM-DD`) from `dataDate`, else `completedHealthThrough`.
     private var lastHealthSessionDateKey: String?
@@ -51,6 +53,8 @@ final class StratjiSessionModel: ObservableObject {
     private var committedProgress: Double = 0
     /// Set once on UI hydrate so poll ticks cannot swap Health vs dashboard copy.
     private var frozenHydrateCaption: String?
+    private var kiteAuthContinuation: CheckedContinuation<Bool, Never>?
+    private var pendingKiteLoginURL: URL?
 
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -68,6 +72,9 @@ final class StratjiSessionModel: ObservableObject {
             sources.first { $0.source.caseInsensitiveCompare(name) == .orderedSame }
         }
     }
+
+    /// Full dashboard live-feed strip (`PulseConstellation` / `GET /api/dashboard/refresh` `sources`).
+    var liveFeedSources: [SourceFreshnessDTO] { sources }
 
     func bootstrap() async {
         stopPeriodicRefresh()
@@ -90,8 +97,6 @@ final class StratjiSessionModel: ObservableObject {
         stageEnteredAt = Date()
         restoreCompletedActions()
         await runAudit(includeStartupScript: true)
-        // Stratji.app: splash is the only automatic complete refresh.
-        stopPeriodicRefresh()
     }
 
     func reload() async {
@@ -103,7 +108,7 @@ final class StratjiSessionModel: ObservableObject {
             guard !refreshInFlight else { return }
             isDegraded = false
             degradedNames = []
-            await runAudit(showLoading: false, includeStartupScript: false)
+            await runAudit(showLoading: false, includeStartupScript: true, incremental: false)
             document.refreshDashboard()
             return
         }
@@ -112,20 +117,34 @@ final class StratjiSessionModel: ObservableObject {
 
     func refreshIfStale() async {
         guard !isBootstrapping else { return }
-        guard !startupRefreshCompleted else { return }
+        guard startupRefreshCompleted else { return }
         guard DashboardRefreshSchedule.isStale(lastSuccess: lastLoadedAt) else { return }
-        await reload(keepDocument: true)
+        await refreshIncremental()
     }
 
     func refreshOnForeground() async {
         guard !isBootstrapping else { return }
-        guard !startupRefreshCompleted else { return }
-        await reload(keepDocument: true)
+        guard startupRefreshCompleted else { return }
+        await refreshIncremental()
     }
 
-    /// No-op after splash. Explicit Reload All / in-page Refresh all remain the only follow-up refreshes.
+    /// After splash, poll incrementally. Skip full Health XML re-extract unless the export mtime changed.
     func startPeriodicRefresh() {
         stopPeriodicRefresh()
+        periodicTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(DashboardRefreshSchedule.interval))
+                guard !Task.isCancelled else { return }
+                await self?.refreshIncremental()
+            }
+        }
+    }
+
+    func refreshIncremental() async {
+        guard !isBootstrapping else { return }
+        guard startupRefreshCompleted else { return }
+        guard !refreshInFlight else { return }
+        await runAudit(showLoading: false, includeStartupScript: true, incremental: true)
     }
 
     func stopPeriodicRefresh() {
@@ -154,6 +173,15 @@ final class StratjiSessionModel: ObservableObject {
         persistCompletedActions()
     }
 
+    func beginKiteLogin() {
+        Task { await openKiteLoginFromSplash() }
+    }
+
+    func skipKiteLogin() {
+        stageLabel = "Continuing with the last validated Kite snapshot…"
+        finishKiteAuth(loggedIn: false)
+    }
+
     func items(for workspace: StratjiWorkspace, lane targetLane: StratjiActionLane) -> [StratjiActionItem] {
         StratjiActionCatalog.items(for: workspace).filter { resolvedLane(for: $0) == targetLane }
     }
@@ -165,7 +193,7 @@ final class StratjiSessionModel: ObservableObject {
         return StratjiActionLane(rawValue: item.lane) ?? .today
     }
 
-    private func runAudit(showLoading: Bool = true, includeStartupScript: Bool = false) async {
+    private func runAudit(showLoading: Bool = true, includeStartupScript: Bool = false, incremental: Bool = false) async {
         guard !refreshInFlight else { return }
         refreshInFlight = true
         defer { refreshInFlight = false }
@@ -178,6 +206,10 @@ final class StratjiSessionModel: ObservableObject {
             latestProgressSnapshot = nil
             committedProgress = 0
             frozenHydrateCaption = nil
+            finishKiteAuth(loggedIn: false)
+            kiteAuthPhase = .idle
+            kiteAuthMessage = ""
+            pendingKiteLoginURL = nil
             progress = 0
             startProgressInterpolator()
             advance(.service, "Starting the local Stratji service…", complete: false)
@@ -226,18 +258,34 @@ final class StratjiSessionModel: ObservableObject {
         serviceFailed = false
         advance(.service, "Local Stratji service is up.")
         await loadLastHealthSessionDate()
+        if showLoading {
+            await promptKiteLoginIfNeeded()
+        }
         var forceBundle = true
         if includeStartupScript {
-            advance(.kite, "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…", complete: false)
+            if incremental {
+                advance(.kite, "Refreshing live sources…", complete: false)
 #if os(macOS)
-            let audited = await FlaskServiceSupervisor.runCompleteRefresh { snapshot in
-                Task { @MainActor [weak self] in
-                    await self?.applyProgress(snapshot)
-                    self?.noteLogTick()
+                let audited = await FlaskServiceSupervisor.runIncrementalRefresh { snapshot in
+                    Task { @MainActor [weak self] in
+                        await self?.applyProgress(snapshot)
+                        self?.noteLogTick()
+                    }
                 }
-            }
-            forceBundle = !audited
+                forceBundle = !audited
 #endif
+            } else {
+                advance(.kite, "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…", complete: false)
+#if os(macOS)
+                let audited = await FlaskServiceSupervisor.runCompleteRefresh { snapshot in
+                    Task { @MainActor [weak self] in
+                        await self?.applyProgress(snapshot)
+                        self?.noteLogTick()
+                    }
+                }
+                forceBundle = !audited
+#endif
+            }
         } else {
             advance(.kite, "Refreshing Kite, Mail, Calendar, Reminders, Podcasts, sectors, and Health snapshot…", complete: false)
         }
@@ -271,8 +319,10 @@ final class StratjiSessionModel: ObservableObject {
         }
 
         applyStageFromSources()
-        if kite == nil {
-            kite = try? await client.kiteSnapshot(baseURL: baseURL)
+        if kite == nil || kite?.hasUsableLiveSession != true {
+            if let snapshot = try? await client.kiteSnapshot(baseURL: baseURL) {
+                kite = snapshot
+            }
         }
         integrations = try? await client.integrations(baseURL: baseURL)
         audit = try? await client.startupAudit(baseURL: baseURL)
@@ -285,9 +335,17 @@ final class StratjiSessionModel: ObservableObject {
 
         evaluateRequiredSources(refreshReturnedRows: !(refresh?.sources ?? []).isEmpty)
         if showLoading {
+            if kite?.hasUsableLiveSession != true {
+                await promptKiteLoginIfNeeded()
+                if let latest = try? await client.kiteSnapshot(baseURL: baseURL, timeout: 12),
+                   latest.hasUsableLiveSession {
+                    kite = latest
+                }
+            }
             startupRefreshCompleted = true
             await waitForDocumentReady()
             completeHydrate()
+            startPeriodicRefresh()
         }
     }
 
@@ -302,6 +360,100 @@ final class StratjiSessionModel: ObservableObject {
         workspace = StratjiWorkspace(rawValue: target.view) ?? .investment
         NSLog("[Stratji] session.select %@ → %@/%@", destination.id, target.view, target.section ?? "")
         document.load(baseURL: baseURL, destination: target, force: false)
+    }
+
+    private func promptKiteLoginIfNeeded() async {
+        advance(.kite, "Checking the Kite session…", complete: false)
+        let snapshot = try? await client.kiteSnapshot(baseURL: baseURL, timeout: 12)
+        if let snapshot {
+            kite = snapshot
+        }
+        if snapshot?.hasUsableLiveSession == true {
+            return
+        }
+
+        var shouldPrompt = snapshot == nil || snapshot?.needsSplashLogin == true
+        if pendingKiteLoginURL == nil {
+            if let login = try? await client.kiteLogin(baseURL: baseURL, force: false),
+               let raw = login.loginUrl,
+               let url = StratjiKiteAuth.resolvedLoginURL(raw, baseURL: baseURL) {
+                pendingKiteLoginURL = url
+                shouldPrompt = true
+            }
+        }
+        guard shouldPrompt else { return }
+
+        let expired = snapshot?.authStatus == "expired"
+        stageLabel = expired ? "Kite session expired — log in to Kite" : "Log in to Kite to load live holdings"
+        kiteAuthMessage = expired
+            ? "Zerodha access tokens expire around 06:00 IST. Log in now for live holdings, or continue with the last validated snapshot."
+            : "Live Kite data needs a Zerodha login. Cached holdings stay available if you continue without it. Stratji will not invent live quotes."
+        let didLogin = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            kiteAuthContinuation = continuation
+            kiteAuthPhase = .prompt
+        }
+        pendingKiteLoginURL = nil
+        kiteAuthPhase = .idle
+        kiteAuthMessage = ""
+        if didLogin {
+            stageLabel = "Kite session is live. Continuing refresh…"
+        } else {
+            stageLabel = "Continuing with the last validated Kite snapshot…"
+        }
+    }
+
+    private func openKiteLoginFromSplash() async {
+        kiteAuthPhase = .waitingForBrowser
+        kiteAuthMessage = "Complete Zerodha login in your browser. Stratji continues automatically after the callback reaches this Mac (127.0.0.1)."
+        stageLabel = "Waiting for Kite login…"
+
+        if pendingKiteLoginURL == nil {
+            do {
+                let login = try await client.kiteLogin(baseURL: baseURL, force: true)
+                if login.status == "error" || login.loginUrl == nil {
+                    kiteAuthMessage = login.message ?? "Could not create a Kite login URL. Continue with cached data or try again."
+                    kiteAuthPhase = .prompt
+                    return
+                }
+                pendingKiteLoginURL = login.loginUrl.flatMap { StratjiKiteAuth.resolvedLoginURL($0, baseURL: baseURL) }
+            } catch {
+                kiteAuthMessage = "Could not open Kite login. Continue with cached data or try again."
+                kiteAuthPhase = .prompt
+                return
+            }
+        }
+
+        guard let loginURL = pendingKiteLoginURL else {
+            kiteAuthMessage = "Could not create a Kite login URL. Continue with cached data or try again."
+            kiteAuthPhase = .prompt
+            return
+        }
+
+#if os(macOS)
+        StratjiKiteAuth.openInBrowser(loginURL)
+#endif
+
+        while kiteAuthPhase == .waitingForBrowser {
+            if let latest = try? await client.kiteSnapshot(baseURL: baseURL, timeout: 12),
+               latest.hasUsableLiveSession {
+                kite = latest
+                stageLabel = "Kite session is live. Continuing refresh…"
+                finishKiteAuth(loggedIn: true)
+#if os(macOS)
+                NSApp.activate(ignoringOtherApps: true)
+#endif
+                return
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    private func finishKiteAuth(loggedIn: Bool) {
+        kiteAuthPhase = .idle
+        kiteAuthMessage = ""
+        guard let continuation = kiteAuthContinuation else { return }
+        kiteAuthContinuation = nil
+        continuation.resume(returning: loggedIn)
     }
 
     private func applyStageFromSources() {
@@ -431,6 +583,22 @@ final class StratjiSessionModel: ObservableObject {
 
     private func tickSplashProgress() {
         guard isBootstrapping else { return }
+        if kiteAuthPhase != .idle {
+            if stage != .kite {
+                adoptDisplayedStage(.kite, snapshot: latestProgressSnapshot)
+            }
+            let elapsed = Date().timeIntervalSince(stageEnteredAt)
+            let target = SplashProgressInterpolator.displayedProgress(
+                stage: .kite,
+                elapsed: elapsed,
+                committed: max(committedProgress, StratjiLoadStage.kite.startProgress),
+                stageCompleted: false
+            )
+            withAnimation(.easeInOut(duration: SplashProgressInterpolator.animationDuration)) {
+                progress = max(progress, target)
+            }
+            return
+        }
         let snapshot = latestProgressSnapshot
         let snapshotStage = snapshot?.stage ?? stage
         let completed = (snapshot?.completed ?? []).union(completedStages).subtracting([.hydrate])

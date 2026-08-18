@@ -110,8 +110,8 @@ test("risk panel uses selected tab semantics and remains content-sized", async (
   assert.match(riskGridRule, /align-items:stretch/);
   assert.match(css, /\.investment-risk-grid>\.exposure-composition-panel\s*\{[^}]*display:flex;[^}]*align-self:stretch;[^}]*flex-direction:column;/s);
   assert.match(css, /\.investment-risk-grid>\.exposure-composition-panel \.exposure-driver-map\s*\{[^}]*display:grid;[^}]*flex:0 0 auto;[^}]*grid-auto-rows:auto;/s);
-  assert.match(css, /\.exposure-driver-head\s*\{[^}]*font-size:12px/);
-  assert.match(css, /\.exposure-driver-row\s*\{[^}]*font-size:13px/);
+  assert.match(css, /\.exposure-driver-head\s*\{[^}]*font-size:var\(--font-size-body\)/);
+  assert.match(css, /\.exposure-driver-row\s*\{[^}]*font-size:var\(--font-size-body\)/);
   assert.match(css, /\.exposure-driver-list li\[data-tone="positive"\]/);
   assert.match(css, /\.exposure-driver-list li\[data-tone="negative"\]/);
   assert.match(workspace, /eventBullets\.map/);
@@ -128,8 +128,8 @@ test("risk panel uses selected tab semantics and remains content-sized", async (
   assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
   assert.doesNotMatch(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-comparison\s*\{/);
   assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-evidence dl/);
-  assert.match(css, /\.macro-regime-card p \{[^}]*font-size:13px/);
-  assert.match(css, /\.macro-selected-evidence section p \{[^}]*font-size:13px/);
-  assert.match(visualCss, /\.macro-regime-card \.macro-ai-evidence li p[\s\S]*?font-size:\s*13px/);
+  assert.match(css, /\.macro-regime-card p \{[^}]*font-size:15px/);
+  assert.match(css, /\.macro-selected-evidence section p \{[^}]*font-size:15px/);
+  assert.match(visualCss, /\.macro-regime-card \.macro-ai-evidence li p[\s\S]*?font-size:\s*15px/);
   assert.match(css, /@media \(max-width:620px\)[\s\S]*?\.risk-axis-list\s*\{\s*grid-template-columns:1fr;/);
 });

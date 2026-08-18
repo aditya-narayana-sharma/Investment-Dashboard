@@ -38,8 +38,23 @@ struct StratjiAPIClient {
         )
     }
 
-    func kiteSnapshot(baseURL: URL) async throws -> KiteSnapshotDTO {
-        try await get(baseURL: baseURL, path: "/api/kite/snapshot", timeout: 45)
+    func kiteSnapshot(baseURL: URL, timeout: TimeInterval = 45) async throws -> KiteSnapshotDTO {
+        try await get(
+            baseURL: baseURL,
+            path: "/api/kite/snapshot",
+            timeout: timeout,
+            extraAcceptedStatusCodes: [503]
+        )
+    }
+
+    func kiteLogin(baseURL: URL, force: Bool) async throws -> KiteLoginDTO {
+        try await get(
+            baseURL: baseURL,
+            path: "/api/kite/login",
+            query: force ? [URLQueryItem(name: "force", value: "1")] : [],
+            timeout: 20,
+            extraAcceptedStatusCodes: [503]
+        )
     }
 
     func integrations(baseURL: URL, includeSecrets: Bool = false) async throws -> IntegrationsConfigDTO {
@@ -72,10 +87,16 @@ struct StratjiAPIClient {
         )
     }
 
-    private func get<T: Decodable>(baseURL: URL, path: String, query: [URLQueryItem] = [], timeout: TimeInterval) async throws -> T {
+    private func get<T: Decodable>(
+        baseURL: URL,
+        path: String,
+        query: [URLQueryItem] = [],
+        timeout: TimeInterval,
+        extraAcceptedStatusCodes: Set<Int> = []
+    ) async throws -> T {
         var request = URLRequest(url: url(baseURL, path: path, query: query), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        return try await decode(request)
+        return try await decode(request, extraAcceptedStatusCodes: extraAcceptedStatusCodes)
     }
 
     private func send<T: Decodable, B: Encodable>(baseURL: URL, path: String, method: String, body: B) async throws -> T {
@@ -96,12 +117,12 @@ struct StratjiAPIClient {
         return components.url ?? baseURL.appendingPathComponent(path)
     }
 
-    private func decode<T: Decodable>(_ request: URLRequest) async throws -> T {
+    private func decode<T: Decodable>(_ request: URLRequest, extraAcceptedStatusCodes: Set<Int> = []) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw StratjiClientError.invalidResponse
         }
-        guard (200 ..< 300).contains(http.statusCode) else {
+        guard (200 ..< 300).contains(http.statusCode) || extraAcceptedStatusCodes.contains(http.statusCode) else {
             throw StratjiClientError.http(http.statusCode)
         }
         return try JSONDecoder().decode(T.self, from: data)

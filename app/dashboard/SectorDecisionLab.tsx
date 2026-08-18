@@ -31,7 +31,37 @@ import {
 } from "../sector-investability";
 import type { SectorBenchmarkSnapshot, SectorMarketSnapshot } from "../sector-live-types";
 import { TriggerDial } from "./visual-components";
-import { LlmAssistPanel } from "./LlmAssistPanel";
+import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
+
+function decisionFrameworkSuggestions(sectorName: string): LlmAssistSuggestion[] {
+  return [
+    {
+      id: "gate-change",
+      label: "Monitor → allocate",
+      prompt: `What supplied evidence would need to change for ${sectorName} to move from monitor to allocate? Do not replace the rule-based composite or invent index levels.`,
+    },
+    {
+      id: "closest-trigger",
+      label: "Closest macro trigger",
+      prompt: `Which supplied macro trigger is closest to a sizing change for ${sectorName}? Trigger distance is context, not an automatic trade. Missing levels stay unavailable.`,
+    },
+    {
+      id: "vs-benchmarks",
+      label: "Vs selected indices",
+      prompt: `How does ${sectorName} compare to the selected EOD benchmarks using only supplied levels and returns? Delayed series stay delayed.`,
+    },
+    {
+      id: "evidence-watch",
+      label: "Evidence vs watch",
+      prompt: `Restate the supplied ${sectorName} evidence, monitor, and invalidation lines. If a factor is unavailable, say unavailable.`,
+    },
+    {
+      id: "missing-levels",
+      label: "Unavailable levels",
+      prompt: `Which supplied ${sectorName} benchmark or factor values are unavailable, and how should that constrain the commentary? Never invent levels.`,
+    },
+  ];
+}
 
 export type SectorDecisionPage = "benchmarks" | "investability" | "pestel" | "porter" | "macro";
 
@@ -143,8 +173,8 @@ export function SectorDecisionLab({
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={history} margin={{ top: 10, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-              <XAxis dataKey="date" minTickGap={48} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
-              <YAxis domain={["auto", "auto"]} width={42} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
+              <XAxis dataKey="date" minTickGap={48} tick={{ fill: "var(--chart-tick)", fontSize: 13 }}/>
+              <YAxis domain={["auto", "auto"]} width={42} tick={{ fill: "var(--chart-tick)", fontSize: 13 }}/>
               <Tooltip/>
               <Legend/>
               {chartReadyBenchmarks.map((index) => <Line key={index.id} dataKey={index.id} name={index.officialName} stroke={INDEX_COLORS[benchmarks.indices.findIndex((item) => item.id === index.id)]} dot={false} strokeWidth={2} connectNulls/>)}
@@ -159,6 +189,7 @@ export function SectorDecisionLab({
       <LlmAssistPanel
         task="framework"
         hint="Comments on supplied EOD benchmarks only. Delayed series stay delayed; missing levels stay unavailable."
+        suggestions={decisionFrameworkSuggestions(sector.name)}
         context={`Sector ${sector.name}. Benchmarks status ${benchmarks.status}. Selected: ${selectedBenchmarks.map((index) => `${index.officialName} level ${index.level ?? "unavailable"}`).join("; ") || "none"}.`}
         placeholder="e.g. How does this sector compare to the selected indices?"
       />
@@ -186,8 +217,8 @@ export function SectorDecisionLab({
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={radarChartData} outerRadius="70%" margin={{ top: 18, right: 54, bottom: 18, left: 54 }}>
               <PolarGrid stroke="#46515b"/>
-              <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
-              <PolarRadiusAxis domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
+              <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--chart-label)", fontSize: 13, fontWeight: 800 }}/>
+              <PolarRadiusAxis domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 13 }}/>
               <Radar name="All-sector median" dataKey="median" stroke="#9ca4ad" fill="#9ca4ad" fillOpacity={0.07} strokeDasharray="5 4"/>
               <Radar name={sector.name} dataKey="score" stroke={sector.color} fill={sector.color} fillOpacity={0.3} strokeWidth={2.5}/>
               <Legend/><Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)} / 5`, String(name)]}/>
@@ -215,6 +246,7 @@ export function SectorDecisionLab({
       <LlmAssistPanel
         task="framework"
         hint="Comments on the rule-based gate. It does not replace composite scores or invent index levels."
+        suggestions={decisionFrameworkSuggestions(sector.name)}
         context={`Sector ${sector.name}. Page ${page}. Gate ${decision.label} ${decisionScore.toFixed(1)}/5. ${decision.action} Evidence: ${sector.summary}. Monitor: ${sector.watch}.`}
         placeholder="e.g. What would change this from monitor to allocate?"
       />
@@ -244,8 +276,8 @@ export function SectorDecisionLab({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={macroData} layout="vertical" margin={{ top: 8, right: 24, bottom: 8, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-              <XAxis type="number" domain={[0, 100]} tick={{ fill: "var(--chart-tick)", fontSize: 10 }}/>
-              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
+              <XAxis type="number" domain={[0, 100]} tick={{ fill: "var(--chart-tick)", fontSize: 13 }}/>
+              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 13, fontWeight: 800 }}/>
               <Tooltip formatter={(value, name, item) => [`${Number(value).toFixed(1)} / 100 · ${item.payload.raw}`, String(name)]}/>
               <Legend/><Bar dataKey="current" name="Current" fill="#4c8fff"/><Bar dataKey="trigger" name="Decision trigger" fill="#e9ae2f"/>
             </BarChart>
@@ -260,8 +292,8 @@ export function SectorDecisionLab({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={liveSqueeze} layout="vertical" margin={{ top: 8, right: 46, bottom: 8, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-              <XAxis type="number" domain={[0, "dataMax"]} tick={{ fill: "var(--chart-tick)", fontSize: 10 }} unit="%"/>
-              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 10, fontWeight: 800 }}/>
+              <XAxis type="number" domain={[0, "dataMax"]} tick={{ fill: "var(--chart-tick)", fontSize: 13 }} unit="%"/>
+              <YAxis dataKey="name" type="category" width={74} tick={{ fill: "var(--chart-label)", fontSize: 13, fontWeight: 800 }}/>
               <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, "Band width"]}/>
               <Bar dataKey="value" name="Band width" radius={[0, 3, 3, 0]}>
                 {liveSqueeze.map((item) => <Cell fill={item.color} key={item.name}/>)}
@@ -275,6 +307,7 @@ export function SectorDecisionLab({
     <LlmAssistPanel
       task="framework"
       hint="Macro commentary only. Trigger distance is not an automatic trade."
+      suggestions={decisionFrameworkSuggestions(sector.name)}
       context={`Sector ${sector.name}. Macro dials: ${macroData.map((dial) => `${dial.name} ${dial.raw}`).join("; ")}.`}
       placeholder="e.g. Which trigger is closest to a sizing change?"
     />

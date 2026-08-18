@@ -9,12 +9,18 @@ private struct DashboardHealthAverage: Codable {
     let delta: String?
 }
 
+private struct DashboardHealthHistoryPoint: Codable {
+    let date: String
+    let value: Double
+}
+
 private struct DashboardHealthMetric: Codable {
     let label: String
     let value: String
     let context: String
     let tone: String?
     let averages: [String: DashboardHealthAverage]
+    let history: [String: [DashboardHealthHistoryPoint]]
 }
 
 private struct DashboardHealthCategory: Codable {
@@ -167,7 +173,18 @@ final class HealthKitSyncCoordinator: ObservableObject {
             guard let day else { continue }
             let week = try await statistics(for: type, start: weeklyStart, end: end, descriptor: descriptor)
             let month = try await statistics(for: type, start: monthlyStart, end: end, descriptor: descriptor)
-            let metric = makeMetric(descriptor: descriptor, day: day, week: week, month: month, date: date)
+            let monthlyHistory = try await dailyHistory(for: type, start: monthlyStart, end: date, calendar: calendar, descriptor: descriptor)
+            let weeklyKey = Self.machineDayFormatter.string(from: weeklyStart)
+            let weeklyHistory = monthlyHistory.filter { $0.date >= weeklyKey }
+            let metric = makeMetric(
+                descriptor: descriptor,
+                day: day,
+                week: week,
+                month: month,
+                date: date,
+                weeklyHistory: weeklyHistory,
+                monthlyHistory: monthlyHistory
+            )
             grouped[descriptor.category, default: []].append(metric)
             tones[descriptor.category] = descriptor.categoryTone
         }
@@ -254,7 +271,15 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
     }
 
-    private func makeMetric(descriptor: QuantityMetricDescriptor, day: StatisticValues, week: StatisticValues?, month: StatisticValues?, date: Date) -> DashboardHealthMetric {
+    private func makeMetric(
+        descriptor: QuantityMetricDescriptor,
+        day: StatisticValues,
+        week: StatisticValues?,
+        month: StatisticValues?,
+        date: Date,
+        weeklyHistory: [DashboardHealthHistoryPoint],
+        monthlyHistory: [DashboardHealthHistoryPoint]
+    ) -> DashboardHealthMetric {
         let display: (StatisticValues) -> String = { values in
             if let minimum = values.minimum, let maximum = values.maximum {
                 return "\(descriptor.format(minimum))–\(descriptor.format(maximum))"
@@ -270,12 +295,16 @@ final class HealthKitSyncCoordinator: ObservableObject {
         var averages: [String: DashboardHealthAverage] = [:]
         if let weekly = average(week) { averages["weekly"] = weekly }
         if let monthly = average(month) { averages["monthly"] = monthly }
+        var history: [String: [DashboardHealthHistoryPoint]] = [:]
+        if !weeklyHistory.isEmpty { history["weekly"] = weeklyHistory }
+        if !monthlyHistory.isEmpty { history["monthly"] = monthlyHistory }
         return DashboardHealthMetric(
             label: descriptor.label,
             value: display(day),
             context: "Apple Health · \(Self.dayFormatter.string(from: date))",
             tone: descriptor.tone,
-            averages: averages
+            averages: averages,
+            history: history
         )
     }
 
@@ -300,7 +329,10 @@ final class HealthKitSyncCoordinator: ObservableObject {
             guard day > 0 else { return nil }
             let week = duration(of: values, in: weekSamples, windowStart: weekStart, windowEnd: end) / 7
             let month = duration(of: values, in: monthSamples, windowStart: monthStart, windowEnd: end) / 30
-            return durationMetric(label: label, day: day, week: week, month: month, date: date)
+            let monthlyHistory = sleepDailyHistory(of: values, in: monthSamples, start: monthStart, end: end, calendar: calendar)
+            let weeklyKey = Self.machineDayFormatter.string(from: weekStart)
+            let weeklyHistory = monthlyHistory.filter { $0.date >= weeklyKey }
+            return durationMetric(label: label, day: day, week: week, month: month, date: date, weeklyHistory: weeklyHistory, monthlyHistory: monthlyHistory)
         }
     }
 
@@ -328,7 +360,15 @@ final class HealthKitSyncCoordinator: ObservableObject {
         }
     }
 
-    private func durationMetric(label: String, day: TimeInterval, week: TimeInterval, month: TimeInterval, date: Date) -> DashboardHealthMetric {
+    private func durationMetric(
+        label: String,
+        day: TimeInterval,
+        week: TimeInterval,
+        month: TimeInterval,
+        date: Date,
+        weeklyHistory: [DashboardHealthHistoryPoint],
+        monthlyHistory: [DashboardHealthHistoryPoint]
+    ) -> DashboardHealthMetric {
         let format: (TimeInterval) -> String = { duration in
             let minutes = Int((duration / 60).rounded())
             return "\(minutes / 60)h \(String(format: "%02d", minutes % 60))m"
@@ -341,7 +381,80 @@ final class HealthKitSyncCoordinator: ObservableObject {
         var averages: [String: DashboardHealthAverage] = [:]
         if let value = average(week) { averages["weekly"] = value }
         if let value = average(month) { averages["monthly"] = value }
-        return DashboardHealthMetric(label: label, value: format(day), context: "Apple Health · \(Self.dayFormatter.string(from: date))", tone: label == "Time asleep" ? "blue" : nil, averages: averages)
+        var history: [String: [DashboardHealthHistoryPoint]] = [:]
+        if !weeklyHistory.isEmpty { history["weekly"] = weeklyHistory }
+        if !monthlyHistory.isEmpty { history["monthly"] = monthlyHistory }
+        return DashboardHealthMetric(label: label, value: format(day), context: "Apple Health · \(Self.dayFormatter.string(from: date))", tone: label == "Time asleep" ? "blue" : nil, averages: averages, history: history)
+    }
+
+    private func dailyHistory(
+        for type: HKQuantityType,
+        start: Date,
+        end: Date,
+        calendar: Calendar,
+        descriptor: QuantityMetricDescriptor
+    ) async throws -> [DashboardHealthHistoryPoint] {
+        switch descriptor.aggregation {
+        case .range:
+            return []
+        case .sum, .average:
+            break
+        }
+        let dayStart = calendar.startOfDay(for: start)
+        let queryEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end))!
+        let options: HKStatisticsOptions = descriptor.aggregation == .sum ? .cumulativeSum : .discreteAverage
+        let collection = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HKStatisticsCollection, Error>) in
+            let predicate = HKQuery.predicateForSamples(withStart: dayStart, end: queryEnd, options: .strictStartDate)
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: options,
+                anchorDate: dayStart,
+                intervalComponents: DateComponents(day: 1)
+            )
+            query.initialResultsHandler = { _, statistics, error in
+                if let error { continuation.resume(throwing: error) }
+                else if let statistics { continuation.resume(returning: statistics) }
+                else { continuation.resume(throwing: CocoaError(.fileReadUnknown)) }
+            }
+            healthStore.execute(query)
+        }
+        var points: [DashboardHealthHistoryPoint] = []
+        collection.enumerateStatistics(from: dayStart, to: queryEnd) { stats, _ in
+            let raw: Double?
+            switch descriptor.aggregation {
+            case .sum:
+                raw = stats.sumQuantity()?.doubleValue(for: descriptor.unit)
+            case .average:
+                raw = stats.averageQuantity()?.doubleValue(for: descriptor.unit)
+            case .range:
+                raw = nil
+            }
+            guard let raw, stats.startDate < queryEnd else { return }
+            points.append(DashboardHealthHistoryPoint(date: Self.machineDayFormatter.string(from: stats.startDate), value: raw))
+        }
+        return points
+    }
+
+    private func sleepDailyHistory(
+        of values: Set<Int>,
+        in samples: [HKCategorySample],
+        start: Date,
+        end: Date,
+        calendar: Calendar
+    ) -> [DashboardHealthHistoryPoint] {
+        var points: [DashboardHealthHistoryPoint] = []
+        var day = calendar.startOfDay(for: start)
+        let last = calendar.startOfDay(for: end)
+        while day <= last {
+            let next = calendar.date(byAdding: .day, value: 1, to: day)!
+            let seconds = duration(of: values, in: samples, windowStart: day, windowEnd: next)
+            if seconds > 0 {
+                points.append(DashboardHealthHistoryPoint(date: Self.machineDayFormatter.string(from: day), value: seconds / 3600))
+            }
+            day = next
+        }
+        return points
     }
 
     private func upload(_ snapshot: DashboardHealthSnapshot, to dashboardURL: URL) async throws {

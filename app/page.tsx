@@ -23,7 +23,7 @@ import {
   retainHealthOnFailure,
   retainKiteOnFailure,
 } from "./dashboard-refresh-merge";
-import { kiteAuthPresentation } from "./kite-auth-presentation";
+import { kiteAuthPresentation, kiteLoginHref } from "./kite-auth-presentation";
 import { sanitizeKiteStatusNote } from "./kite-status-note";
 import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
@@ -673,7 +673,13 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem("dashboard-appearance");
-      if (stored === "black" || stored === "dark" || stored === "sepia") setAppearance(stored);
+      const fromDom = document.documentElement.dataset.appearance;
+      const next = stored === "black" || stored === "dark" || stored === "sepia"
+        ? stored
+        : fromDom === "black" || fromDom === "dark" || fromDom === "sepia"
+          ? fromDom
+          : "black";
+      setAppearance(next);
       setHealthIncognito(window.localStorage.getItem("dashboard-health-incognito") === "1");
       setAppearanceHydrated(true);
     }, 0);
@@ -806,11 +812,9 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
             ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
             : kiteAuthControl === "partial"
               ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
-              : kiteAuthControl === "authenticate" && showAuthAction
-                ? <a className="kite-auth-control" href={snapshot.authUrl || "/api/kite/login?force=1&redirect=1"} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login"}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>
-                : kiteAuthControl === "cached"
-                  ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing retained Kite data; auth could not be confirmed on the latest refresh"><Activity size={15}/><span>Kite cached</span></button>
-                  : <button className="kite-auth-control unavailable" type="button" disabled title="Kite is unavailable; inspect the displayed source failure before attempting authentication"><Activity size={15}/><span>Kite unavailable</span></button>}
+              : kiteAuthControl === "cached" && !showAuthAction
+                ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing retained Kite data; a confirmed session still exists for the retained snapshot"><Activity size={15}/><span>Kite cached</span></button>
+                : <a className="kite-auth-control" href={kiteLoginHref(snapshot.authUrl)} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login. Stratji.app opens this in Safari so the dashboard stays put."}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>}
           {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
           <button onClick={()=>void refreshAll(true)} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
           <em>On request</em>

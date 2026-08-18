@@ -38,8 +38,11 @@ test("Vital Metrics UI uses three collapsible direction rows with category colou
   assert.match(sharedUiSource, /HEALTH_DIRECTION_COLUMNS/);
   assert.match(sharedUiSource, /health-kpi-category/);
   assert.match(sharedUiSource, /\{column\.title\}/);
-  assert.match(sharedUiSource, /SparkFilament tone=\{filamentTone\} series=\{entry\.metric\.history\?\.\[averagePeriod\]\} unit=\{healthMetricUnit\(entry\.metric\.value\)\}/);
+  assert.match(sharedUiSource, /SparkFilament/);
+  assert.match(sharedUiSource, /endDate=\{dataDate\}/);
+  assert.match(sharedUiSource, /windowDays=\{averagePeriod === "weekly" \? 7 : 30\}/);
   assert.match(sharedUiSource, /function healthMetricUnit/);
+  assert.match(sharedUiSource, /function healthMetricIsRangeValue/);
   assert.match(sharedUiSource, /directionColumns\.unavailable/);
   assert.match(sharedUiSource, /average-unavailable/);
   assert.match(sharedUiSource, /shown under Context dependent/);
@@ -74,13 +77,16 @@ test("SparkFilament renders from per-metric history and has no hardcoded shared 
   assert.match(visualSource, /export function SparkFilament/);
   assert.match(visualSource, /series\?: Array<\{ date: string; value: number \}>/);
   assert.match(visualSource, /spark-filament-label/);
+  assert.match(visualSource, /spark-filament-gap/);
   assert.match(visualSource, /onPointerMove/);
   assert.match(visualSource, /onPointerLeave/);
   assert.doesNotMatch(visualSource, /M0 8 Q8 2 16 7 T32 6 T48 5 T64 7/);
   assert.match(overhaulCss, /vo-filament-draw/);
   assert.match(overhaulCss, /spark-filament-label/);
+  assert.match(overhaulCss, /spark-filament-gap/);
   assert.match(readFileSync(join(root, "app/health-data.ts"), "utf8"), /history\?: Partial<Record<HealthAveragePeriod, HealthMetricHistoryPoint\[\]>>/);
   assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /def daily_history\(/);
+  assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /if mode == "range":/);
   assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /"history": history/);
 });
 
@@ -96,7 +102,7 @@ test("Health console is H-1 / Daily Optimism H-2 / Vital Metrics H-3 without H-4
   assert.doesNotMatch(workspaceSource, /number="H-4"/);
   assert.doesNotMatch(workspaceSource, /id="health-h4"/);
   assert.match(workspaceSource, /HealthIncognitoGate/);
-  assert.match(workspaceSource, /<HealthMasonryGrid categories=\{healthSnapshot\.categories\}\/>/);
+  assert.match(workspaceSource, /<HealthMasonryGrid categories=\{healthSnapshot\.categories\} dataDate=\{healthSnapshot\.dataDate\}\/>/);
 });
 
 function classifyTone(label, direction) {

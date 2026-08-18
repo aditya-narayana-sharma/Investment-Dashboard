@@ -7,7 +7,7 @@ import { sectorComposite, sectorSourceNote, sectors } from "../sector-data";
 import { fundamentalMetricLabels, sectorCompanies, sectorUniverseLabels, type FundamentalMetricKey, type SectorCompany } from "../sector-company-data";
 import { isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
 import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "../sector-news-types";
-import { lifeCyclePoints, marketStructurePoints, sectorImpactRows, type ImpactSignal } from "../sector-analytics-data";
+import { alignSectorImpactRows, lifeCyclePoints, marketStructurePoints, type ImpactSignal } from "../sector-analytics-data";
 import type { LiveHolding } from "../live-types";
 import type { SectorRankingView } from "./types";
 import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
@@ -15,7 +15,7 @@ import { currentIstDateLabel, inr } from "./utils";
 
 const impactGlyph: Record<ImpactSignal, string> = { tailwind: "▲", headwind: "▼", "two-way": "●", na: "—" };
 const LIFE_CYCLE_STAGES = ["", "Growth", "Shakeout", "Mature", "Decline", "Legacy"];
-const axisLabelStyle = { fill: "#9ba6b2", fontSize: 11, fontWeight: 700 };
+const axisLabelStyle = { fill: "#9ba6b2", fontSize: 13, fontWeight: 700 };
 
 export type SectorAnalyticsPage = "pulse" | "companies" | "rankings" | "lifecycle" | "structure" | "mece";
 
@@ -299,18 +299,18 @@ function BubbleTooltip({ active, payload }: { active?: boolean; payload?: Array<
 function SectorImpactMatrix({ selectedIds, onToggle }: { selectedIds: string[]; onToggle: (sectorId: string) => void }) {
   const headers = [["crude", "Crude"], ["inr", "USD/INR"], ["rates", "Rates"], ["monsoon", "Monsoon"], ["aiCapex", "AI capex"], ["earnings", "Q1 earnings"]] as const;
   const [shockId, setShockId] = useState<string | null>(null);
+  const impactRows = alignSectorImpactRows(sectors);
   return <article className="panel impact-matrix-panel">
     <div className="analytics-subhead"><div><b>A · Sector map + impact matrix (MECE)</b><span>One row per sector · ▲ tailwind · ▼ headwind · ● two-way · shockwave board</span></div><em>{currentIstDateLabel().toUpperCase()}</em></div>
     <div className="impact-matrix-scroll"><div className="impact-matrix sector-impact-matrix shockwave-board">
       <div className="impact-row impact-head"><span>Sector &amp; stance</span><span>Sub-sectors</span>{headers.map(([, label]) => <span key={label}>{label}</span>)}<span>Current read</span></div>
-      {sectorImpactRows.map((row) => {
-        const selectable = sectors.some((sector) => sector.id === row.id);
+      {impactRows.map((row) => {
         const selected = selectedIds.includes(row.id);
         const rowClass = selectedIds.length === 0 ? "" : selected ? "selected" : "sector-dimmed";
         const stanceTone = row.stance.toLowerCase().includes("tailwind") || row.stance.toLowerCase().includes("constructive") ? 0.72
           : row.stance.toLowerCase().includes("headwind") || row.stance.toLowerCase().includes("stress") ? 0.28
           : 0.5;
-        return <button type="button" onClick={() => { if (!selectable) return; setShockId(row.id); window.setTimeout(() => setShockId(null), 700); onToggle(row.id); }} aria-pressed={selected} aria-disabled={!selectable} className={`impact-row ${rowClass} ${selectable ? "selectable" : "reference-only"}${shockId === row.id ? " shock-active" : ""}`} style={{ "--sector": row.color } as CSSProperties} key={row.id}>
+        return <button type="button" onClick={() => { setShockId(row.id); window.setTimeout(() => setShockId(null), 700); onToggle(row.id); }} aria-pressed={selected} className={`impact-row ${rowClass} selectable${shockId === row.id ? " shock-active" : ""}`} style={{ "--sector": row.color } as CSSProperties} key={row.id}>
           <span className="impact-stance"><b>{row.name}</b><small>{row.stance}</small><i className="seismic-bar" style={{ transform: `scaleX(${stanceTone})` }} aria-hidden="true"/></span><span className="subsector-chips">{row.subsectors.map((item) => <i key={item}>{item}</i>)}</span>
           {headers.map(([key, label]) => <span className={`signal ${row[key]}`} data-label={label} key={key}>{impactGlyph[row[key]]}</span>)}<span className="impact-read">{row.read}</span>
         </button>;
@@ -356,7 +356,7 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
   // Largest first: greedy label placer keeps high-weight names; Cells follow same order.
   const companyLifePlot = companyLife.slice().sort((a, b) => b.size - a.size);
   const companyStructurePlot = companyStructure.slice().sort((a, b) => b.size - a.size);
-  const industryLegend = sectors.filter((sector) => (sectorCompanies[sector.id] ?? []).length > 0);
+  const industryLegend = sectors;
   const insightLife = (filterActive ? focusedCompaniesLife : companyLife).slice().sort((a, b) => b.size - a.size).slice(0, 8);
   const insightStructure = (filterActive ? focusedCompaniesStructure : companyStructure).slice().sort((a, b) => b.size - a.size).slice(0, 8);
   return <div className="sector-analytical-stack">
@@ -368,8 +368,8 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 36, right: 28, bottom: 52, left: 36 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
-              <XAxis type="number" dataKey="stage" domain={[0.6, 5.2]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(value) => LIFE_CYCLE_STAGES[Number(value)] ?? ""} tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "X · Life-cycle stage", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
-              <YAxis type="number" dataKey="growth" tick={{ fill: "#c5ced6", fontSize: 10 }} width={48} label={{ value: "Y · Expected revenue growth %", angle: -90, position: "insideLeft", offset: 18, ...axisLabelStyle }}/>
+              <XAxis type="number" dataKey="stage" domain={[0.6, 5.2]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(value) => LIFE_CYCLE_STAGES[Number(value)] ?? ""} tick={{ fill: "#c5ced6", fontSize: 13 }} label={{ value: "X · Life-cycle stage", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
+              <YAxis type="number" dataKey="growth" tick={{ fill: "#c5ced6", fontSize: 13 }} width={48} label={{ value: "Y · Expected revenue growth %", angle: -90, position: "insideLeft", offset: 18, ...axisLabelStyle }}/>
               <ZAxis type="number" dataKey="size" range={[36, 280]}/>
               <ReferenceLine y={10} stroke="#65717c" strokeDasharray="5 5"/>
               <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<BubbleTooltip/>}/>
@@ -414,8 +414,8 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 36, right: 28, bottom: 52, left: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
-              <XAxis type="number" dataKey="margin" unit="%" tick={{ fill: "#c5ced6", fontSize: 10 }} label={{ value: "X · Operating margin %", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
-              <YAxis type="number" dataKey="concentration" domain={[1.5, 5.2]} tick={{ fill: "#c5ced6", fontSize: 10 }} width={52} label={{ value: "Y · Profit-pool concentration / 5", angle: -90, position: "insideLeft", offset: 18, ...axisLabelStyle }}/>
+              <XAxis type="number" dataKey="margin" unit="%" tick={{ fill: "#c5ced6", fontSize: 13 }} label={{ value: "X · Operating margin %", position: "insideBottom", offset: -28, ...axisLabelStyle }}/>
+              <YAxis type="number" dataKey="concentration" domain={[1.5, 5.2]} tick={{ fill: "#c5ced6", fontSize: 13 }} width={52} label={{ value: "Y · Profit-pool concentration / 5", angle: -90, position: "insideLeft", offset: 18, ...axisLabelStyle }}/>
               <ZAxis type="number" dataKey="size" range={[36, 280]}/>
               <ReferenceLine x={20} stroke="#65717c" strokeDasharray="5 5"/>
               <ReferenceLine y={3.5} stroke="#65717c" strokeDasharray="5 5"/>

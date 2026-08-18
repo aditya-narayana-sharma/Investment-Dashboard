@@ -151,7 +151,21 @@ function healthMetricUnit(value: string): string | undefined {
   return match?.[0]?.trim() || undefined;
 }
 
-export function HealthMasonryGrid({ categories, compact = false }: { categories: HealthLiveSnapshot["categories"]; compact?: boolean }) {
+/** Daily ranges are kept as ranges — never charted as invented midpoints. */
+function healthMetricIsRangeValue(value: string): boolean {
+  return /\d(?:\.\d+)?\s*[-–—]\s*\d/.test(value);
+}
+
+export function HealthMasonryGrid({
+  categories,
+  compact = false,
+  dataDate,
+}: {
+  categories: HealthLiveSnapshot["categories"];
+  compact?: boolean;
+  /** Operational Health target date that ends the 7-day / 30-day sparkline window. */
+  dataDate?: string;
+}) {
   const [averagePeriod, setAveragePeriod] = useState<HealthAveragePeriod>("weekly");
   const [averagePeriodHydrated, setAveragePeriodHydrated] = useState(false);
   const [collapsedDirections, setCollapsedDirections] = useState<Set<string>>(
@@ -226,9 +240,11 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
               ? <p className="health-direction-empty">No metrics in this direction for the selected cadence.</p>
               : entries.map((entry) => {
                 const average = entry.metric.averages?.[averagePeriod];
-                const filamentTone = average
-                  ? (healthTrendTone(entry.metric, average.direction) === "good" ? "good" : healthTrendTone(entry.metric, average.direction) === "bad" ? "bad" : "neutral")
-                  : undefined;
+                const trend = average ? healthTrendTone(entry.metric, average.direction) : "moderate";
+                const filamentTone = trend === "good" ? "good" : trend === "bad" ? "bad" : "neutral";
+                const history = healthMetricIsRangeValue(entry.metric.value)
+                  ? undefined
+                  : entry.metric.history?.[averagePeriod];
                 return (
                 <div
                   className={`health-kpi-tile biometric-capsule ${entry.categoryAccent}${average ? "" : " average-unavailable"}`}
@@ -236,7 +252,13 @@ export function HealthMasonryGrid({ categories, compact = false }: { categories:
                 >
                   <span className="health-kpi-label">{entry.metric.label}</span>
                   <b>{entry.metric.value}</b>
-                  {average ? <SparkFilament tone={filamentTone} series={entry.metric.history?.[averagePeriod]} unit={healthMetricUnit(entry.metric.value)} /> : null}
+                  <SparkFilament
+                    tone={filamentTone}
+                    series={history}
+                    unit={healthMetricUnit(entry.metric.value)}
+                    endDate={dataDate}
+                    windowDays={averagePeriod === "weekly" ? 7 : 30}
+                  />
                   <HealthMetricComparison metric={entry.metric} averagePeriod={averagePeriod}/>
                   <small>
                     <span className="health-kpi-category">{entry.categoryName}</span>
@@ -324,7 +346,9 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     () => (hideHealth ? workspaces.filter((workspace) => workspace.key !== "health") : workspaces),
     [hideHealth],
   );
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const activeIndex = Math.max(0, visibleWorkspaces.findIndex((workspace) => workspace.key === active));
+  const pillIndex = hoverIndex ?? activeIndex;
   const selectByIndex = (index: number) => {
     const normalized = (index + visibleWorkspaces.length) % visibleWorkspaces.length;
     const workspace = visibleWorkspaces[normalized];
@@ -347,7 +371,8 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
       role="tablist"
       aria-orientation="horizontal"
       data-count={visibleWorkspaces.length}
-      style={{ "--glass-count": visibleWorkspaces.length, "--glass-index": activeIndex } as CSSProperties}
+      style={{ "--glass-count": visibleWorkspaces.length, "--glass-index": pillIndex } as CSSProperties}
+      onMouseLeave={() => setHoverIndex(null)}
     >
       {visibleWorkspaces.map((workspace, index) => {
         const badge = workspaceOrbitalBadge(workspace.key, kiteLive, contentLive, healthIncognito, healthStatus);
@@ -365,6 +390,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
           aria-label={locked ? `${workspace.label} (locked)` : `${workspace.label} · ${badge}`}
           tabIndex={active === workspace.key || (active === null && index === 0) ? 0 : -1}
           className={active === workspace.key ? "active" : ""}
+          onMouseEnter={() => setHoverIndex(index)}
           onClick={() => onChange(workspace.key)}
           onKeyDown={(event) => {
             if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); selectByIndex(index + 1); }

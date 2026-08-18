@@ -17,6 +17,13 @@ const company = (symbol: string, name: string, universeShare: number, scores: [n
 });
 
 export const sectorCompanies: Record<string, SectorCompany[]> = {
+  it: [
+    company("TCS", "Tata Consultancy Services", 24, [3.7, 4.6, 4.7, 4.8]), company("INFY", "Infosys", 22, [4.0, 4.5, 4.5, 4.6]),
+    company("HCLTECH", "HCL Technologies", 13, [4.2, 4.3, 4.3, 4.4]), company("WIPRO", "Wipro", 9, [3.5, 3.8, 3.9, 4.0]),
+    company("TECHM", "Tech Mahindra", 8, [4.3, 4.0, 3.8, 3.8]), company("LTIM", "LTIMindtree", 7, [4.1, 4.2, 4.1, 4.2]),
+    company("PERSISTENT", "Persistent Systems", 5, [4.5, 4.1, 4.0, 3.9]), company("COFORGE", "Coforge", 4, [4.4, 3.9, 3.8, 3.8]),
+    company("LTTS", "L&T Technology Services", 4, [4.2, 4.1, 4.0, 4.1]), company("MPHASIS", "Mphasis", 4, [3.8, 3.7, 3.6, 3.7]),
+  ],
   pharma: [
     company("SUNPHARMA", "Sun Pharmaceutical", 24, [4.4, 4.5, 4.1, 4.5]), company("DIVISLAB", "Divi's Laboratories", 12, [4.1, 4.4, 4.6, 4.6]),
     company("CIPLA", "Cipla", 11, [3.9, 4.2, 4.3, 4.3]), company("DRREDDY", "Dr. Reddy's Laboratories", 11, [4.0, 4.1, 4.0, 4.2]),
@@ -87,6 +94,13 @@ export const sectorCompanies: Record<string, SectorCompany[]> = {
     company("OIL", "Oil India", 5, [4.1, 4.3, 4.1, 4.0]), company("PETRONET", "Petronet LNG", 5, [3.6, 4.2, 4.3, 4.3]),
     company("IGL", "Indraprastha Gas", 3, [3.3, 4.0, 4.2, 4.1]), company("MGL", "Mahanagar Gas", 3, [3.2, 4.1, 4.3, 4.2]),
   ],
+  metals: [
+    company("TATASTEEL", "Tata Steel", 18, [3.6, 3.8, 3.5, 3.6]), company("JSWSTEEL", "JSW Steel", 16, [4.0, 4.2, 3.9, 3.7]),
+    company("HINDALCO", "Hindalco Industries", 14, [3.8, 4.0, 3.8, 3.8]), company("COALINDIA", "Coal India", 13, [3.2, 4.3, 4.4, 4.2]),
+    company("VEDL", "Vedanta", 10, [3.7, 3.6, 3.4, 3.2]), company("JINDALSTEL", "Jindal Steel", 9, [4.1, 4.0, 3.8, 3.5]),
+    company("HINDZINC", "Hindustan Zinc", 7, [3.4, 4.2, 4.3, 4.0]), company("NMDC", "NMDC", 5, [3.3, 4.1, 4.2, 3.9]),
+    company("SAIL", "Steel Authority of India", 4, [3.2, 3.3, 3.1, 3.2]), company("NATIONALUM", "National Aluminium", 4, [3.4, 3.7, 3.6, 3.5]),
+  ],
   defence: [
     company("HAL", "Hindustan Aeronautics", 22, [4.6, 4.5, 4.3, 4.4]), company("BEL", "Bharat Electronics", 18, [4.5, 4.6, 4.4, 4.5]),
     company("MAZDOCK", "Mazagon Dock Shipbuilders", 12, [4.7, 4.4, 4.2, 4.1]), company("BDL", "Bharat Dynamics", 10, [4.4, 4.3, 4.1, 4.0]),
@@ -104,6 +118,7 @@ export const fundamentalMetricLabels: Record<FundamentalMetricKey, string> = {
 };
 
 export const sectorUniverseLabels: Record<string, string> = {
+  it: "NIFTY IT",
   pharma: "NIFTY Pharma",
   power: "NIFTY 500 · Power industry",
   infrastructure: "NIFTY Infrastructure",
@@ -114,5 +129,6 @@ export const sectorUniverseLabels: Record<string, string> = {
   fmcg: "NIFTY FMCG",
   consumer: "NIFTY India Consumption",
   energy: "NIFTY Oil & Gas",
+  metals: "NIFTY Metal",
   defence: "NSE · Defence & Aerospace research universe",
 };

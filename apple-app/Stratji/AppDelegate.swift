@@ -107,7 +107,7 @@ final class StratjiAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { @MainActor in
-            // Gated by startupRefreshCompleted: splash already refreshed; do not reload on focus.
+            // Incremental ticks after splash (gated by startupRefreshCompleted); do not run another complete audit on focus.
             await self.session?.refreshOnForeground()
         }
     }

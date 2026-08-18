@@ -99,6 +99,26 @@ struct SourceFreshnessDTO: Codable, Equatable, Identifiable {
         required = try container.decodeIfPresent(Bool.self, forKey: .required)
         message = try container.decodeIfPresent(String.self, forKey: .message)
     }
+
+    /// Dashboard `PulseConstellation` title: source name with CSS `text-transform: uppercase`.
+    var chipTitle: String { source.uppercased() }
+
+    /// Dashboard strip subtext: `{state} · {period}` with CSS `text-transform: capitalize`.
+    var chipSubtitle: String {
+        let statePart = state.rawValue.replacingOccurrences(of: "_", with: " ")
+        guard let period, !period.isEmpty else {
+            return Self.cssCapitalize(statePart)
+        }
+        return Self.cssCapitalize("\(statePart) · \(period)")
+    }
+
+    /// CSS `text-transform: capitalize` — first letter of each space-delimited word, remaining characters unchanged.
+    static func cssCapitalize(_ text: String) -> String {
+        text.split(separator: " ", omittingEmptySubsequences: false).map { part in
+            guard let first = part.first else { return String(part) }
+            return String(first).uppercased() + part.dropFirst()
+        }.joined(separator: " ")
+    }
 }
 
 struct KitePortfolioDTO: Codable, Equatable {
@@ -143,6 +163,7 @@ struct KiteSnapshotDTO: Codable, Equatable {
     var authStatus: String?
     var asOf: String?
     var message: String?
+    var authUrl: String?
     var portfolio: KitePortfolioDTO?
     var holdings: [KiteHoldingDTO]?
     var positions: [KitePositionDTO]?
@@ -155,6 +176,26 @@ struct KiteSnapshotDTO: Codable, Equatable {
         case "auth_required": .unavailable
         default: .unavailable
         }
+    }
+
+    /// True when the daily Kite token can serve live/partial holdings.
+    var hasUsableLiveSession: Bool {
+        let authenticated = authStatus == nil
+            || authStatus == "authenticated"
+            || authStatus == "partial"
+        switch status {
+        case "live", "partial":
+            return authenticated
+        case "snapshot":
+            return authStatus == "authenticated"
+        default:
+            return false
+        }
+    }
+
+    /// Splash should pause for Zerodha login whenever the daily token cannot serve live data.
+    var needsSplashLogin: Bool {
+        !hasUsableLiveSession
     }
 }
 

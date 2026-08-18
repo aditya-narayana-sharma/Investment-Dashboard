@@ -217,6 +217,11 @@ struct HealthMetricAveragePayload: Codable, Equatable {
     let delta: String?
 }
 
+struct HealthMetricHistoryPointPayload: Codable, Equatable {
+    let date: String
+    let value: Double
+}
+
 struct HealthMetricPayload: Codable, Identifiable, Equatable {
     var id: String { label }
     let label: String
@@ -224,6 +229,7 @@ struct HealthMetricPayload: Codable, Identifiable, Equatable {
     let context: String?
     let tone: String?
     let averages: [String: HealthMetricAveragePayload]?
+    let history: [String: [HealthMetricHistoryPointPayload]]?
 }
 
 struct HealthCategoryPayload: Codable, Identifiable, Equatable {
@@ -486,6 +492,7 @@ enum NativeActionCatalog {
 
 enum NativeSectorCatalog {
     static let all: [(id: String, title: String)] = [
+        ("it", "IT / Tech"),
         ("pharma", "Pharma"),
         ("power", "Power"),
         ("infrastructure", "Infrastructure"),
@@ -496,6 +503,7 @@ enum NativeSectorCatalog {
         ("fmcg", "FMCG"),
         ("consumer", "Consumer"),
         ("energy", "Energy"),
+        ("metals", "Metals"),
         ("defence", "Defence"),
     ]
 }

@@ -133,6 +133,13 @@ test("pipeline connect/test/disconnect are local placeholders and do not claim l
   assert.equal(disconnected.pipelines.broker.status, "not_configured");
 });
 
+test("Settings broker card exposes Authenticate Kite, not only a config Connect flag", async () => {
+  const source = await readFile(new URL("../app/dashboard/IntegrationsWorkspace.tsx", import.meta.url), "utf8");
+  assert.match(source, /KITE_LOGIN_HREF/);
+  assert.match(source, /Authenticate Kite/);
+  assert.match(source, /id === "broker"/);
+});
+
 test("apple permission states sanitize, merge, and never carry secrets", () => {
   const seed = defaultIntegrationsConfig();
   assert.equal(seed.applePermissions.mail.status, "permission_required");
@@ -264,7 +271,13 @@ test("native Stratji Settings is a SwiftUI form, not a live dashboard WebView", 
   assert.match(settings, /Section\("Appearance"\)/);
   assert.match(settings, /Section\("Apple apps"\)/);
   assert.match(settings, /Health Incognito/);
+  assert.match(settings, /StratjiAppearanceStore\.defaultsKey/);
+  assert.match(settings, /onChange\(of: appearanceRaw\)/);
+  assert.match(settings, /session\.document\.applyPreferences/);
+  assert.match(settings, /UserDefaults\.standard\.object\(forKey: StratjiAppearanceStore\.defaultsKey\) == nil/);
   assert.match(settings, /Kite MCP project dir/);
+  assert.match(settings, /Authenticate Kite/);
+  assert.match(settings, /StratjiKiteAuth\.loginURL/);
   assert.match(settings, /Newsletters/);
   assert.match(settings, /Axis Research/);
   assert.match(settings, /Paste keys locally/);
@@ -317,6 +330,36 @@ test("native Stratji Settings is a SwiftUI form, not a live dashboard WebView", 
   assert.match(entitlements, /com.apple.security.personal-information.calendars/);
   assert.match(entitlements, /com.apple.security.personal-information.reminders/);
   assert.match(entitlements, /com.apple.security.automation.apple-events/);
+});
+
+test("native Stratji Settings wraps live-feed freshness chips from the refresh payload", async () => {
+  const [settings, models, session, visual, refresh] = await Promise.all([
+    readFile(new URL("../apple-app/Stratji/StratjiSettingsWindow.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Shared/StratjiModels.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Shared/StratjiSessionModel.swift", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/dashboard/refresh/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(settings, /Section\("Source freshness"\)|Text\("Source freshness"\)/);
+  assert.match(settings, /session\.liveFeedSources/);
+  assert.match(settings, /struct StratjiFlowLayout: Layout/);
+  assert.match(settings, /wrappingWidth/);
+  assert.match(settings, /StratjiFreshnessChip\(source: source\)/);
+  assert.match(settings, /source\.chipTitle/);
+  assert.match(settings, /source\.chipSubtitle/);
+  assert.match(settings, /font\(\.system\(size: 14, weight: \.heavy, design: \.monospaced\)\)/);
+  assert.match(settings, /font\(\.system\(size: 13, weight: \.regular, design: \.monospaced\)\)/);
+  assert.doesNotMatch(settings, /Live · 5 Minutes/);
+  assert.doesNotMatch(settings, /2024-08-17/);
+  assert.doesNotMatch(settings, /DailyKanbanBoard/);
+  assert.match(session, /var liveFeedSources: \[SourceFreshnessDTO\] \{ sources \}/);
+  assert.match(session, /sources = refresh\.sources/);
+  assert.match(models, /var chipSubtitle: String/);
+  assert.match(models, /state\.rawValue\.replacingOccurrences\(of: "_", with: " "\)/);
+  assert.match(visual, /source\.state\.replaceAll\("_", " "\)\} · \{source\.period\}/);
+  assert.match(refresh, /"NSE benchmarks"/);
+  assert.match(refresh, /"NSE \/ US market calendars"/);
 });
 
 test("committed seed LLM keys stay empty and overlay only fills from local secrets", () => {

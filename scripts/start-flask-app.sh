@@ -62,8 +62,10 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 
-# Terminal.app / the .command file is the TCC parent. Do not spawn this script
-# from Stratji.app with Process().
+# Headless: launchd / Stratji invoke this with /bin/bash and log redirection.
+# Never `open` start-dashboard.command — Launch Services attaches Terminal.app.
+# Stratji.app must not Process() this file from ~/Documents (TCC); the
+# Application Support wrapper is the executable path.
 nohup /bin/bash "$ROOT_DIR/scripts/run-dashboard-service.sh" \
   >>"$LOG_DIR/service.log" 2>&1 &
 SERVICE_PID=$!

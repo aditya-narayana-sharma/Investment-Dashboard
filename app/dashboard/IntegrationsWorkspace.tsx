@@ -8,11 +8,13 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  LogIn,
   Plug,
   RefreshCw,
   ShieldAlert,
   Unplug,
 } from "lucide-react";
+import { KITE_LOGIN_HREF } from "../kite-auth-presentation";
 import {
   defaultIntegrationsConfig,
   INTEGRATION_PIPELINE_IDS,
@@ -146,7 +148,7 @@ function pipelinePlaybook(id: IntegrationPipelineId): { api: string; mcp: string
   switch (id) {
     case "broker":
       return {
-        api: "Create a Kite Connect app. Store API key/secret in the kite-mcp-server .env — never in this git repo. Authenticate from Portfolio Overview when status is auth_required.",
+        api: "Create a Kite Connect app. Store API key/secret in the kite-mcp-server .env — never in this git repo. Use Authenticate Kite in the live-feed banner or on this card when Kite is not live.",
         mcp: "Set Kite MCP project dir in the wizard. scripts/ensure-kite-server.sh reads KITE_MCP_PROJECT_DIR.",
         extra: "Groww is a placeholder card. No live Groww API in this slice. Writes need typed confirmation on Kite tickets.",
       };
@@ -675,6 +677,11 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
                   <dd>{playbook.extra}</dd>
                 </dl>
                 <div className="integrations-card-actions">
+                  {id === "broker" && (
+                    <a className="integrations-kite-login" href={KITE_LOGIN_HREF} target="_blank" rel="noreferrer">
+                      <LogIn size={14} /> Authenticate Kite
+                    </a>
+                  )}
                   <button type="button" disabled={busy} onClick={() => void runAction(id, "connect")}>
                     <Plug size={14} /> Connect
                   </button>

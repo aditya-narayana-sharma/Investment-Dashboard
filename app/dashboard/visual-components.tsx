@@ -3,6 +3,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SourceFreshness } from "../dashboard-types";
 import type { WorkspaceKey } from "./types";
+import {
+  SPARK_HEIGHT,
+  SPARK_WIDTH,
+  sparkFilamentGapXs,
+  sparkFilamentMissingDates,
+  sparkFilamentPathFromPoints,
+  sparkFilamentPoints as mapSparkFilamentPoints,
+  type SparkFilamentPoint,
+} from "./health-sparkline";
 
 const SOURCE_WORKSPACE: Record<string, WorkspaceKey> = {
   kite: "investment",
@@ -201,50 +210,30 @@ export function TriggerDial({
   );
 }
 
-const SPARK_WIDTH = 64;
-const SPARK_HEIGHT = 18;
-const SPARK_PAD = 2;
+export type { SparkFilamentPoint };
 
-export type SparkFilamentPoint = {
-  date: string;
-  value: number;
-  x: number;
-  y: number;
-};
-
-/** Map measured daily points into SVG coordinates. Gaps stay omitted — never invent days. */
+/** Map measured daily points onto the calendar window. Missing days are skipped, not interpolated. */
 export function sparkFilamentPoints(
   series: Array<{ date: string; value: number }>,
   width = SPARK_WIDTH,
   height = SPARK_HEIGHT,
-  pad = SPARK_PAD,
+  pad = 2,
+  endDate?: string,
+  windowDays?: number,
 ): SparkFilamentPoint[] | null {
-  if (series.length < 2) return null;
-  const values = series.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const times = series.map((point) => Date.parse(point.date));
-  const start = times[0]!;
-  const end = times[times.length - 1]!;
-  const timeSpan = end - start || 1;
-  return series.map((point, index) => ({
-    date: point.date,
-    value: point.value,
-    x: pad + ((times[index]! - start) / timeSpan) * (width - pad * 2),
-    y: height - pad - ((point.value - min) / span) * (height - pad * 2),
-  }));
+  return mapSparkFilamentPoints(series, { width, height, pad, endDate, windowDays });
 }
 
 export function sparkFilamentPath(
   series: Array<{ date: string; value: number }>,
   width = SPARK_WIDTH,
   height = SPARK_HEIGHT,
-  pad = SPARK_PAD,
+  pad = 2,
+  endDate?: string,
+  windowDays?: number,
 ): string | null {
-  const points = sparkFilamentPoints(series, width, height, pad);
-  if (!points) return null;
-  return points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+  const points = mapSparkFilamentPoints(series, { width, height, pad, endDate, windowDays });
+  return points ? sparkFilamentPathFromPoints(points) : null;
 }
 
 function formatSparkDate(dateKey: string): string {
@@ -267,17 +256,20 @@ export function SparkFilament({
   tone = "neutral",
   series,
   unit,
+  endDate,
+  windowDays,
 }: {
   tone?: "good" | "bad" | "neutral";
-  /** Chronological measured daily points for this metric only. */
+  /** Chronological measured daily points for this metric only. Missing dates are omitted. */
   series?: Array<{ date: string; value: number }>;
   /** Unit suffix from the live metric label (e.g. kcal, min) — never invented. */
   unit?: string;
+  /** Health target / completed-through date that ends the 7-day or 30-day window. */
+  endDate?: string;
+  windowDays?: number;
 }) {
-  const points = series ? sparkFilamentPoints(series) : null;
-  const path = points
-    ? points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ")
-    : null;
+  const points = mapSparkFilamentPoints(series, { endDate, windowDays });
+  const path = points ? sparkFilamentPathFromPoints(points) : null;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hover, setHover] = useState<SparkFilamentPoint | null>(null);
   const [hoverSeries, setHoverSeries] = useState(series);
@@ -286,11 +278,18 @@ export function SparkFilament({
     setHover(null);
   }
 
-  if (!path || !points) return null;
+  if (!points?.length) return null;
+  const resolvedEnd = endDate || points[points.length - 1]!.date;
+  const resolvedDays = windowDays && windowDays > 1 ? windowDays : Math.max(points.length, 2);
+  const missingDates = sparkFilamentMissingDates(series, resolvedEnd, resolvedDays);
+  const gapXs = sparkFilamentGapXs(missingDates, resolvedEnd, resolvedDays);
   const color = tone === "good" ? "#22c55e" : tone === "bad" ? "#ef4444" : "#93c5fd";
   const first = points[0]!;
   const last = points[points.length - 1]!;
-  const ariaLabel = `History ${formatSparkDate(first.date)} to ${formatSparkDate(last.date)} · ${points.length} measured days`;
+  const missingLabel = missingDates.length
+    ? ` · missing ${missingDates.map(formatSparkDate).join(", ")}`
+    : "";
+  const ariaLabel = `History ${formatSparkDate(first.date)} to ${formatSparkDate(last.date)} · ${points.length} measured day${points.length === 1 ? "" : "s"}${missingLabel}`;
 
   const nearestPoint = (clientX: number) => {
     const svg = svgRef.current;
@@ -321,14 +320,21 @@ export function SparkFilament({
       onPointerLeave={() => setHover(null)}
     >
       <svg ref={svgRef} viewBox={`0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}`} preserveAspectRatio="none">
-        <path className="spark-filament-trace" d={path} pathLength={1} />
-        <path className="spark-filament-line" d={path} pathLength={1} />
-        {hover ? (
-          <>
-            <line className="spark-filament-guide" x1={hover.x} y1={0} x2={hover.x} y2={SPARK_HEIGHT} />
-            <circle className="spark-filament-dot" cx={hover.x} cy={hover.y} r={2.1} />
-          </>
-        ) : null}
+        {gapXs.map((x) => (
+          <line key={`gap-${x}`} className="spark-filament-gap" x1={x} y1={SPARK_HEIGHT - 3.4} x2={x} y2={SPARK_HEIGHT} />
+        ))}
+        {path ? <path className="spark-filament-trace" d={path} pathLength={1} /> : null}
+        {path ? <path className="spark-filament-line" d={path} pathLength={1} /> : null}
+        {points.map((point) => (
+          <circle
+            key={point.date}
+            className={`spark-filament-mark${hover?.date === point.date ? " active" : ""}`}
+            cx={point.x}
+            cy={point.y}
+            r={hover?.date === point.date ? 2.1 : 1.15}
+          />
+        ))}
+        {hover ? <line className="spark-filament-guide" x1={hover.x} y1={0} x2={hover.x} y2={SPARK_HEIGHT} /> : null}
       </svg>
       {hover ? (
         <em

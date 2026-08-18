@@ -38,6 +38,28 @@ export const cageAxes = ["Cultural", "Administrative", "Geographic", "Economic"]
 
 export const sectors: SectorView[] = [
   {
+    id: "it",
+    name: "IT / Tech",
+    color: "#4c8fff",
+    pulse: "Constructive",
+    stance: "AI-led deal conversion and margin execution matter more than broad demand commentary",
+    summary:
+      "Q1FY27 prints show resilient margins with still-cautious volume growth: Infosys delivered $5,082m revenue (+2.4% YoY CC) at a 21.1% operating margin while trimming FY27 CC growth to 1.5%–3.0%; Tech Mahindra expanded EBIT margin to 14.4% with $1,078m new-deal TCV. INR translation and AI-services mix remain the ranking split versus headline demand.",
+    scores: { demand: 4.1, earnings: 4.3, policy: 3.8, cost: 4.0, valuation: 3.3 },
+    pestel: [3.6, 4.0, 4.2, 4.9, 3.2, 3.5],
+    porter: [3.8, 3.4, 2.6, 2.8, 2.4],
+    cage: [2.8, 3.2, 3.8, 4.4],
+    kpis: [
+      { label: "Infosys Q1 CC", value: "+2.4% YoY", context: "Q1FY27 revenue $5,082m / ₹48,211 Cr; Infosys IR" },
+      { label: "Infosys Q1 OM", value: "21.1%", context: "+20 bps QoQ · +30 bps YoY; FY27 OM band 20%–22% retained" },
+      { label: "FY27 CC guide", value: "1.5%–3.0%", context: "Infosys trimmed the upper end; TechM Q1 EBIT 14.4%" },
+    ],
+    mece: ["AI-led deal conversion and export demand", "Margin execution and utilisation", "Visa, tax and data-localisation rules", "Premium multiples need TCV delivery"],
+    watch: "Large-deal TCV, FY27 CC delivery, INR translation, attrition, AI-revenue mix and discretionary pause risk.",
+    sourceLabel: "Infosys · Q1 FY27 results (23 Jul 2026)",
+    sourceUrl: "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q1.html",
+  },
+  {
     id: "pharma",
     name: "Pharma",
     color: "#52d6a3",
@@ -258,6 +280,28 @@ export const sectors: SectorView[] = [
     sourceUrl: "https://www.moneycontrol.com/news/business/commodities/amid-west-asia-tensions-lpg-under-recovery-tops-rs-51-000-crore-govt-tells-lok-sabha-13981791.html",
   },
   {
+    id: "metals",
+    name: "Metals",
+    color: "#9aa6b2",
+    pulse: "Selective",
+    stance: "China demand, spreads and safeguard policy keep the cycle two-way",
+    summary:
+      "Steel and mining remain a two-way print: JSW Steel’s Q1FY27 PAT more than doubled to ₹4,696 crore on ₹47,364 crore revenue and ₹14,990 adjusted EBITDA per tonne, with net debt down ₹7,713 crore versus March. China demand, input inflation and safeguard policy still decide whether volume strength converts to sustained margins.",
+    scores: { demand: 3.8, earnings: 3.6, policy: 3.5, cost: 3.0, valuation: 3.4 },
+    pestel: [3.4, 3.6, 3.0, 3.2, 2.6, 3.4],
+    porter: [4.2, 3.6, 4.0, 3.2, 2.8],
+    cage: [1.8, 3.4, 3.6, 4.2],
+    kpis: [
+      { label: "JSW Q1 revenue", value: "₹47,364 Cr", context: "Q1FY27; +9.8% YoY; Moneycontrol 17 Jul 2026" },
+      { label: "JSW EBITDA / t", value: "₹14,990", context: "Adjusted; +27% YoY with 6.25 MT saleable sales" },
+      { label: "JSW net debt", value: "₹46,157 Cr", context: "Down ₹7,713 Cr versus March 2026" },
+    ],
+    mece: ["China, domestic infra and auto steel demand", "Spreads, realisation and mining mix", "Safeguard duties and commodity policy", "Input inflation and cycle-peak multiples"],
+    watch: "HRC spreads, coking-coal basket, China restocking, safeguard outcomes, volume versus realisation and net-debt trajectory.",
+    sourceLabel: "Moneycontrol · JSW Steel Q1FY27 (17 Jul 2026)",
+    sourceUrl: "https://www.moneycontrol.com/news/business/markets/jsw-steel-q1-results-net-profit-more-than-doubles-to-rs-4-696-crore-beats-estimates-13976697.html",
+  },
+  {
     id: "defence",
     name: "Defence",
     color: "#e76f51",
@@ -285,6 +329,9 @@ export function sectorComposite(sector: SectorView) {
   const values = Object.values(sector.scores);
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
+
+/** Canonical S-2 / S-3 industry ids. Every sectoral surface must use this list. */
+export const sectorCatalogIds = sectors.map((sector) => sector.id);
 
 export const sectorSourceNote =
   "Sector research narratives and KPIs remain the dated research snapshot from 24 Jul 2026 (Moneycontrol and NDTV Profit primary articles, with official SIAM/RBI/Budget figures where those outlets cite them). Live S-2 news + sentiment aggregates Economic Times, Financial Times, Bloomberg, Zerodha, Moneycontrol, and NDTV Profit on each refresh. Live prices and return horizons refresh separately via yfinance sector snapshots. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";

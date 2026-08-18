@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildEarningsSnapshot, earningsEventDateKey } from "../app/earnings-verify.ts";
-import { kiteAuthPresentation } from "../app/kite-auth-presentation.ts";
+import { kiteAuthPresentation, kiteLoginHref } from "../app/kite-auth-presentation.ts";
 import { earningsCalendar } from "../app/portfolio-data.ts";
 
 test("earnings verification requires sources and flags overdue pending rows", () => {
@@ -135,17 +135,20 @@ test("bundled dashboard refresh can force Mail Calendar Reminders and Podcasts",
   const script = await readFile(new URL("../scripts/refresh-dashboard-data.sh", import.meta.url), "utf8");
   assert.match(route, /forceContent = requestUrl.searchParams.get\("force"\) === "1"/);
   assert.match(route, /force=\$\{forceContent \? "1" : "0"\}/);
-  assert.match(route, /forceContent \? 300_000 : 75_000/);
+  assert.match(route, /forceContent \? 160_000 : 75_000/);
   assert.match(route, /readAppleHealthSnapshot/);
   assert.doesNotMatch(route, /refreshAppleHealth/);
   assert.match(flask, /api\/dashboard\/refresh/);
   assert.match(flask, /force_content/);
   assert.match(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.match(script, /PORTFOLIO_REFRESH_MODE:-complete/);
+  assert.match(script, /--if-changed/);
 });
 
 test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains unfiltered", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
   const intelligenceWorkspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const analytics = await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
@@ -177,6 +180,8 @@ test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains u
   assert.doesNotMatch(intelligenceWorkspace, /sector-dimmed/);
   assert.doesNotMatch(intelligenceWorkspace, /sector-intelligence-filter/);
   assert.doesNotMatch(intelligenceWorkspace, /selectedSectorId/);
+  assert.match(analytics, /alignSectorImpactRows\(sectors\)/);
+  assert.doesNotMatch(analytics, /aria-disabled=\{!selectable\}/);
 
   assert.match(page, /IntelligenceWorkspace/);
   assert.match(page, /workspace === "intelligence"/);
@@ -210,9 +215,28 @@ test("valid Kite auth with a non-auth subsource failure never offers re-authenti
     status: "unavailable",
     authStatus: "unavailable",
   }), {
-    control: "unavailable",
+    control: "authenticate",
+    showAuthAction: true,
+  });
+});
+
+test("unavailable or unknown cached Kite still offers Authenticate Kite", () => {
+  assert.deepEqual(kiteAuthPresentation({
+    status: "snapshot",
+    authStatus: "unknown",
+  }), {
+    control: "authenticate",
+    showAuthAction: true,
+  });
+  assert.deepEqual(kiteAuthPresentation({
+    status: "snapshot",
+    authStatus: "authenticated",
+  }), {
+    control: "cached",
     showAuthAction: false,
   });
+  assert.equal(kiteLoginHref(undefined), "/api/kite/login?force=1&redirect=1");
+  assert.equal(kiteLoginHref("https://kite.zerodha.com/connect/login"), "https://kite.zerodha.com/connect/login");
 });
 
 test("explicit invalid Kite auth still offers authentication", () => {

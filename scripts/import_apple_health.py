@@ -254,16 +254,18 @@ def daily_history(
     days: int,
     mode: str,
 ) -> List[dict]:
-    """Chronological (oldest→newest) measured daily points; omit days with no records."""
+    """Chronological measured daily points; omit missing days and never invent range midpoints."""
+    if mode == "range":
+        return []
     points: List[dict] = []
     for offset in range(days - 1, -1, -1):
         day = (end - timedelta(days=offset)).isoformat()
         result = aggregate(db, metric_type, day, mode)
-        if result is None:
+        if result is None or isinstance(result, tuple):
             continue
         value = adjusted(metric_type, result)
         if isinstance(value, tuple):
-            value = sum(value) / 2
+            continue
         points.append({"date": day, "value": float(value)})
     return points
 
@@ -553,9 +555,10 @@ def build_snapshot(
             adjusted_prior = adjusted(metric_type, prior_current) if prior_current is not None else None
             week_values = replace_current(week_values, current, adjusted_prior)
             month_values = replace_current(month_values, current, adjusted_prior)
-            target_day = completed.isoformat()
-            weekly_history = apply_history_override(weekly_history, current, adjusted_prior, target_day)
-            monthly_history = apply_history_override(monthly_history, current, adjusted_prior, target_day)
+            if mode != "range" and not isinstance(current, tuple):
+                target_day = completed.isoformat()
+                weekly_history = apply_history_override(weekly_history, current, adjusted_prior, target_day)
+                monthly_history = apply_history_override(monthly_history, current, adjusted_prior, target_day)
         averages = {}
         weekly = comparison(current, week_values, unit)
         monthly = comparison(current, month_values, unit)

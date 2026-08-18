@@ -14,7 +14,12 @@ enum FlaskServiceStatus: Equatable {
 enum FlaskServiceSupervisor {
     private static let healthTimeout: TimeInterval = 3
     private static let pollLimit = 90
-    private static let refreshTimeout: TimeInterval = 200
+    /// Incremental ticks: source HTTP checks without a full Health XML re-extract.
+    private static let incrementalRefreshTimeout: TimeInterval = 200
+    /// Splash / Refresh all: Health ZIP validate+extract+import can take many minutes.
+    private static let completeRefreshTimeout: TimeInterval = 35 * 60
+    private static let launchLock = NSLock()
+    nonisolated(unsafe) private static var headlessStartProcess: Process?
 
     static func isHealthy() async -> Bool {
         await isReachable()
@@ -46,15 +51,19 @@ enum FlaskServiceSupervisor {
     static func ensureRunning(onTick: (() -> Void)? = nil) async -> FlaskServiceStatus {
         StratjiConfiguration.persistRepoRoot()
         onTick?()
-        if await isReachable() {
-            return .live
-        }
-
-        appendDesktopLog("Starting Stratji service via LaunchAgent \(StratjiConfiguration.launchAgentTarget)\n")
+        let alreadyLive = await isReachable()
+        appendDesktopLog(
+            alreadyLive
+                ? "Gateway reachable; replacing LaunchAgent watchdog without Terminal.app\n"
+                : "Starting Stratji service via LaunchAgent \(StratjiConfiguration.launchAgentTarget)\n"
+        )
         onTick?()
         await Task.detached {
-            startViaLaunchd()
+            startViaLaunchd(startNow: !alreadyLive)
         }.value
+        if alreadyLive {
+            return .live
+        }
 
         for _ in 0 ..< pollLimit {
             onTick?()
@@ -67,9 +76,24 @@ enum FlaskServiceSupervisor {
         return .unavailable(message: failureSummary().message, needsFullDiskAccess: failureSummary().needsFullDiskAccess)
     }
 
-    /// Complete source refresh after Flask is reachable. Skips Health ZIP import (`PORTFOLIO_SKIP_HEALTH_ZIP=1`).
+    /// Splash / Reload All: every source including Health ZIP ingest. Never sets `PORTFOLIO_SKIP_HEALTH_ZIP`.
     @discardableResult
     static func runCompleteRefresh(onProgress: ((StratjiRefreshProgressSnapshot) -> Void)? = nil) async -> Bool {
+        await runRefreshScript(mode: "complete", timeout: completeRefreshTimeout, onProgress: onProgress)
+    }
+
+    /// Post-hydrate ticks: skip Health XML re-extract unless the export mtime changed.
+    @discardableResult
+    static func runIncrementalRefresh(onProgress: ((StratjiRefreshProgressSnapshot) -> Void)? = nil) async -> Bool {
+        await runRefreshScript(mode: "incremental", timeout: incrementalRefreshTimeout, onProgress: onProgress)
+    }
+
+    @discardableResult
+    private static func runRefreshScript(
+        mode: String,
+        timeout: TimeInterval,
+        onProgress: ((StratjiRefreshProgressSnapshot) -> Void)?
+    ) async -> Bool {
         guard let repoRoot = StratjiConfiguration.repoRoot else { return false }
         let script = repoRoot.appendingPathComponent(StratjiConfiguration.refreshScriptRelativePath)
         guard FileManager.default.fileExists(atPath: script.path) else { return false }
@@ -89,7 +113,8 @@ enum FlaskServiceSupervisor {
         var dashboard = StratjiConfiguration.dashboardURL.absoluteString
         if dashboard.hasSuffix("/") { dashboard.removeLast() }
         environment["DASHBOARD_PUBLIC_URL"] = dashboard
-        environment["PORTFOLIO_SKIP_HEALTH_ZIP"] = "1"
+        environment["PORTFOLIO_REFRESH_MODE"] = mode
+        environment.removeValue(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP")
         environment["PORTFOLIO_STARTUP_PROGRESS_PATH"] = repoRoot
             .appendingPathComponent("artifacts/private/startup-progress.json").path
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -100,13 +125,14 @@ enum FlaskServiceSupervisor {
                 onProgress?(snapshot)
             }
         }
-        let deadline = Date().addingTimeInterval(refreshTimeout)
+        let deadline = Date().addingTimeInterval(timeout)
+        let healthNote = mode == "complete" ? "Health ZIP ingest enabled" : "Health ZIP re-extract only if export mtime changed"
 
         if let handle = try? FileHandle(forWritingTo: logFile) {
             handle.seekToEndOfFile()
             process.standardOutput = handle
             process.standardError = handle
-            appendDesktopLog("Running \(script.lastPathComponent) (Health ZIP skipped)\n")
+            appendDesktopLog("Running \(script.lastPathComponent) (mode=\(mode); \(healthNote))\n")
             do {
                 try process.run()
             } catch {
@@ -118,7 +144,7 @@ enum FlaskServiceSupervisor {
                 publishProgress()
                 if Date() > deadline {
                     process.terminate()
-                    appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(Self.refreshTimeout))s\n")
+                    appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(timeout))s\n")
                     break
                 }
                 try? await Task.sleep(for: .milliseconds(400))
@@ -129,7 +155,7 @@ enum FlaskServiceSupervisor {
             return true
         }
 
-        appendDesktopLog("Running \(script.lastPathComponent) (Health ZIP skipped)\n")
+        appendDesktopLog("Running \(script.lastPathComponent) (mode=\(mode); \(healthNote))\n")
         do {
             try process.run()
         } catch {
@@ -140,7 +166,7 @@ enum FlaskServiceSupervisor {
             publishProgress()
             if Date() > deadline {
                 process.terminate()
-                appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(Self.refreshTimeout))s\n")
+                appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(timeout))s\n")
                 break
             }
             try? await Task.sleep(for: .milliseconds(400))
@@ -205,20 +231,69 @@ enum FlaskServiceSupervisor {
         return ("The local Stratji service did not start. Retry, or grant Full Disk Access if macOS is blocking it.", true)
     }
 
-    nonisolated private static func startViaLaunchd() {
+    /// Writes the LaunchAgent, optionally starts the data plane, and replaces any
+    /// older watchdog that used `open` on a `.command` file (that opens Terminal.app).
+    nonisolated private static func startViaLaunchd(startNow: Bool) {
+        launchLock.lock()
+        defer { launchLock.unlock() }
+
         let logDirectory = StratjiConfiguration.logDirectory
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
         StratjiConfiguration.writeLaunchAgent()
 
+        if startNow {
+            startHeadlessService()
+        }
+        recycleLaunchAgent()
+    }
+
+    /// Run Application Support `start-dashboard.command` with `/bin/bash`.
+    /// Do not `open` that file — Launch Services would attach Terminal.app.
+    nonisolated private static func startHeadlessService() {
         let command = StratjiConfiguration.startCommand
-        if FileManager.default.fileExists(atPath: command.path) {
-            let openResult = runTool(
-                URL(fileURLWithPath: "/usr/bin/open"),
-                ["-g", "-j", command.path]
-            )
-            appendDesktopLog("open start-dashboard.command (\(openResult.status))\n")
+        guard FileManager.default.fileExists(atPath: command.path) else {
+            appendDesktopLog("start-dashboard.command missing; LaunchAgent watchdog will retry\n")
+            return
+        }
+        if let existing = headlessStartProcess, existing.isRunning {
+            appendDesktopLog("headless start already running (pid \(existing.processIdentifier))\n")
+            return
         }
 
+        let logFile = StratjiConfiguration.logDirectory.appendingPathComponent("desktop-app.log")
+        if !FileManager.default.fileExists(atPath: logFile.path) {
+            FileManager.default.createFile(atPath: logFile.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: logFile) else {
+            appendDesktopLog("could not open desktop-app.log for headless start\n")
+            return
+        }
+        handle.seekToEndOfFile()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [command.path]
+        process.currentDirectoryURL = StratjiConfiguration.applicationSupportDirectory
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = handle
+        process.standardError = handle
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        process.environment = environment
+
+        do {
+            try process.run()
+            headlessStartProcess = process
+            appendDesktopLog("started start-dashboard via bash (pid \(process.processIdentifier))\n")
+        } catch {
+            appendDesktopLog("headless start failed: \(error.localizedDescription)\n")
+            try? handle.close()
+        }
+    }
+
+    /// Reload the watchdog so a previously loaded `open .command` loop is replaced.
+    /// The data plane is `nohup`'d by start-flask-app.sh, so bootout does not kill Flask/Next.
+    nonisolated private static func recycleLaunchAgent() {
         let uid = getuid()
         let domain = "gui/\(uid)"
         let label = StratjiConfiguration.launchAgentLabel
@@ -226,10 +301,10 @@ enum FlaskServiceSupervisor {
         let plist = StratjiConfiguration.launchAgentPlist
 
         if FileManager.default.fileExists(atPath: plist.path) {
+            _ = runLaunchctl(["bootout", target])
             _ = runLaunchctl(["bootstrap", domain, plist.path])
             _ = runLaunchctl(["enable", target])
         }
-        // Never kickstart -k or bootout: that kills a still-starting supervisor.
         let kickstart = runLaunchctl(["kickstart", target])
         if kickstart.status != 0 {
             appendDesktopLog("launchctl kickstart failed (\(kickstart.status))\n")

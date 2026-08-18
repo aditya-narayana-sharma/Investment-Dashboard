@@ -71,6 +71,7 @@ function classifySectorSentiment(value: string): SectorNewsSentiment {
 }
 
 const SECTOR_MATCHERS: Array<[string, RegExp]> = [
+  ["it", /\b(?:it services|software|infosys|wipro|\btcs\b|hcl tech|tech mahindra|coforge|ltts|it\/tech)\b/i],
   ["pharma", /\b(?:pharma|pharmaceutical|generic(?:s)?|drug|api maker|sun pharma|cipla|dr\.?\s*reddy)\b/i],
   ["power", /\b(?:power|electricity|renewable|solar|wind|grid|utility|utilities)\b/i],
   ["infrastructure", /\b(?:infrastructure|highway|nhai|construction|epc|cement|capex)\b/i],
@@ -81,6 +82,7 @@ const SECTOR_MATCHERS: Array<[string, RegExp]> = [
   ["fmcg", /\b(?:fmcg|staples|consumer goods|nestl[eé]|hindustan unilever|itc)\b/i],
   ["consumer", /\b(?:quick commerce|consumer|retail|e-?commerce|blinkit|zomato|eternal)\b/i],
   ["energy", /\b(?:oil|gas|crude|refining|omc|lpg|petroleum|ongc|reliance)\b/i],
+  ["metals", /\b(?:steel|aluminium|aluminum|mining|zinc|metal(?:s)?|jsw steel|tata steel|hindalco|coal india)\b/i],
   ["defence", /\b(?:defence|defense|hal\b|ordnance|missile|aerospace|mod\b)\b/i],
 ];
 

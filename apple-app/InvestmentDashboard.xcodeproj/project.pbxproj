@@ -199,6 +199,7 @@
 			fileSystemSynchronizedGroups = (
 				A57A73013006C900007787CF /* Outline */,
 				A57A84013006D000007787CF /* Auth */,
+				A57A72103006C600007787CF /* Shared */,
 				E65EBEBC3006C519007787CF /* InvestmentDashboard */,
 			);
 			name = InvestmentDashboard;

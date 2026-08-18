@@ -13,7 +13,7 @@ final class StratjiWindowController: NSWindowController, NSWindowDelegate {
         )
         window.title = "Stratji"
         window.minSize = NSSize(width: 1180, height: 720)
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = StratjiAppearanceStore.current.nsAppearance
         window.titlebarAppearsTransparent = false
         window.setFrameAutosaveName("StratjiMainWindow.v7")
         window.center()

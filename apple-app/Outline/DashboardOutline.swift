@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Historical 5-minute cadence. Stratji.app no longer auto-refreshes on this interval after splash.
+/// Historical 5-minute cadence. After splash, Stratji.app uses this interval for incremental ticks only.
 enum DashboardRefreshSchedule {
     static let interval: TimeInterval = 5 * 60
     /// Forced Mail/Podcasts/Calendar/Reminders + Kite bundle (`?force=1`).

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum StratjiWorkspace: String, CaseIterable, Identifiable, Codable {
     case investment
@@ -30,6 +31,18 @@ enum StratjiWorkspace: String, CaseIterable, Identifiable, Codable {
         case .health: "Health"
         case .builder: "Canvas"
         case .strategies: "Strategies"
+        }
+    }
+
+    /// Sliding-pill tints matching CSS `--vo-desk` / `--vo-map` / `--vo-news` / `--vo-body` / `--vo-canvas` / `--vo-strategies`.
+    var barTint: Color {
+        switch self {
+        case .investment: Color(red: 29 / 255, green: 78 / 255, blue: 216 / 255) // #1d4ed8
+        case .sectors: Color(red: 13 / 255, green: 148 / 255, blue: 136 / 255) // #0d9488
+        case .intelligence: Color(red: 168 / 255, green: 85 / 255, blue: 247 / 255) // #a855f7
+        case .health: Color(red: 244 / 255, green: 63 / 255, blue: 94 / 255) // #f43f5e
+        case .builder: Color(red: 217 / 255, green: 119 / 255, blue: 6 / 255) // #d97706
+        case .strategies: Color(red: 101 / 255, green: 163 / 255, blue: 13 / 255) // #65a30d
         }
     }
 
@@ -176,6 +189,20 @@ enum StratjiSourceState: String, Codable {
         switch self {
         case .live, .verified: true
         case .partial, .stale, .cached, .unavailable, .permissionRequired, .unknown: false
+        }
+    }
+
+    /// Dot fill matching `.source-freshness-strip i.{state}` / `.pulse-core.{state}`.
+    var freshnessDotColor: Color {
+        switch self {
+        case .live, .verified:
+            Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255)
+        case .partial, .cached:
+            Color(red: 234 / 255, green: 179 / 255, blue: 8 / 255)
+        case .unavailable, .permissionRequired, .stale:
+            Color(red: 239 / 255, green: 68 / 255, blue: 68 / 255)
+        case .unknown:
+            Color(red: 113 / 255, green: 113 / 255, blue: 122 / 255)
         }
     }
 }

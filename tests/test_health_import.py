@@ -170,6 +170,38 @@ class HealthDatePolicyTests(unittest.TestCase):
         )
         self.assertEqual(snapshot["coverage"]["Cardio fitness"]["status"], "missing_target")
         self.assertIn("2026-07-25", snapshot["coverage"]["Cardio fitness"]["missingDates7"])
+        heart = next(category for category in snapshot["categories"] if category["name"] == "Heart")
+        heart_rate = next(metric for metric in heart["metrics"] if metric["label"] == "Heart rate")
+        self.assertFalse(heart_rate.get("history"))
+
+    def test_history_omits_missing_days_without_interpolating(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = setup_database(Path(directory) / "health.sqlite3")
+            insert_category_day(db, "2026-07-23")
+            insert_category_day(db, "2026-07-25")
+            snapshot = build_snapshot(
+                db,
+                "2026-07-25 21:00:00 +0530",
+                12,
+                archive_state={"status": "verified_latest", "activeArchive": "health.zip"},
+                now=datetime.fromisoformat("2026-07-25T21:30:00+05:30"),
+            )
+            db.close()
+
+        activity = next(category for category in snapshot["categories"] if category["name"] == "Activity")
+        steps = next(metric for metric in activity["metrics"] if metric["label"] == "Steps")
+        self.assertEqual(
+            steps["history"]["weekly"],
+            [
+                {"date": "2026-07-23", "value": 10000.0},
+                {"date": "2026-07-25", "value": 10000.0},
+            ],
+        )
+        self.assertIn("2026-07-24", snapshot["coverage"]["Steps"]["missingDates7"])
+        self.assertNotIn("2026-07-24", [point["date"] for point in steps["history"]["weekly"]])
+        sleep = next(category for category in snapshot["categories"] if category["name"] == "Sleep")
+        asleep = next(metric for metric in sleep["metrics"] if metric["label"] == "Time asleep")
+        self.assertEqual([point["date"] for point in asleep["history"]["weekly"]], ["2026-07-23", "2026-07-25"])
 
 
 class HealthArchivePreparationTests(unittest.TestCase):

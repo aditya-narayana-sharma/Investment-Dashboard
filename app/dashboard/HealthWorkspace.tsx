@@ -273,10 +273,12 @@ function healthCategoryName(page: Exclude<HealthH3Page, "metrics-overview">): st
 function HealthMetricsWorkbench({
   page,
   categories,
+  dataDate,
   onOpenPage,
 }: {
   page: HealthH3Page;
   categories: HealthCategorySnapshot[];
+  dataDate?: string;
   onOpenPage: (page: HealthH3Page) => void;
 }) {
   switch (page) {
@@ -308,7 +310,7 @@ function HealthMetricsWorkbench({
       const category = categories.find((item) => item.name === categoryName);
       if (!category) return <div className="health-guidance-empty"><b>{categoryName} data unavailable</b><span>The current Health snapshot does not include this category.</span></div>;
       return <div className={page === "nutrition" ? "nutrition-lab-tray" : undefined}>
-        <HealthMasonryGrid categories={[category]} compact/>
+        <HealthMasonryGrid categories={[category]} compact dataDate={dataDate}/>
       </div>;
     }
     default: {
@@ -489,8 +491,8 @@ export function HealthWorkspace({
             <button type="button" disabled={pageIndex >= pages.length - 1} onClick={() => changePage(pageIndex + 1)} aria-label="Next page"><ChevronRight size={17}/></button>
           </nav>}
           {h3ShowsCategory
-            ? <HealthMetricsWorkbench page={h3Page} categories={healthSnapshot.categories} onOpenPage={(page) => navigate("h3", page)}/>
-            : <HealthMasonryGrid categories={healthSnapshot.categories}/>}
+            ? <HealthMetricsWorkbench page={h3Page} categories={healthSnapshot.categories} dataDate={healthSnapshot.dataDate} onOpenPage={(page) => navigate("h3", page)}/>
+            : <HealthMasonryGrid categories={healthSnapshot.categories} dataDate={healthSnapshot.dataDate}/>}
         </HealthIncognitoGate>
       </CollapsibleSection>
     </div>

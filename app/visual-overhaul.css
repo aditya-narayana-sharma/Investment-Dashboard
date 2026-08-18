@@ -5,6 +5,14 @@
   --radius-sm: 8px;
   --radius-lg: 16px;
   --radius-pill: 999px;
+  --control-gap: 10px;
+  --chrome-stack-gap: 16px;
+  --section-nav-clearance: 28px;
+  --font-size-chip: 13px;
+  --font-size-label: 13px;
+  --font-size-ui: 14px;
+  --font-size-body: 15px;
+  --font-size-title: 18px;
   --vo-desk: #1d4ed8;
   --vo-map: #0d9488;
   --vo-news: #a855f7;
@@ -95,11 +103,6 @@
   scrollbar-width: thin;
   font-family: var(--font-mono);
 }
-html.native-chrome-embed .source-freshness-strip.pulse-constellation,
-html[data-native-chrome] .source-freshness-strip.pulse-constellation {
-  padding: 2px 0 6px;
-  gap: 8px;
-}
 .pulse-constellation .pulse-node {
   position: relative;
   min-width: max-content;
@@ -152,8 +155,8 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .pulse-constellation .pulse-core.permission_required,
 .pulse-constellation .pulse-core.stale { background: var(--vo-pulse-fail); color: var(--vo-pulse-fail); }
 .pulse-constellation .pulse-node span { display: grid; gap: 1px; }
-.pulse-constellation .pulse-node b { font-size: 10px; color: var(--ink); font-weight: 900; text-transform: uppercase; }
-.pulse-constellation .pulse-node small { font-size: 10px; color: var(--muted); text-transform: capitalize; }
+.pulse-constellation .pulse-node b { font-size: var(--font-size-chip); color: var(--ink); font-weight: 900; text-transform: uppercase; }
+.pulse-constellation .pulse-node small { font-size: var(--font-size-chip); color: var(--muted); text-transform: capitalize; }
 .pulse-detail-lane {
   margin: -6px 0 12px;
   padding: 10px 12px;
@@ -163,7 +166,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   box-shadow: var(--brutalist-shadow);
   color: #d4d4d8;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.4;
   overflow-wrap: anywhere;
   pointer-events: none;
@@ -172,6 +175,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 /* ——— Mode dial (workspace liquid glass capsule) ——— */
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button {
   border-top-width: 0;
+  transform-origin: center bottom;
 }
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="investment"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="sectors"],
@@ -179,7 +183,8 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
-  color: rgba(236, 240, 244, 0.62);
+  color: rgba(248, 250, 252, 0.86);
+  font-weight: 600;
 }
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="sectors"],
@@ -188,13 +193,38 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
   color: #fff;
+  font-weight: 700;
+}
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="investment"]) { --glass-tint: var(--vo-desk); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="sectors"]) { --glass-tint: var(--vo-map); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="intelligence"]) { --glass-tint: var(--vo-news); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="health"]) { --glass-tint: var(--vo-body); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="builder"]) { --glass-tint: var(--vo-canvas); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="strategies"]) { --glass-tint: var(--vo-strategies); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="investment"]:hover) { --glass-tint: var(--vo-desk); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="sectors"]:hover) { --glass-tint: var(--vo-map); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="intelligence"]:hover) { --glass-tint: var(--vo-news); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="health"]:hover) { --glass-tint: var(--vo-body); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="builder"]:hover) { --glass-tint: var(--vo-canvas); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="strategies"]:hover) { --glass-tint: var(--vo-strategies); }
+.workspace-navigation.glass-bar .workspace-tabs:has(button[data-locked="1"]:hover)::before,
+.workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-locked="1"]):not(:has(button:hover))::before {
+  opacity: 0.68;
 }
 .workspace-navigation.glass-bar .workspace-tabs button:hover,
-.workspace-navigation.glass-bar .workspace-tabs button:focus-visible,
-.workspace-navigation.glass-bar .workspace-tabs button:active {
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible {
+  z-index: 3;
   box-shadow: none;
-  transform: none;
   animation: none;
+  transform: scale(1.05);
+  transform-origin: center bottom;
+}
+.workspace-navigation.glass-bar .workspace-tabs button:active {
+  z-index: 3;
+  box-shadow: none;
+  animation: none;
+  transform: scale(0.99);
+  transform-origin: center bottom;
 }
 .workspace-tabs em.orbital-badge {
   position: relative;
@@ -203,6 +233,8 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 /* ——— Button / control pop-up press ——— */
 .vo-pop,
 .workspace-tabs button,
+.workspace-section-nav button,
+.intelligence-section-nav button,
 .segmented button,
 .appearance-toggle button,
 .digest-show-more,
@@ -210,16 +242,11 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .incognito-toggle,
 .pill,
 .kanban-board[data-visual="mission-chips"] .kanban-card,
-.panel,
-.llm-assist,
-.kanban-summary,
-.kanban-lane,
 .kanban-card,
-.metrics-strip article,
-.portfolio-management-card,
-.masthead,
-.health-kpi-tile,
-.health-organ-portal {
+.axis-pick-list button,
+.axis-category-strip > button,
+.macro-dial-chips > div,
+.sector-page-nav > div button {
   border-radius: var(--radius);
   transition:
     box-shadow var(--vo-motion) var(--vo-ease),
@@ -232,6 +259,10 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .vo-pop:focus-visible,
 .workspace-tabs button:hover,
 .workspace-tabs button:focus-visible,
+.workspace-section-nav button:hover,
+.workspace-section-nav button:focus-visible,
+.intelligence-section-nav button:hover,
+.intelligence-section-nav button:focus-visible,
 .segmented button:hover,
 .segmented button:focus-visible,
 .appearance-toggle button:hover,
@@ -272,7 +303,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   gap: 6px;
   margin-left: 8px;
   color: #71717a;
-  font-size: 10px;
+  font-size: 13px;
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -423,13 +454,13 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .instrument-gauge .gauge-center b {
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
   line-height: 1.1;
 }
 .instrument-gauge > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 900;
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -438,7 +469,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .instrument-gauge > small {
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
 }
 .instrument-gauge .redline {
   position: absolute;
@@ -447,7 +478,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   padding: 2px 5px;
   border: 1px solid #ef4444;
   color: #fca5a5;
-  font-size: 9px;
+  font-size: 13px;
   font-family: var(--font-mono);
   font-weight: 900;
   text-transform: uppercase;
@@ -474,7 +505,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   grid-row: 3;
   margin: 0 0 4px;
   color: #93c5fd;
-  font-size: 11px;
+  font-size: 14px;
   font-family: var(--font-mono);
 }
 
@@ -499,7 +530,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .portfolio-map-panel.gravity-well .portfolio-map-heading h3::after {
   content: " · gravity well";
   color: #71717a;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   font-family: var(--font-mono);
   text-transform: lowercase;
@@ -564,13 +595,13 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 }
 .macro-regime-card .macro-ai-evidence > header b {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.25;
   text-transform: uppercase;
 }
 .macro-regime-card .macro-ai-evidence > header span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .macro-regime-card .macro-ai-evidence ul {
@@ -617,7 +648,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   border: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 850;
   line-height: 1.25;
   text-transform: uppercase;
@@ -625,7 +656,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .macro-regime-card .macro-ai-evidence li p,
 .macro-regime-card .macro-ai-evidence .macro-ai-empty {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.5;
 }
 .macro-regime-card .macro-ai-evidence .macro-ai-empty {
@@ -639,7 +670,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   gap: 6px;
   margin: 0 0 8px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   text-transform: uppercase;
   color: #71717a;
 }
@@ -681,7 +712,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .exposure-spine-panel .panel-title h3::after {
   content: " · exposure spine";
   color: #71717a;
-  font-size: 12px;
+  font-size: 15px;
   font-family: var(--font-mono);
   font-weight: 600;
 }
@@ -750,7 +781,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   border-radius: 0 !important;
   clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);
   padding: 9px 11px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 900;
   letter-spacing: .02em;
 }
@@ -807,7 +838,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   clip-path: none;
   padding: 10px 14px;
   text-align: left;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 850;
   line-height: 1.25;
   white-space: normal;
@@ -836,7 +867,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
   gap: 5px 12px;
   min-height: 24px;
   color: #d9e0e7;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.3;
 }
 .risk-panel.threat-flower.holdings-stack .risk-series-key span {
@@ -881,7 +912,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 }
 .risk-panel.threat-flower.holdings-stack .risk-evidence dt {
   color: #8fb9e2;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -889,7 +920,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .risk-panel.threat-flower.holdings-stack .risk-evidence dd {
   margin: 3px 0 0;
   color: #d9e0e7;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.45;
 }
 .risk-panel.threat-flower.holdings-stack .risk-evidence a {
@@ -899,7 +930,7 @@ html[data-native-chrome] .source-freshness-strip.pulse-constellation {
 .risk-panel.threat-flower.holdings-stack .risk-overview-list li,
 .risk-panel.threat-flower.holdings-stack .risk-axis-list li,
 .risk-panel.threat-flower.holdings-stack .risk-axis-list p {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.45;
 }
 html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-series-key,
@@ -913,7 +944,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 .risk-panel.threat-flower .panel-title h3::after {
   content: " · threat flower";
   color: #71717a;
-  font-size: 12px;
+  font-size: 15px;
   font-family: var(--font-mono);
   font-weight: 600;
 }
@@ -973,14 +1004,19 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   right: 0;
   top: -14px;
   color: #86efac;
-  font-size: 9px;
+  font-size: 13px;
   font-family: var(--font-mono);
   text-transform: uppercase;
 }
 
 /* ——— Sector prism + shockwave ——— */
 .sector-selector.sector-prism button {
-  transition: filter var(--vo-motion) var(--vo-ease), opacity var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
+  transition:
+    filter var(--vo-motion) var(--vo-ease),
+    opacity var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    transform var(--vo-motion) var(--vo-ease),
+    box-shadow var(--vo-motion) var(--vo-ease);
 }
 .sector-selector.sector-prism button:not(.active):not([aria-pressed="true"]) {
   filter: saturate(0.35);
@@ -1033,7 +1069,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   background: radial-gradient(circle, rgba(37, 99, 235, 0.35), #0a0a0a 70%);
   animation: vo-breathe 3.2s var(--vo-ease) infinite;
   font-family: var(--font-mono);
-  font-size: clamp(10px, 1.15vw, 12px);
+  font-size: clamp(13px,1.15vw,15px);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
@@ -1053,7 +1089,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 .pulse-orb .orb-satellites span {
   padding: 2px 6px;
   border: 1px solid #3f3f46;
-  font-size: 9px;
+  font-size: 13px;
   font-family: var(--font-mono);
   color: #a1a1aa;
   text-transform: uppercase;
@@ -1078,7 +1114,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   padding: 10px 12px;
   border-bottom: 2px solid #27272a;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1104,11 +1140,11 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   font-family: var(--font-mono);
   color: #71717a;
 }
-.ladder-duel .ladder li strong { color: #fff; font-size: 12px; }
+.ladder-duel .ladder li strong { color: #fff; font-size: 15px; }
 .ladder-duel .ladder li em {
   font-style: normal;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
 }
 .ladder-duel .ladder.leaders li em { color: #86efac; }
@@ -1124,14 +1160,14 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 .lifecycle-panel.evolution-river .panel-title h3::after {
   content: " · evolution river";
   color: #71717a;
-  font-size: 12px;
+  font-size: 15px;
   font-family: var(--font-mono);
   font-weight: 600;
 }
 .structure-panel.profit-pool-terrain .panel-title h3::after {
   content: " · profit-pool terrain";
   color: #71717a;
-  font-size: 12px;
+  font-size: 15px;
   font-family: var(--font-mono);
   font-weight: 600;
 }
@@ -1153,7 +1189,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border-bottom: 2px solid #27272a;
   border-top: 3px solid #0d9488;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1167,7 +1203,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   color: #d4d4d8;
   text-align: left;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.4;
 }
 .mece-loom .loom-bead:hover,
@@ -1218,8 +1254,8 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   top: 4px;
   transform-origin: 50% 38px;
 }
-.trigger-dial b { display: block; color: #fff; font-family: var(--font-mono); font-size: 12px; }
-.trigger-dial small { color: #a1a1aa; font-size: 10px; font-family: var(--font-mono); }
+.trigger-dial b { display: block; color: #fff; font-family: var(--font-mono); font-size: 15px; }
+.trigger-dial small { color: #a1a1aa; font-size: 13px; font-family: var(--font-mono); }
 .band-accordion {
   display: grid;
   gap: 8px;
@@ -1237,7 +1273,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   cursor: pointer;
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
 }
 .band-accordion .band-width {
   height: 10px;
@@ -1252,7 +1288,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 .band-accordion .band-detail {
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -1276,7 +1312,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border: 1px solid var(--chip-border);
   background: var(--chip-bg);
   color: var(--chip-fg);
-  font-size: 11px;
+  font-size: 14px;
   cursor: pointer;
   opacity: 1;
   transition: border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease), color var(--vo-motion) var(--vo-ease);
@@ -1314,7 +1350,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border: 1px solid color-mix(in srgb, #a855f7 55%, var(--line));
   color: var(--ink);
   background: color-mix(in srgb, #a855f7 12%, var(--bg-panel));
-  font-size: 10px;
+  font-size: 13px;
   font-family: var(--font-mono);
 }
 
@@ -1349,7 +1385,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   display: grid;
   place-items: center;
   color: #71717a;
-  font-size: 10px;
+  font-size: 13px;
   font-family: var(--font-mono);
   text-transform: uppercase;
   background: repeating-linear-gradient(-45deg, #0a0a0a, #0a0a0a 4px, #18181b 4px, #18181b 8px);
@@ -1428,7 +1464,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   background: rgba(24, 24, 27, 0.85);
   backdrop-filter: blur(6px);
   color: #a1a1aa;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.45;
 }
 .health-direction-grid.quadrant-vitals-stage {
@@ -1455,6 +1491,10 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   margin: 6px 0 4px;
   touch-action: none;
   cursor: crosshair;
+}
+.health-direction-grid.quadrant-vitals-stage.compact .health-kpi-tile.biometric-capsule .spark-filament {
+  height: 22px;
+  margin: 3px 0 2px;
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament svg {
   display: block;
@@ -1489,6 +1529,24 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   opacity: 0.45;
   pointer-events: none;
 }
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-gap {
+  stroke: currentColor;
+  stroke-width: 1.1;
+  stroke-linecap: square;
+  opacity: 0.28;
+  pointer-events: none;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-mark {
+  fill: currentColor;
+  stroke: none;
+  pointer-events: none;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-mark.active {
+  fill: #0a0a0a;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 3px currentColor);
+}
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot {
   fill: #0a0a0a;
   stroke: currentColor;
@@ -1517,12 +1575,12 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label b {
   color: currentColor;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label span {
   color: #a1a1aa;
-  font-size: 9px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1540,7 +1598,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border: 2px dashed #52525b;
   padding: 12px;
   color: #a1a1aa;
-  font-size: 11px;
+  font-size: 14px;
   font-family: var(--font-mono);
 }
 .health-missing-ribbon {
@@ -1549,7 +1607,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   border: 2px solid #7f1d1d;
   background: #450a0a;
   color: #fecaca;
-  font-size: 11px;
+  font-size: 14px;
   font-family: var(--font-mono);
 }
 .health-organ-portals {
@@ -1572,7 +1630,6 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
 }
 .health-organ-portal:hover,
 .health-organ-portal:focus-visible {
-  transform: scale(1.02);
   border-color: #f43f5e;
   box-shadow: var(--brutalist-shadow-lg);
   outline: none;
@@ -1628,7 +1685,7 @@ html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evi
   background: var(--bg-panel);
   box-shadow: var(--brutalist-shadow-sm);
   color: #d4d4d8;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.35;
   pointer-events: none;
 }
@@ -1771,7 +1828,8 @@ html[data-appearance="sepia"] .health-insight-crystal {
   background: linear-gradient(135deg, color-mix(in srgb, var(--ink) 4%, transparent), transparent 50%), var(--bg-panel);
   border-color: var(--line);
 }
-html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot {
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot,
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-mark.active {
   fill: var(--bg-panel);
 }
 html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label {
@@ -1910,7 +1968,8 @@ html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspa
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
-  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  color: color-mix(in srgb, var(--ink) 88%, transparent);
+  font-weight: 600;
 }
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="sectors"],
@@ -1919,6 +1978,7 @@ html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspa
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
 html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
   color: var(--ink) !important;
+  font-weight: 700;
 }
 
 /* Investment visualisation legends and macro evidence are paper surfaces. */
@@ -2062,26 +2122,323 @@ html[data-appearance="sepia"] .spark-filament-label {
 }
 .vo-pop:hover,
 .vo-pop:focus-visible,
-.panel:hover,
-.llm-assist:hover,
 .kanban-card:hover,
 .kanban-board[data-visual="mission-chips"] .kanban-card:hover,
 .pulse-constellation .pulse-node:hover,
 .pulse-constellation .pulse-node:focus-visible,
-.health-organ-portal:hover,
-.health-organ-portal:focus-visible,
 .strategy-card:hover,
 .strategy-card:focus-visible,
-.metrics-strip article:hover,
-.portfolio-management-card:hover,
-.sender-group:hover {
+.workspace-section-nav button:hover,
+.workspace-section-nav button:focus-visible,
+.intelligence-section-nav button:hover,
+.intelligence-section-nav button:focus-visible,
+.macro-dial-chips > div:hover,
+.sector-page-nav > div button:hover,
+.sector-page-nav > div button:focus-visible {
   transform: translateY(-2px) scale(1.02);
   box-shadow: var(--brutalist-shadow-lg);
 }
+/* Whole panels, matrices, charts, lanes, collapsibles, digest chrome, and
+   Axis/BUY group wrappers stay still. Hover-pop belongs on rows and cards. */
+.panel:hover,
+.masthead:hover,
+.kanban-summary:hover,
+.kanban-lane:hover,
+.kanban-board:hover,
+.collapsible-section:hover,
+.collapsible-section .collapsible-heading:hover,
+.collapsible-section .section-heading:hover,
+.collapse-button:hover,
+.collapse-button:focus-visible,
+.collapsible-content:hover,
+.workspace-section:hover,
+.chart-panel:hover,
+.nested-chart-panel:hover,
+.macro-chart-panel:hover,
+.mece-panel:hover,
+.impact-matrix-panel:hover,
+.digest-panel:hover,
+.intelligence-feed-section:hover,
+.table-scroll:hover,
+.holdings-panel:hover,
+.analyst-matrix:hover,
+.analyst-group-block:hover,
+.analyst-group-header:hover,
+.analyst-group-header:focus-visible,
+.axis-workbench:hover,
+.axis-visual-grid:hover,
+.axis-pick-group:hover,
+.axis-pick-group-title:hover,
+.axis-pick-list:hover,
+.axis-category-strip:hover,
+.axis-category-strip > div:hover,
+.axis-category-strip > button:hover,
+.axis-category-strip > button:focus-visible,
+.axis-audit-strip:hover,
+.pill:hover,
+.scenario-shell:hover,
+.risk-panel:hover,
+.metrics-strip:hover,
+.metrics-strip article:hover,
+.portfolio-management-card:hover,
+.sender-group:hover,
+.sender-group-header:hover,
+.sender-group-collapsible > summary:hover,
+.health-direction-row:hover,
+.health-direction-header:hover,
+.health-direction-header:focus-visible,
+.health-organ-portal:hover,
+.health-organ-portal:focus-visible {
+  transform: none;
+}
+.sector-selector,
+.impact-matrix,
+.mece-matrix,
+.industry-breadth-table tbody,
+.axis-pick-list,
+.digest-panel .digest-list {
+  isolation: isolate;
+}
+.analyst-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.sector-selector button,
+.impact-row.selectable,
+.mece-row,
+.industry-breadth-table tbody tr,
+.axis-pick-list button,
+.analyst-table tbody tr,
+.digest-panel .digest-item {
+  position: relative;
+  transform-origin: center center;
+  transition:
+    transform var(--vo-motion) var(--vo-ease),
+    box-shadow var(--vo-motion) var(--vo-ease),
+    filter var(--vo-motion) var(--vo-ease),
+    opacity var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    background-color var(--vo-motion) var(--vo-ease);
+}
+.sector-selector button:hover,
+.sector-selector button:focus-visible,
+.impact-row.selectable:hover,
+.impact-row.selectable:focus-visible,
+.mece-row:hover,
+.mece-row:focus-visible,
+.industry-breadth-table tbody tr:hover,
+.axis-pick-list button:hover,
+.axis-pick-list button:focus-visible,
+.analyst-table tbody tr:hover,
+.digest-panel .digest-item:hover {
+  z-index: 2;
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: var(--brutalist-shadow);
+}
+/* WKWebView promotes transform on display:table-row to the whole table, so a
+   tbody tr:hover scale lifts thead + every ticker together. Give each Axis row
+   its own box; freeze the matrix card, BUY headers, table chrome, and cells. */
+.panel.analyst-matrix:hover,
+.analyst-matrix:hover,
+.analyst-matrix .panel-title:hover,
+.analyst-matrix-controls:hover,
+.analyst-matrix .llm-assist-anchor:hover,
+.analyst-matrix .table-scroll:hover,
+.analyst-matrix .analyst-table:hover,
+.analyst-matrix .analyst-table thead:hover,
+.analyst-matrix .analyst-table thead tr:hover,
+.analyst-matrix .analyst-table thead th:hover,
+.analyst-matrix .analyst-table tbody:hover,
+.analyst-matrix .analyst-group-block:hover,
+.analyst-matrix .analyst-group-header:hover,
+.analyst-matrix .analyst-group-header:focus-visible,
+.analyst-matrix .table-note:hover {
+  transform: none !important;
+  filter: none !important;
+}
+.panel.analyst-matrix:hover,
+.analyst-matrix:hover {
+  box-shadow: var(--brutalist-shadow) !important;
+}
+.analyst-matrix .analyst-group-header:hover,
+.analyst-matrix .analyst-table:hover,
+.analyst-matrix .analyst-table thead:hover,
+.analyst-matrix .analyst-table thead tr:hover,
+.analyst-matrix .analyst-table tbody:hover,
+.analyst-matrix .table-scroll:hover {
+  box-shadow: none !important;
+}
+.analyst-matrix .analyst-table tbody tr:hover td,
+.analyst-matrix .analyst-table tbody tr:hover .pill,
+.analyst-matrix .analyst-table .pill:hover,
+.analyst-matrix .analyst-table .pill:focus-visible,
+.analyst-matrix .thesis-bullet-list:hover,
+.analyst-matrix .thesis-bullet-list li:hover {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+@media (min-width: 621px) {
+  .analyst-matrix,
+  .analyst-matrix .table-scroll {
+    overflow: visible;
+  }
+  .analyst-matrix .analyst-table,
+  .analyst-matrix .analyst-table thead,
+  .analyst-matrix .analyst-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .analyst-matrix .analyst-table thead tr,
+  .analyst-matrix .analyst-table tbody tr {
+    display: grid;
+    width: 100%;
+    grid-template-columns:
+      minmax(7.5rem, 0.9fr)
+      minmax(9rem, 1.3fr)
+      6.5rem
+      minmax(6.25rem, 0.7fr)
+      minmax(6.25rem, 0.7fr)
+      minmax(6.5rem, 0.75fr)
+      5.5rem
+      minmax(10rem, 1.55fr);
+    align-items: stretch;
+  }
+  .analyst-matrix .analyst-table thead tr,
+  .analyst-matrix .analyst-table thead tr:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .analyst-matrix .analyst-table tbody tr {
+    isolation: isolate;
+  }
+  .analyst-matrix .analyst-table th,
+  .analyst-matrix .analyst-table td {
+    min-width: 0;
+  }
+}
+.impact-row.selectable.selected:hover,
+.impact-row.selectable.selected:focus-visible,
+.mece-row.selected:hover,
+.mece-row.selected:focus-visible {
+  box-shadow: inset 4px 0 var(--sector), var(--brutalist-shadow);
+}
+.impact-matrix-panel .analytics-subhead,
+.mece-panel > .panel-title,
+.impact-row.impact-head {
+  position: relative;
+  z-index: 3;
+}
+.impact-row.impact-head:hover,
+.impact-read,
+.impact-read:hover,
+.mece-row > .mece-cell,
+.mece-row > .mece-cell:hover {
+  transform: none;
+  box-shadow: none;
+}
 .workspace-navigation.glass-bar .workspace-tabs button:hover,
-.workspace-navigation.glass-bar .workspace-tabs button:focus-visible,
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible {
+  box-shadow: none;
+  animation: none;
+  transform: scale(1.05);
+  transform-origin: center bottom;
+}
 .workspace-navigation.glass-bar .workspace-tabs button:active {
   box-shadow: none;
-  transform: none;
   animation: none;
+  transform: scale(0.99);
+  transform-origin: center bottom;
+}
+.live-feed-actions a,
+.live-feed-actions button,
+.live-feed-actions .masthead-pdf,
+.live-feed-actions a:hover,
+.live-feed-actions a:focus-visible,
+.live-feed-actions a:active,
+.live-feed-actions button:hover,
+.live-feed-actions button:focus-visible,
+.live-feed-actions button:active {
+  transform: none !important;
+  animation: none !important;
+}
+.llm-assist textarea,
+.llm-assist-composer,
+.llm-assist-run {
+  transition:
+    box-shadow var(--vo-motion) var(--vo-ease),
+    transform var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    background-color var(--vo-motion) var(--vo-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .llm-assist textarea:hover:not(:disabled),
+  .llm-assist textarea:focus-visible:not(:disabled),
+  .llm-assist-composer:hover:not(:disabled),
+  .llm-assist-composer:focus-visible:not(:disabled),
+  .llm-assist-run:hover:not(:disabled),
+  .llm-assist-run:focus-visible:not(:disabled) {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--llm-accent, var(--blue)) 45%, transparent);
+  }
+}
+
+/* LAST-WINS (this file loads after globals.css): sticky I1–I4 / S1–S3 / M1–M4 / H1–H3
+   must sit fully above the section heading + 36px badge. Do not reuse --control-gap.
+   html.native-chrome-embed must not zero this gap — glass bar is an overlay, not a host. */
+.workspace-section-nav,
+.intelligence-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  flex-shrink: 0;
+  margin: 0 0 var(--section-nav-clearance);
+  background: #344353;
+  background-color: #344353;
+}
+[data-focus-section] {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) {
+  min-height: 0;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open {
+  min-height: 0;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .section-heading,
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-heading {
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-content {
+  min-height: 0;
+  overflow: auto;
+}
+.workspace-section .section-heading {
+  margin-top: var(--section-nav-clearance);
+  margin-bottom: var(--chrome-stack-gap);
+  overflow: visible;
+}
+.workspace-section .section-heading h2 {
+  overflow: visible;
+  line-height: 1.2;
+}
+.health-workspace-shell[data-focus-section] {
+  overflow: hidden;
+}
+.health-workspace-shell[data-focus-section] > .workspace-section:not([hidden]) {
+  overflow: visible;
+}
+html.native-chrome-embed .workspace-section-nav,
+html[data-native-chrome] .workspace-section-nav,
+html.native-chrome-embed .intelligence-section-nav,
+html[data-native-chrome] .intelligence-section-nav {
+  margin-bottom: var(--section-nav-clearance);
+}
+html.native-chrome-embed .workspace-section .section-heading,
+html[data-native-chrome] .workspace-section .section-heading {
+  margin-top: var(--section-nav-clearance);
 }

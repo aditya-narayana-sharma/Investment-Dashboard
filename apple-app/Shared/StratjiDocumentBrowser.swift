@@ -41,6 +41,7 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
             errorMessage = nil
             isLoading = false
             DashboardNativeRoute.apply(in: webView, url: url, destination: target)
+            applyPreferences()
             return
         }
         load(url, force: force)
@@ -71,6 +72,16 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
                 self?.retry()
             }
         }
+    }
+
+    /// Push `stratji.appearance` into the page's `dashboard-appearance` store and `data-appearance`.
+    func applyPreferences() {
+        installBootstrapScripts()
+        webView.evaluateJavaScript(StratjiAppearanceStore.applyJavaScript(), completionHandler: nil)
+#if os(macOS)
+        webView.layer?.backgroundColor = chromeBackgroundColor
+#endif
+        NotificationCenter.default.post(name: .stratjiAppearanceDidChange, object: StratjiAppearanceStore.current.rawValue)
     }
 
     private func canReuseHydratedDashboard(_ url: URL) -> Bool {
@@ -104,16 +115,7 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        let hideChrome = WKUserScript(
-            source: """
-            document.documentElement.classList.add('native-chrome-embed');
-            document.documentElement.dataset.nativeChrome = '1';
-            \(StratjiLicenseStore.webBootstrapScript())
-            """,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        configuration.userContentController.addUserScript(hideChrome)
+        configuration.userContentController.addUserScript(makeBootstrapScript())
         configuration.applicationNameForUserAgent = "Stratji/1"
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 1100, height: 800), configuration: configuration)
         view.navigationDelegate = self
@@ -122,10 +124,38 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
 #if os(macOS)
         view.setValue(true, forKey: "drawsBackground")
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.black.cgColor
+        view.layer?.backgroundColor = chromeBackgroundColor
 #endif
         return view
     }
+
+    private func makeBootstrapScript() -> WKUserScript {
+        WKUserScript(
+            source: """
+            document.documentElement.classList.add('native-chrome-embed');
+            document.documentElement.dataset.nativeChrome = '1';
+            \(StratjiLicenseStore.webBootstrapScript())
+            \(StratjiAppearanceStore.webBootstrapScript())
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true,
+            in: .page
+        )
+    }
+
+    private func installBootstrapScripts() {
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        controller.addUserScript(makeBootstrapScript())
+    }
+
+#if os(macOS)
+    private var chromeBackgroundColor: CGColor {
+        StratjiAppearanceStore.current.prefersDarkChrome
+            ? NSColor.black.cgColor
+            : NSColor(calibratedRed: 0.98, green: 0.97, blue: 0.95, alpha: 1).cgColor
+    }
+#endif
 
     private func handleNavigationError(_ error: Error) {
         let nsError = error as NSError
@@ -177,6 +207,7 @@ extension StratjiDocumentBrowser: WKNavigationDelegate, WKUIDelegate {
         isLoading = false
         errorMessage = nil
         updateNavigationState()
+        applyPreferences()
         if !showingIntegrations,
            let url = requestedURL ?? webView.url,
            let destination = pendingDestination ?? DashboardOutline.match(url: url) {
@@ -213,6 +244,15 @@ extension StratjiDocumentBrowser: WKNavigationDelegate, WKUIDelegate {
             decisionHandler(.cancel)
             return
         }
+        if StratjiKiteAuth.shouldOpenInSystemBrowser(url) {
+            decisionHandler(.cancel)
+#if os(macOS)
+            Task { await StratjiKiteAuth.openFromDashboard(url) }
+#else
+            openExternally(url)
+#endif
+            return
+        }
         // fetch/XHR POSTs often arrive with targetFrame == nil. Reloading them as
         // document navigations drops the body, so only intercept actual new-window links.
         if navigationAction.targetFrame == nil {
@@ -244,6 +284,14 @@ extension StratjiDocumentBrowser: WKNavigationDelegate, WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         if let requestURL = navigationAction.request.url {
+            if StratjiKiteAuth.shouldOpenInSystemBrowser(requestURL) {
+#if os(macOS)
+                Task { await StratjiKiteAuth.openFromDashboard(requestURL) }
+#else
+                openExternally(requestURL)
+#endif
+                return nil
+            }
             webView.load(URLRequest(url: requestURL))
         }
         return nil
@@ -258,7 +306,9 @@ final class StratjiFilledWebHost: NSView {
         self.webView = webView
         super.init(frame: NSRect(x: 0, y: 0, width: 1100, height: 800))
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.backgroundColor = StratjiAppearanceStore.current.prefersDarkChrome
+            ? NSColor.black.cgColor
+            : NSColor(calibratedRed: 0.98, green: 0.97, blue: 0.95, alpha: 1).cgColor
         webView.setValue(true, forKey: "drawsBackground")
         webView.autoresizingMask = [.width, .height]
         webView.translatesAutoresizingMaskIntoConstraints = true

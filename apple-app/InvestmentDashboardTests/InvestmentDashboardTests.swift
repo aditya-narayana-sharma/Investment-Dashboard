@@ -85,6 +85,34 @@ struct InvestmentDashboardTests {
         #expect(FreshnessLabel.isLive("live"))
     }
 
+    @Test func liveFeedChipCopyMatchesDashboardStrip() {
+        let kite = SourceFreshnessDTO(source: "Kite", state: .live, period: "5 minutes")
+        #expect(kite.chipTitle == "KITE")
+        #expect(kite.chipSubtitle == "Live · 5 Minutes")
+
+        let unavailable = SourceFreshnessDTO(source: "Kite", state: .unavailable, period: "5 minutes")
+        #expect(unavailable.chipSubtitle == "Unavailable · 5 Minutes")
+
+        let health = SourceFreshnessDTO(source: "Apple Health export", state: .verified, period: "D-1 · 2026-08-17")
+        #expect(health.chipTitle == "APPLE HEALTH EXPORT")
+        #expect(health.chipSubtitle == "Verified · D-1 · 2026-08-17")
+
+        let earnings = SourceFreshnessDTO(source: "Earnings", state: .verified, period: "through 2026-08-17")
+        #expect(earnings.chipSubtitle == "Verified · Through 2026-08-17")
+
+        let calendars = SourceFreshnessDTO(source: "NSE / US market calendars", state: .live, period: "canonical config adapter")
+        #expect(calendars.chipTitle == "NSE / US MARKET CALENDARS")
+        #expect(calendars.chipSubtitle == "Live · Canonical Config Adapter")
+
+        let nse = SourceFreshnessDTO(
+            source: "NSE benchmarks",
+            state: .live,
+            period: "official or exact-index EOD · daily history"
+        )
+        #expect(nse.chipTitle == "NSE BENCHMARKS")
+        #expect(nse.chipSubtitle == "Live · Official Or Exact-index EOD · Daily History")
+    }
+
     @Test @MainActor func decodesKiteHoldingsWithoutClaimingCachedLive() throws {
         let data = Data("""
         {
@@ -254,6 +282,62 @@ struct InvestmentDashboardTests {
         #expect(!audit.isCurrent)
         #expect(audit.failures == 2)
         #expect(audit.failedSources == ["Sector: power", "Sector: defence"])
+    }
+
+    @Test func appearanceStorePushesBlackTokenIntoWebScript() {
+        #expect(StratjiAppearanceStore.defaultsKey == "stratji.appearance")
+        #expect(StratjiAppearanceStore.webStorageKey == "dashboard-appearance")
+        #expect(StratjiAppearanceStore.defaultValue == "black")
+        #expect(StratjiAppearanceStore.normalized("SEPIA") == "sepia")
+        #expect(StratjiAppearanceStore.normalized("garbage") == "black")
+        let script = StratjiAppearanceStore.webBootstrapScript(appearance: "black", healthIncognito: false)
+        #expect(script.contains("localStorage.setItem('dashboard-appearance', 'black')"))
+        #expect(script.contains("document.documentElement.dataset.appearance = 'black'"))
+        #expect(StratjiAppearance.black.prefersDarkChrome)
+        #expect(!StratjiAppearance.sepia.prefersDarkChrome)
+    }
+
+    @Test func kiteLoginOpensInSystemBrowser() {
+        let login = URL(string: "http://127.0.0.1:5050/api/kite/login?force=1&redirect=1")!
+        let kiteHost = URL(string: "https://kite.zerodha.com/connect/login?api_key=demo")!
+        let dashboard = URL(string: "http://127.0.0.1:5050/?view=investment&nativeChrome=1")!
+        #expect(StratjiKiteAuth.shouldOpenInSystemBrowser(login))
+        #expect(StratjiKiteAuth.shouldOpenInSystemBrowser(kiteHost))
+        #expect(!StratjiKiteAuth.shouldOpenInSystemBrowser(dashboard))
+        #expect(
+            StratjiKiteAuth.loginURL(baseURL: URL(string: "http://127.0.0.1:5050/")!).absoluteString
+                == "http://127.0.0.1:5050/api/kite/login?force=1&redirect=1"
+        )
+        #expect(
+            StratjiKiteAuth.jsonLoginURL(from: login).absoluteString
+                == "http://127.0.0.1:5050/api/kite/login?force=1"
+        )
+    }
+
+    @Test func kiteSnapshotSplashLoginIsRequiredOnlyWhenSessionIsMissingOrExpired() {
+        let live = KiteSnapshotDTO(status: "live", authStatus: "authenticated", asOf: nil, message: nil, authUrl: nil, portfolio: nil, holdings: nil, positions: nil)
+        #expect(live.hasUsableLiveSession)
+        #expect(!live.needsSplashLogin)
+
+        let partial = KiteSnapshotDTO(status: "partial", authStatus: "authenticated", asOf: nil, message: nil, authUrl: nil, portfolio: nil, holdings: nil, positions: nil)
+        #expect(partial.hasUsableLiveSession)
+        #expect(!partial.needsSplashLogin)
+
+        let expired = KiteSnapshotDTO(status: "auth_required", authStatus: "expired", asOf: nil, message: nil, authUrl: "https://kite.zerodha.com/connect/login", portfolio: nil, holdings: nil, positions: nil)
+        #expect(!expired.hasUsableLiveSession)
+        #expect(expired.needsSplashLogin)
+
+        let cachedLiveSession = KiteSnapshotDTO(status: "snapshot", authStatus: "authenticated", asOf: nil, message: nil, authUrl: nil, portfolio: nil, holdings: nil, positions: nil)
+        #expect(cachedLiveSession.hasUsableLiveSession)
+        #expect(!cachedLiveSession.needsSplashLogin)
+
+        let unavailable = KiteSnapshotDTO(status: "unavailable", authStatus: "unknown", asOf: nil, message: "Waiting for live Kite data.", authUrl: nil, portfolio: nil, holdings: nil, positions: nil)
+        #expect(!unavailable.hasUsableLiveSession)
+        #expect(unavailable.needsSplashLogin)
+
+        let missing = KiteSnapshotDTO(status: nil, authStatus: nil, asOf: nil, message: nil, authUrl: nil, portfolio: nil, holdings: nil, positions: nil)
+        #expect(!missing.hasUsableLiveSession)
+        #expect(missing.needsSplashLogin)
     }
 
     @Test func auth0CustomSchemeCallbacksMatchBundleIds() {

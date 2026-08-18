@@ -32,7 +32,7 @@ cat >"$TRAMPOLINE" <<EOF
 #!/bin/bash
 set -euo pipefail
 LOG_DIR="\$HOME/Library/Logs/PortfolioIntelligence"
-COMMAND="$SUPPORT_DIR/start-dashboard.command"
+START_SCRIPT="$SUPPORT_DIR/start-dashboard.command"
 mkdir -p "\$LOG_DIR"
 healthy() {
   curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1
@@ -42,8 +42,9 @@ while true; do
     sleep 12
     continue
   fi
-  if [[ -f "\$COMMAND" ]]; then
-    /usr/bin/open -g -j "\$COMMAND" >/dev/null 2>&1 || true
+  # Invoke with bash. Never \`open\` a .command file — Launch Services attaches Terminal.app.
+  if [[ -f "\$START_SCRIPT" ]]; then
+    /bin/bash "\$START_SCRIPT" >>"\$LOG_DIR/desktop-app.log" 2>&1 || true
   fi
   sleep 20
 done
@@ -52,6 +53,7 @@ chmod 755 "$TRAMPOLINE"
 
 cat >"$SUPPORT_DIR/start-dashboard.command" <<EOF
 #!/bin/bash
+# Headless wrapper. Invoke with /bin/bash — do not \`open\` this .command file.
 set -euo pipefail
 ROOT_DIR=\$(cat "$SUPPORT_DIR/repo-root" 2>/dev/null || true)
 if [[ -z "\$ROOT_DIR" || ! -d "\$ROOT_DIR" ]]; then

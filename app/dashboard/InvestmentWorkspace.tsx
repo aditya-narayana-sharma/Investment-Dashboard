@@ -215,7 +215,7 @@ function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix, expla
         <RadarChart data={data} outerRadius={explainSelected ? "78%" : "88%"} margin={explainSelected ? { top: 16, right: 36, bottom: 12, left: 36 } : { top: 4, right: 18, bottom: 4, left: 18 }}>
           <PolarGrid stroke="#3b444e" />
           <PolarAngleAxis dataKey="axis" tick={renderAxisTick} />
-          <PolarRadiusAxis angle={90} domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 10 }} />
+          <PolarRadiusAxis angle={90} domain={[0, 5]} tickCount={6} tick={{ fill: "var(--chart-tick)", fontSize: 13 }} />
           <Radar name={averageLabel} dataKey="average" stroke="#8f98a2" fill="#8f98a2" fillOpacity={0.06} strokeDasharray="5 4" isAnimationActive={false} dot={false} />
           <Radar name={profile.name} dataKey="score" stroke={seriesColor} fill={seriesColor} fillOpacity={0.22} strokeWidth={2.75} isAnimationActive={false} dot={renderScoreDot} />
           {!explainSelected && <Legend />}
@@ -994,8 +994,8 @@ export function InvestmentWorkspace({
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={exposureComposition} layout="vertical" margin={{top:8,right:56,bottom:10,left:2}} barCategoryGap="14%">
                   <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                  <XAxis type="number" domain={[0,5]} ticks={[0,1,2,3,4,5]} tick={{fill:"var(--chart-tick)",fontSize:12}} label={{value:"COMPOSITE MONITORING INDEX",position:"insideBottom",offset:-2,fill:"var(--chart-tick)",fontSize:12}}/>
-                  <YAxis dataKey="symbol" type="category" width={72} tick={{fill:"var(--chart-label)",fontSize:12,fontWeight:800}}/>
+                  <XAxis type="number" domain={[0,5]} ticks={[0,1,2,3,4,5]} tick={{fill:"var(--chart-tick)",fontSize:13}} label={{value:"COMPOSITE MONITORING INDEX",position:"insideBottom",offset:-2,fill:"var(--chart-tick)",fontSize:13}}/>
+                  <YAxis dataKey="symbol" type="category" width={72} tick={{fill:"var(--chart-label)",fontSize:13,fontWeight:800}}/>
                   <Tooltip formatter={(value,name) => [`${(Number(value) * exposureFactors.length).toFixed(1)} / 5 raw · ${Number(value).toFixed(2)} points`, String(name)]} labelFormatter={(label) => `${label} · equal-weighted composition`}/>
                   {exposureFactors.map((factor,index) => <Bar key={factor.key} dataKey={factor.key} name={factor.label} stackId="exposure" fill={factor.color} radius={index === exposureFactors.length - 1 ? [0,3,3,0] : 0} isAnimationActive={false}>
                     {index === exposureFactors.length - 1 && <LabelList dataKey="total" position="right" className="exposure-total-label" formatter={(value) => `${Number(value).toFixed(1)}/5`}/>}

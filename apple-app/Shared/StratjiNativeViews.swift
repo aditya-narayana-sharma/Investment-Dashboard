@@ -36,6 +36,9 @@ struct StratjiLoadingView: View {
             Text("\(Int((session.progress * 100).rounded()))% · \(session.stage.title)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+            if session.kiteAuthPhase != .idle {
+                splashKiteAuthPrompt
+            }
             let stages = StratjiLoadStage.allCases
             VStack(alignment: .center, spacing: SplashMetrics.glyphRowsSpacing) {
                 splashStageRow(Array(stages.prefix(6)))
@@ -48,6 +51,29 @@ struct StratjiLoadingView: View {
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
+    }
+
+    private var splashKiteAuthPrompt: some View {
+        VStack(spacing: 10) {
+            Text(session.kiteAuthMessage)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+            HStack(spacing: 10) {
+                Button(session.kiteAuthPhase == .waitingForBrowser ? "Open Kite login again" : "Log in to Kite") {
+                    session.beginKiteLogin()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Log in to Kite")
+                Button("Continue without live Kite (cached)") {
+                    session.skipKiteLogin()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Continue without live Kite, using cached data")
+            }
+        }
+        .padding(.top, 4)
     }
 
     private func splashStageRow(_ stages: [StratjiLoadStage]) -> some View {

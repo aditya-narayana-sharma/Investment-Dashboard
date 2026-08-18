@@ -99,15 +99,12 @@ finish_stage() {
   fi
 }
 
-printf 'Complete dashboard refresh audit\n'
+REFRESH_MODE="${PORTFOLIO_REFRESH_MODE:-complete}"
+HEALTH_SCRIPT="$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh"
+
+printf '%s dashboard refresh audit\n' "$([[ "$REFRESH_MODE" == "incremental" ]] && printf 'Incremental' || printf 'Complete')"
 printf 'Started\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 emit_progress service ok "Local Stratji service is up."
-
-if [[ "${PORTFOLIO_SKIP_HEALTH_ZIP:-0}" == "1" ]]; then
-  printf 'Health ZIP\tskipped\tnative hot path uses /_health/snapshot only\n'
-else
-  "$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh" >/dev/null 2>&1 || true
-fi
 
 emit_progress kite start "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…"
 check_source "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
@@ -115,7 +112,14 @@ finish_stage kite "Kite snapshot received." "Kite snapshot stale or unavailable.
 
 # content-digest-server emits distinct mail/axis/calendar/reminders/podcasts events while this curl runs.
 # Mail osascript is bounded (~50s); do not let splash sit on a lumped Mail caption for the whole Apple pass.
-check_source "Mail and Podcasts" "/api/content/refresh?force=1&startup=$(date +%s)" "live" "false" "160"
+# Incremental ticks keep the digest cache; complete / Refresh all force a live Apple pass.
+CONTENT_FORCE="force=1&"
+CONTENT_TIMEOUT="160"
+if [[ "$REFRESH_MODE" == "incremental" ]]; then
+  CONTENT_FORCE=""
+  CONTENT_TIMEOUT="90"
+fi
+check_source "Mail and Podcasts" "/api/content/refresh?${CONTENT_FORCE}startup=$(date +%s)" "live" "false" "$CONTENT_TIMEOUT"
 MAIL_STATE="ensure"
 if [[ "${CHECK_OK:-0}" != "1" ]]; then
   MAIL_STATE="ensure-failed"
@@ -157,7 +161,16 @@ emit_progress earnings start "Refreshing earnings calendar…"
 check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
 finish_stage earnings "Earnings snapshot received." "Earnings snapshot stale or unverified."
 
-emit_progress health start "Refreshing Health snapshot…"
+emit_progress health start "Validating Apple Health export and importing…"
+if [[ "${PORTFOLIO_SKIP_HEALTH_ZIP:-0}" == "1" ]]; then
+  printf 'Health ZIP\tskipped\tPORTFOLIO_SKIP_HEALTH_ZIP=1 (hot-path override; splash complete must not set this)\n'
+elif [[ "$REFRESH_MODE" == "incremental" ]]; then
+  printf 'Health ZIP\tincremental\tre-extract only if the export mtime changed\n'
+  "$HEALTH_SCRIPT" --if-changed || true
+else
+  printf 'Health ZIP\tcomplete\tvalidate newest iCloud ZIP, extract export.xml, import snapshot\n'
+  "$HEALTH_SCRIPT" || true
+fi
 check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
 finish_stage health "Health snapshot received." "Health snapshot stale or unavailable."
 
