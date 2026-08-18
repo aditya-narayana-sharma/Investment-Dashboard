@@ -112,7 +112,8 @@ test("author flag and master key unlock Ultra on this Mac", () => {
   assert.equal(fromMaster.tier, "ultra");
   assert.equal(fromMaster.source, "author");
   assert.equal(fromMaster.author, true);
-  assert.equal(fromMaster.key, "stratji-ultra-master-abcde12345");
+  assert.equal(fromMaster.keyPresent, true);
+  assert.equal("key" in fromMaster, false);
 });
 
 test("client license fetch never flashes Basic over a server Ultra snapshot", () => {
@@ -137,7 +138,6 @@ test("client license fetch never flashes Basic over a server Ultra snapshot", ()
     message: "",
     author: false,
     operatorTier: null,
-    key: null,
   }));
   assert.equal(fromProFetch?.tier, "pro");
 });

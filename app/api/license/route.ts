@@ -1,4 +1,5 @@
 import { applyLicenseUpdate, readPublicLicense } from "../../license-server";
+import { isLocalOperatorRequest } from "../../local-llm-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,12 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  if (!isLocalOperatorRequest(request)) {
+    return Response.json(
+      { error: "License writes are only available on the author Mac." },
+      { status: 403, headers: NO_STORE },
+    );
+  }
   try {
     const body = await request.json() as {
       key?: string;

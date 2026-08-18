@@ -1,0 +1,470 @@
+/* Visual-overhaul sepia islands + LAST-WINS heading clearance */
+/* Sepia: paperize visual-overhaul dark islands (Black/Dark unchanged) */
+html[data-appearance="sepia"] .nested-chart-panel.orbital-planet,
+html[data-appearance="sepia"] .orbital-planet .nested-chart-panel {
+  background:
+    radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--blue) 10%, transparent), transparent 42%),
+    var(--bg-panel) !important;
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .nested-chart-panel.orbital-planet .nested-center,
+html[data-appearance="sepia"] .orbital-planet .nested-chart-panel .nested-center {
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+}
+html[data-appearance="sepia"] .orbital-planet::before {
+  color: color-mix(in srgb, var(--blue) 55%, var(--ink));
+}
+html[data-appearance="sepia"] .portfolio-map-panel.gravity-well .portfolio-map {
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ink) 6%, transparent), transparent 55%),
+    var(--bg-app) !important;
+}
+html[data-appearance="sepia"] .portfolio-map-panel.gravity-well .portfolio-map-heading h3::after,
+html[data-appearance="sepia"] .exposure-spine-panel .panel-title h3::after,
+html[data-appearance="sepia"] .risk-panel.threat-flower .panel-title h3::after,
+html[data-appearance="sepia"] .lifecycle-panel.evolution-river .panel-title h3::after,
+html[data-appearance="sepia"] .structure-panel.profit-pool-terrain .panel-title h3::after {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .macro-workbench.scenario-weather .macro-event-tabs button.active {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+}
+html[data-appearance="sepia"] .weather-altitude { color: var(--muted); }
+html[data-appearance="sepia"] .weather-altitude span {
+  border-color: var(--line);
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .weather-altitude span.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-elevated));
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower {
+  background:
+    radial-gradient(circle at 72% 48%, color-mix(in srgb, var(--red) 8%, transparent), transparent 48%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .axis-call-constellation .analyst-matrix,
+html[data-appearance="sepia"] .analyst-matrix[data-visual="axis-call-constellation"] {
+  background:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, #a855f7 10%, transparent), transparent 30%),
+    radial-gradient(circle at 80% 60%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 28%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .axis-workbench.target-hud .axis-cmp-progress::after {
+  color: color-mix(in srgb, var(--green) 45%, var(--ink));
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li {
+  border-bottom-color: var(--line);
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li:hover {
+  background: var(--bg-hover);
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li b { color: var(--muted); }
+html[data-appearance="sepia"] .ladder-duel .ladder li strong { color: var(--ink); }
+html[data-appearance="sepia"] .lifecycle-panel.evolution-river .chart-wrap,
+html[data-appearance="sepia"] .structure-panel.profit-pool-terrain .chart-wrap {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #0d9488 10%, transparent), transparent 40%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .mece-loom .loom-thread { border-color: var(--line); }
+html[data-appearance="sepia"] .mece-loom .loom-thread header { border-color: var(--line); color: var(--ink); }
+html[data-appearance="sepia"] .mece-loom .loom-bead {
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+html[data-appearance="sepia"] .mece-loom .loom-bead:hover,
+html[data-appearance="sepia"] .mece-loom .loom-bead:focus-visible,
+html[data-appearance="sepia"] .mece-loom .loom-bead.expanded {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .decision-hex-shield .risk-chart,
+html[data-appearance="sepia"] .decision-lab-panel.decision-hex-shield {
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, #a855f7 8%, transparent), transparent 50%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .trigger-dial {
+  background: var(--bg-panel);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: var(--brutalist-shadow-sm);
+}
+html[data-appearance="sepia"] .trigger-dial b,
+html[data-appearance="sepia"] .trigger-dial small {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .trigger-dial .dial-face circle.track {
+  stroke: var(--line);
+}
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory {
+  background:
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, #6366f1 12%, transparent), transparent 35%),
+    radial-gradient(circle at 80% 70%, color-mix(in srgb, #a855f7 8%, transparent), transparent 30%),
+    var(--bg-app) !important;
+}
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory .earnings-month-cell:not(.empty):hover,
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory .earnings-month-cell.selected {
+  background: var(--bg-hover);
+}
+html[data-appearance="sepia"] .earnings-result-telemetry td.sealed::after {
+  color: var(--muted);
+  background: repeating-linear-gradient(-45deg, var(--bg-panel), var(--bg-panel) 4px, var(--bg-elevated) 4px, var(--bg-elevated) 8px);
+}
+html[data-appearance="sepia"] .earnings-result-telemetry td.pending-lock {
+  color: color-mix(in srgb, var(--amber) 45%, var(--ink));
+}
+html[data-appearance="sepia"] .health-optimism-panel.morning-light {
+  background: linear-gradient(120deg, var(--amber-bg), var(--bg-panel) 40%, color-mix(in srgb, var(--blue) 12%, var(--bg-panel)) 90%);
+  animation: none;
+}
+html[data-appearance="sepia"] .health-insight-crystal {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ink) 4%, transparent), transparent 50%), var(--bg-panel);
+  border-color: var(--line);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot,
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-mark.active {
+  fill: var(--bg-panel);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label span {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .health-missing-ribbon {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+  color: color-mix(in srgb, var(--red) 50%, var(--ink));
+}
+html[data-appearance="sepia"] .health-organ-portal .portal-core b { color: var(--ink); }
+html[data-appearance="sepia"] .nutrition-lab-tray {
+  background: color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+}
+html[data-appearance="sepia"] .explain-dwell .explain-pop {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .instrument-gauge .redline {
+  color: color-mix(in srgb, var(--red) 50%, var(--ink));
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+}
+
+/* Hardcoded dark-theme grays → black on paper surfaces */
+html[data-appearance="sepia"] .shutter-preview,
+html[data-appearance="sepia"] .pulse-orb .orb-satellites span,
+html[data-appearance="sepia"] .pulse-detail-lane,
+html[data-appearance="sepia"] .health-guardrail-slab,
+html[data-appearance="sepia"] .explain-dwell .explain-pop {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .health-guardrail-slab {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+}
+html[data-appearance="sepia"] .pulse-orb .orb-satellites span {
+  border-color: var(--line);
+}
+
+/* Sepia contrast enforcement
+ *
+ * globals.css intentionally paperizes the dashboard in Sepia, but a handful of
+ * component-level dark-theme rules still win on leaf text (most visibly the
+ * S-2 sector-prism labels). Keep this final layer theme-scoped and distinguish
+ * paper text from the few controls that deliberately retain dark chrome.
+ */
+html[data-appearance="sepia"] {
+  --sepia-positive-ink: #075b32;
+  --sepia-warning-ink: #704600;
+  --sepia-negative-ink: #8f1d2c;
+  --sepia-blue-ink: #174b9a;
+}
+
+/* Paper cards, tabs, tables, feeds and visualisation labels use dark ink. */
+html[data-appearance="sepia"] .sector-selector.sector-prism button,
+html[data-appearance="sepia"] .sector-selector.sector-prism button span,
+html[data-appearance="sepia"] .sector-selector.sector-prism button small,
+html[data-appearance="sepia"] .pulse-orb,
+html[data-appearance="sepia"] .pulse-orb span,
+html[data-appearance="sepia"] .pulse-orb small,
+html[data-appearance="sepia"] .pulse-orb p,
+html[data-appearance="sepia"] .ladder-duel .ladder li,
+html[data-appearance="sepia"] .mece-loom .loom-thread,
+html[data-appearance="sepia"] .mece-loom .loom-thread header,
+html[data-appearance="sepia"] .mece-loom .loom-bead,
+html[data-appearance="sepia"] .health-organ-portal,
+html[data-appearance="sepia"] .health-organ-portal small,
+html[data-appearance="sepia"] .health-organ-portal span,
+html[data-appearance="sepia"] .health-organ-portal b,
+html[data-appearance="sepia"] .health-organ-portal strong {
+  color: var(--ink) !important;
+}
+
+/* Semantic meaning remains color-coded, using sepia-safe dark variants. */
+html[data-appearance="sepia"] .positive,
+html[data-appearance="sepia"] .good,
+html[data-appearance="sepia"] .pill.green,
+html[data-appearance="sepia"] .sector-news-source.live,
+html[data-appearance="sepia"] .status-panel div b.live,
+html[data-appearance="sepia"] .flows-donut-center.positive b {
+  color: var(--sepia-positive-ink) !important;
+}
+html[data-appearance="sepia"] .warning,
+html[data-appearance="sepia"] .amber-text,
+html[data-appearance="sepia"] .moderate,
+html[data-appearance="sepia"] .pill.amber,
+html[data-appearance="sepia"] .sector-news-source.unavailable,
+html[data-appearance="sepia"] .status-panel div b.snapshot,
+html[data-appearance="sepia"] .status-panel div b.partial,
+html[data-appearance="sepia"] .status-panel div b.auth_required,
+html[data-appearance="sepia"] .flows-donut-center.neutral b {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .negative,
+html[data-appearance="sepia"] .bad,
+html[data-appearance="sepia"] .pill.red,
+html[data-appearance="sepia"] .status-panel div b.unavailable,
+html[data-appearance="sepia"] .flows-donut-center.negative b {
+  color: var(--sepia-negative-ink) !important;
+}
+html[data-appearance="sepia"] .pill.blue {
+  color: var(--sepia-blue-ink) !important;
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-panel));
+}
+
+/* Matrix signals are text glyphs, so their dark variants must meet text
+   contrast instead of relying on the brighter chart-mark palette. */
+html[data-appearance="sepia"] .signal.tailwind { color: var(--sepia-positive-ink) !important; }
+html[data-appearance="sepia"] .signal.two-way { color: var(--sepia-warning-ink) !important; }
+html[data-appearance="sepia"] .signal.headwind { color: var(--sepia-negative-ink) !important; }
+html[data-appearance="sepia"] .signal.na { color: var(--ink) !important; }
+
+/* Colored badges on light paper need dark ink; dark control chrome keeps its
+   cream foreground. */
+html[data-appearance="sepia"] .sector-lead-score em { color: var(--ink) !important; }
+html[data-appearance="sepia"] .section-heading > .shutter-preview,
+html[data-appearance="sepia"] .section-heading > .shutter-preview em,
+html[data-appearance="sepia"] .appearance-toggle button.active,
+html[data-appearance="sepia"] .incognito-toggle,
+html[data-appearance="sepia"] .incognito-toggle small,
+html[data-appearance="sepia"] .collapse-button,
+html[data-appearance="sepia"] .workspace-tabs button.active,
+html[data-appearance="sepia"] .workspace-tabs button.active small,
+html[data-appearance="sepia"] .workspace-tabs button.active em {
+  color: var(--ink) !important;
+}
+
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="investment"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="sectors"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="intelligence"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
+  color: color-mix(in srgb, var(--ink) 88%, transparent);
+  font-weight: 600;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="sectors"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="intelligence"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="health"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
+  color: var(--ink) !important;
+  font-weight: 700;
+}
+
+/* Investment visualisation legends and macro evidence are paper surfaces. */
+html[data-appearance="sepia"] .portfolio-map-legend,
+html[data-appearance="sepia"] .portfolio-map-legend span,
+html[data-appearance="sepia"] .scenario-body b,
+html[data-appearance="sepia"] .scenario-body .scenario-range,
+html[data-appearance="sepia"] .scenario-body p,
+html[data-appearance="sepia"] .scenario-body small,
+html[data-appearance="sepia"] .scenario-copy span,
+html[data-appearance="sepia"] .macro-no-evidence b,
+html[data-appearance="sepia"] .macro-no-evidence p,
+html[data-appearance="sepia"] .macro-dial-chips b,
+html[data-appearance="sepia"] .macro-dial-chips span,
+html[data-appearance="sepia"] .macro-dial-chips small,
+html[data-appearance="sepia"] .framework-interpretation > p,
+html[data-appearance="sepia"] .framework-interpretation > small,
+html[data-appearance="sepia"] .framework-pressure-list span,
+html[data-appearance="sepia"] .framework-pressure-list b {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button:not(.active) small {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button.active small {
+  color: var(--btn-fg) !important;
+}
+
+/* S-2 linked chart narratives and legends must not retain dark-theme grays. */
+html[data-appearance="sepia"] .bubble-axis-legend em,
+html[data-appearance="sepia"] .linked-insight h4,
+html[data-appearance="sepia"] .linked-insight b,
+html[data-appearance="sepia"] .linked-insight span,
+html[data-appearance="sepia"] .linked-insight p,
+html[data-appearance="sepia"] .linked-insight-note {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .linked-insight-scroll > div {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+}
+
+/* Market Intelligence evidence and calendar glyphs use dark semantic ink. */
+html[data-appearance="sepia"] .podcast-summary-unavailable,
+html[data-appearance="sepia"] .earnings-holding-star {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-month-cell.today .earnings-month-daynum {
+  color: var(--sepia-blue-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-day-summary-item h5,
+html[data-appearance="sepia"] .earnings-day-summary-item h5 small {
+  color: var(--ink) !important;
+}
+
+/* Recharts and custom SVG text inherit the sepia chart tokens. Slice labels
+   remain light because they sit directly on dark/coloured arcs. */
+html[data-appearance="sepia"] .recharts-cartesian-axis-tick-value,
+html[data-appearance="sepia"] .recharts-label,
+html[data-appearance="sepia"] .recharts-legend-item-text,
+html[data-appearance="sepia"] .bubble-label,
+html[data-appearance="sepia"] .sector-total-label,
+html[data-appearance="sepia"] .exposure-total-label,
+html[data-appearance="sepia"] .spark-filament-label {
+  color: var(--chart-label) !important;
+  fill: var(--chart-label) !important;
+}
+
+/* Last-wins rounded brutalist clip. Class+!important beats earlier square 0/2/4px
+   rules. html/body/.dashboard-app stay square so the macOS window is not clipped.
+   Hover-pop box-shadow is painted on these same rounded boxes. */
+.panel,
+.masthead,
+.skip-link,
+.metrics-strip article,
+.portfolio-management-card,
+.portfolio-management-heading,
+.portfolio-management-sources,
+.signal,
+.market-ticker,
+.collapse-button,
+.appearance-toggle,
+.appearance-toggle button,
+.incognito-toggle,
+.segmented,
+.segmented button,
+.digest-show-more,
+.digest-show-all,
+.live-feed-banner,
+.live-feed-actions a,
+.live-feed-actions button,
+.source-freshness-strip > div,
+.pulse-constellation .pulse-node,
+.pulse-detail-lane,
+.collapsible-section,
+.collapsible-content,
+.workspace-section,
+.workspace-section-nav,
+.intelligence-section-nav,
+.intelligence-feed-section,
+.kanban-summary,
+.kanban-lane,
+.kanban-card,
+.health-kpi-tile,
+.health-organ-portal,
+.health-highlight,
+.health-coverage-strip > div,
+.macro-regime-card,
+.macro-selected-evidence,
+.sector-lead,
+.sector-filter-status,
+.sector-kpi-grid article,
+.pulse-orb .orb-core,
+.sector-selector button,
+.sender-group,
+.digest-panel,
+.earnings-month-cell,
+.earnings-kpi-grid > div,
+.kite-order-ticket,
+.algorithm-builder .builder-chrome,
+.algorithm-builder .builder-node,
+.algorithm-builder .builder-toolbar button,
+.algorithm-builder .builder-block,
+.strategy-card,
+.table-scroll,
+.holdings-panel,
+.analyst-matrix,
+.scenario-shell,
+.mece-panel,
+.portfolio-map-tile,
+.chart-panel,
+.nested-chart-panel,
+.macro-chart-panel,
+.risk-panel,
+.license-gate,
+.integrations-workspace,
+.axis-pick-list button,
+.decision-card-grid > div,
+.earnings-status-cards article {
+  border-radius: var(--radius) !important;
+}
+
+/* LAST-WINS (this file loads after globals.css): sticky I1–I4 / S1–S3 / M1–M4 / H1–H3
+   must sit fully above the section heading + 36px badge. Do not reuse --control-gap.
+   html.native-chrome-embed must not zero this gap — glass bar is an overlay, not a host. */
+.workspace-section-nav,
+.intelligence-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  flex-shrink: 0;
+  margin: 0 0 var(--section-nav-clearance);
+  background: #344353;
+  background-color: #344353;
+}
+[data-focus-section] {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) {
+  min-height: 0;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open {
+  min-height: 0;
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .section-heading,
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-heading {
+  overflow: visible;
+}
+[data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-content {
+  min-height: 0;
+  overflow: auto;
+}
+.workspace-section .section-heading {
+  margin-top: var(--section-nav-clearance);
+  margin-bottom: var(--chrome-stack-gap);
+  overflow: visible;
+}
+.workspace-section .section-heading h2 {
+  overflow: visible;
+  line-height: 1.2;
+}
+.health-workspace-shell[data-focus-section] {
+  overflow: hidden;
+}
+.health-workspace-shell[data-focus-section] > .workspace-section:not([hidden]) {
+  overflow: visible;
+}

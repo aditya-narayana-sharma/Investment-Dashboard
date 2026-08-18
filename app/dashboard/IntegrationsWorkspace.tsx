@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   Unplug,
 } from "lucide-react";
-import { KITE_LOGIN_HREF } from "../kite-auth-presentation";
+import { KITE_LOGIN_HREF, openKiteLogin } from "../kite-auth-presentation";
 import {
   defaultIntegrationsConfig,
   INTEGRATION_PIPELINE_IDS,
@@ -240,7 +240,7 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
   const [cursorApiKey, setCursorApiKey] = useState("");
   const [savingKeys, setSavingKeys] = useState(false);
   const { license, setLicense } = useLicenseSnapshot();
-  const [licenseKey, setLicenseKey] = useState(() => license.key ?? "");
+  const [licenseKey, setLicenseKey] = useState("");
   const [licenseTierDraft, setLicenseTierDraft] = useState<LicenseTier>(() => license.tier);
   const [savingLicense, setSavingLicense] = useState(false);
 
@@ -254,10 +254,10 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
       const next = payload as IntegrationsConfig;
       setConfig(next);
       setWizard(next.wizard);
-      setAnthropicApiKey(next.llm.anthropicApiKey ?? "");
-      setOpenaiApiKey(next.llm.openaiApiKey ?? "");
-      setGeminiApiKey(next.llm.geminiApiKey ?? "");
-      setCursorApiKey(next.llm.cursorApiKey ?? "");
+      setAnthropicApiKey("");
+      setOpenaiApiKey("");
+      setGeminiApiKey("");
+      setCursorApiKey("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load local integrations config.");
     } finally {
@@ -269,7 +269,6 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
       if (licenseResponse.ok && licensePayload) {
         setLicense(licensePayload);
         setLicenseTierDraft(licensePayload.tier);
-        if (licensePayload.key) setLicenseKey(licensePayload.key);
       }
     } catch {
       /* Keep the SSR snapshot. Do not flash Basic over author Ultra. */
@@ -502,7 +501,7 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
           This Mac is on <b>{TIER_LABELS[license.tier]}</b> ({license.source}{license.author ? " · author" : ""}). v1 is an honor + key file at
           <code> ~/Library/Application Support/Stratji/license.json</code> — not Auth0 and not a billing server.
           Downstream clones stay Basic until they paste <code>stratji-pro-yourtoken</code> or <code>stratji-ultra-yourtoken</code>.
-          {license.author && license.key ? <> Master key: <code>{license.key}</code></> : null}
+          {license.author ? " The master license file stays on this Mac and is never sent to the browser." : ""}
         </p>
         <form className="integrations-wizard-grid" onSubmit={(event) => void saveLicense(event)}>
           <label>
@@ -678,7 +677,7 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
                 </dl>
                 <div className="integrations-card-actions">
                   {id === "broker" && (
-                    <a className="integrations-kite-login" href={KITE_LOGIN_HREF} target="_blank" rel="noreferrer">
+                    <a className="integrations-kite-login" href={KITE_LOGIN_HREF} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); void openKiteLogin(); }}>
                       <LogIn size={14} /> Authenticate Kite
                     </a>
                   )}

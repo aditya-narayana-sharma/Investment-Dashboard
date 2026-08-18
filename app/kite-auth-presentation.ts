@@ -9,12 +9,27 @@ export type KiteAuthPresentation = {
   showAuthAction: boolean;
 };
 
-/** Minted on click when the snapshot has no authUrl (MCP login failed on the last refresh). */
-export const KITE_LOGIN_HREF = "/api/kite/login?force=1&redirect=1";
+/** JSON login mint. Never use redirect=1 — Flask urlopen follows 302 onto the dashboard origin. */
+export const KITE_LOGIN_HREF = "/api/kite/login?force=1";
 
 export function kiteLoginHref(authUrl?: string | null): string {
   const trimmed = authUrl?.trim();
   return trimmed || KITE_LOGIN_HREF;
+}
+
+export async function openKiteLogin(authUrl?: string | null): Promise<void> {
+  const direct = authUrl?.trim();
+  if (direct && !direct.includes("/api/kite/login")) {
+    window.location.assign(direct);
+    return;
+  }
+  const response = await fetch(KITE_LOGIN_HREF, { cache: "no-store", headers: { Accept: "application/json" } });
+  const payload = await response.json() as { loginUrl?: string; message?: string };
+  const loginUrl = payload.loginUrl?.trim();
+  if (!loginUrl) {
+    throw new Error(payload.message || "Could not create a Kite login URL");
+  }
+  window.location.assign(loginUrl);
 }
 
 function explicitAuthFailure(status: KiteSnapshot["status"], authStatus: KiteAuthStatus) {

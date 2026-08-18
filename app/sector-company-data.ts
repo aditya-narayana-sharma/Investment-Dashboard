@@ -1,3 +1,5 @@
+import { assertCatalogIds, type SectorCatalogId } from "./sector-catalog.ts";
+
 export type FundamentalMetricKey = "growth" | "profitability" | "margin" | "quality";
 
 export type SectorCompany = {
@@ -16,7 +18,7 @@ const company = (symbol: string, name: string, universeShare: number, scores: [n
   filingPeriod: "Latest available company filing",
 });
 
-export const sectorCompanies: Record<string, SectorCompany[]> = {
+export const sectorCompanies: Record<SectorCatalogId, SectorCompany[]> = {
   it: [
     company("TCS", "Tata Consultancy Services", 24, [3.7, 4.6, 4.7, 4.8]), company("INFY", "Infosys", 22, [4.0, 4.5, 4.5, 4.6]),
     company("HCLTECH", "HCL Technologies", 13, [4.2, 4.3, 4.3, 4.4]), company("WIPRO", "Wipro", 9, [3.5, 3.8, 3.9, 4.0]),
@@ -109,6 +111,7 @@ export const sectorCompanies: Record<string, SectorCompany[]> = {
     company("ZENTEC", "Zen Technologies", 4, [4.4, 3.8, 3.7, 3.6]), company("PARAS", "Paras Defence and Space", 4, [4.3, 3.6, 3.5, 3.4]),
   ],
 };
+assertCatalogIds(Object.keys(sectorCompanies), "sectorCompanies");
 
 export const fundamentalMetricLabels: Record<FundamentalMetricKey, string> = {
   growth: "Growth score",
@@ -117,7 +120,7 @@ export const fundamentalMetricLabels: Record<FundamentalMetricKey, string> = {
   quality: "Balance-sheet quality",
 };
 
-export const sectorUniverseLabels: Record<string, string> = {
+export const sectorUniverseLabels: Record<SectorCatalogId, string> = {
   it: "NIFTY IT",
   pharma: "NIFTY Pharma",
   power: "NIFTY 500 · Power industry",
@@ -132,3 +135,4 @@ export const sectorUniverseLabels: Record<string, string> = {
   metals: "NIFTY Metal",
   defence: "NSE · Defence & Aerospace research universe",
 };
+assertCatalogIds(Object.keys(sectorUniverseLabels), "sectorUniverseLabels");

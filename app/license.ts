@@ -25,8 +25,6 @@ export type PublicLicense = {
   message: string;
   author: boolean;
   operatorTier: LicenseTier | null;
-  /** Present for the author Mac so Settings can show the master key. Never a cloud secret. */
-  key: string | null;
 };
 
 export type StoredLicense = {
@@ -135,7 +133,6 @@ export function coercePublicLicense(value: unknown): PublicLicense | null {
     message: typeof record.message === "string" ? record.message : "",
     author: record.author === true,
     operatorTier: isLicenseTier(operatorTierRaw) ? operatorTierRaw : null,
-    key: typeof record.key === "string" && record.key.trim() ? record.key.trim() : null,
   };
 }
 
@@ -177,7 +174,6 @@ export function defaultPublicLicense(): PublicLicense {
     message: "No license key on this Mac. Basic is active until you paste a key or set a tier in Settings.",
     author: false,
     operatorTier: null,
-    key: null,
   };
 }
 
@@ -272,7 +268,6 @@ export function resolvePublicLicense(
       message: "Author Mac — Ultra is unlocked from the local master license file. GitHub clones stay Basic until they paste a paid key.",
       author: true,
       operatorTier: stored.operatorOverride ? stored.tier : "ultra",
-      key,
     };
   }
   if (fileKeyTier) {
@@ -284,7 +279,6 @@ export function resolvePublicLicense(
       message: `Unlocked ${fileKeyTier} from a license key on this Mac.`,
       author: false,
       operatorTier,
-      key: null,
     };
   }
   if (envKeyTier) {
@@ -296,7 +290,6 @@ export function resolvePublicLicense(
       message: `Unlocked ${envKeyTier} from STRATJI_LICENSE_KEY.`,
       author: false,
       operatorTier,
-      key: null,
     };
   }
   if (stored.operatorOverride) {
@@ -308,7 +301,6 @@ export function resolvePublicLicense(
       message: `Operator set ${stored.tier} in Settings. v1 is an honor + key file, not a billing server.`,
       author: false,
       operatorTier: stored.tier,
-      key: stored.key || null,
     };
   }
   if (envTier) {
@@ -320,7 +312,6 @@ export function resolvePublicLicense(
       message: `Unlocked ${envTier} from STRATJI_LICENSE_TIER.`,
       author: false,
       operatorTier,
-      key: null,
     };
   }
   return defaultPublicLicense();

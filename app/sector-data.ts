@@ -1,3 +1,7 @@
+import { assertCatalogIds } from "./sector-catalog.ts";
+
+export { sectorCatalogIds } from "./sector-catalog.ts";
+
 export type SectorScoreSet = {
   demand: number;
   earnings: number;
@@ -330,8 +334,7 @@ export function sectorComposite(sector: SectorView) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/** Canonical S-2 / S-3 industry ids. Every sectoral surface must use this list. */
-export const sectorCatalogIds = sectors.map((sector) => sector.id);
+assertCatalogIds(sectors.map((sector) => sector.id), "sectors[]");
 
 export const sectorSourceNote =
   "Sector research narratives and KPIs remain the dated research snapshot from 24 Jul 2026 (Moneycontrol and NDTV Profit primary articles, with official SIAM/RBI/Budget figures where those outlets cite them). Live S-2 news + sentiment aggregates Economic Times, Financial Times, Bloomberg, Zerodha, Moneycontrol, and NDTV Profit on each refresh. Live prices and return horizons refresh separately via yfinance sector snapshots. Scores are a transparent 1-5 monitoring model, not forecasts or recommendations.";

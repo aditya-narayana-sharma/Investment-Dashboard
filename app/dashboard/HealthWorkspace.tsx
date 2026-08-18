@@ -20,12 +20,8 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import type { AppleNoteSnapshot, ContentSourceState } from "../content-types";
 import { healthCaveats, type HealthMetric } from "../health-data";
-import {
-  enrichHealthGuidanceActions,
-  parseHealthDailyNoteStats,
-} from "../health-insights";
+import { enrichHealthGuidanceActions } from "../health-insights";
 import type { HealthCategorySnapshot, HealthLiveSnapshot } from "../health-live-types";
 import { CollapsibleSection, DailyKanbanBoard, HealthCategoryIcon, HealthMasonryGrid, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection } from "./shared-ui";
 import { compactHealthDate, healthTrendTone } from "./utils";
@@ -168,28 +164,16 @@ function HealthGuidanceWorkbench({
   focusPage,
   healthSnapshot,
   healthCurrent,
-  healthNote,
-  healthNoteSource,
 }: {
   focusPage?: HealthH2Page;
   healthSnapshot: HealthLiveSnapshot;
   healthCurrent: boolean;
-  healthNote: AppleNoteSnapshot | null;
-  healthNoteSource: ContentSourceState;
 }) {
   const stackRef = useRef<HTMLDivElement>(null);
-  const optimismText = healthNote?.dailyOptimism?.trim() || "";
-  const optimismLive = healthNoteSource.status === "live" && Boolean(healthNote);
-  const optimismDate = healthNote?.observedDate || healthNote?.modifiedAt?.slice(0, 10) || "";
   const guidanceItems = enrichHealthGuidanceActions(healthSnapshot);
-  const noteStats = parseHealthDailyNoteStats(healthNote?.summary);
-  const operationalDate = healthSnapshot.requiredThrough ?? healthSnapshot.targetDate ?? healthSnapshot.dataDate;
-  const noteLagging = Boolean(optimismDate && operationalDate && optimismDate < operationalDate);
-  const optimismSubtitle = optimismText
-    ? `Daily Optimism · ${optimismDate ? compactHealthDate(optimismDate) : "latest entry"} · plus HealthKit guidance`
-    : healthCurrent
-      ? `Prioritised suggestions from ${compactHealthDate(healthSnapshot.dataDate)} HealthKit aggregates`
-      : "Last validated guidance; sync the iPhone before relying on it";
+  const optimismSubtitle = healthCurrent
+    ? `Prioritised suggestions from ${compactHealthDate(healthSnapshot.dataDate)} HealthKit aggregates`
+    : "Last validated guidance; sync the iPhone before relying on it";
   const attentionCount = guidanceItems.filter((item) => item.tone === "red" || item.tone === "amber").length;
 
   useLayoutEffect(() => {
@@ -199,9 +183,8 @@ function HealthGuidanceWorkbench({
   }, [focusPage]);
 
   return <div className="health-full-section-stack health-optimism-combined" ref={stackRef}>
-    <article id="health-h2-optimism" className={`panel health-optimism-panel morning-light viewport ${optimismText ? "has-entry" : ""}`} aria-label="Daily Optimism">
+    <article id="health-h2-optimism" className="panel health-optimism-panel morning-light viewport" aria-label="Daily Optimism">
       <div className="panel-title"><div><h3>Daily Optimism</h3><p>{optimismSubtitle}</p></div><Sparkles size={18}/></div>
-      {optimismText ? <p className="health-optimism-text">{optimismText}</p> : null}
       <section className="health-daily-brief" aria-label="Today’s prioritised health suggestions">
         <header><div><small>TODAY’S HEALTH BRIEF</small><b>{attentionCount ? `${attentionCount} items deserve attention` : "No priority exception detected"}</b></div><span>{guidanceItems.length} suggestions · critical first</span></header>
         <div className="health-action-list viewport health-brief-list">
@@ -209,13 +192,7 @@ function HealthGuidanceWorkbench({
         </div>
       </section>
       <p className="health-optimism-footnote">
-        {optimismText
-          ? "Suggestions combine Daily Optimism text with validated HealthKit aggregates."
-          : optimismLive === false
-            ? "Written Daily Optimism is unavailable; the brief uses validated HealthKit aggregates only."
-            : noteLagging
-              ? `Written optimism was last observed ${compactHealthDate(optimismDate)}; the brief uses the ${compactHealthDate(operationalDate)} operational Health target.`
-              : "No written Daily Optimism entry was present; the brief uses validated HealthKit aggregates only."}
+        The brief uses validated HealthKit aggregates only.
       </p>
     </article>
     <section id="health-h2-insights" className="health-insights-page" aria-label="Insights">
@@ -227,10 +204,6 @@ function HealthGuidanceWorkbench({
           <span>Computer Use could not open Livity. Insights below use only the validated HealthKit snapshot and Health Shortcut / Health Stats — no fabricated Livity numbers.</span>
         </div>
       </div>
-      {noteStats.length ? <div className="health-note-stats health-insight-crystal" aria-label="Health Shortcut Health Stats snapshot">
-        <header><b>Health Shortcut / Health Stats snapshot</b><span>{optimismDate ? compactHealthDate(optimismDate) : "latest export"} · evidence only · HealthKit takes precedence</span></header>
-        <div>{noteStats.map((stat) => <article key={stat.label}><small>{stat.label}</small><b>{stat.value}</b></article>)}</div>
-      </div> : null}
       <div className="health-action-list viewport" aria-label="Metric-derived health insights">
         {guidanceItems.map((item) => <div className="health-insight-crystal" key={item.title}><span className={`dot ${item.tone}`}/><div><b>{item.title}</b><p>{item.text}</p></div></div>)}
       </div>
@@ -329,8 +302,6 @@ export function HealthWorkspace({
   healthError: _healthError,
   healthRequiredDate: _healthRequiredDate,
   healthMissingDates,
-  healthNote,
-  healthNoteSource,
 }: {
   active?: boolean;
   healthIncognito: boolean;
@@ -340,8 +311,6 @@ export function HealthWorkspace({
   healthError: string;
   healthRequiredDate: string;
   healthMissingDates: string[];
-  healthNote: AppleNoteSnapshot | null;
-  healthNoteSource: ContentSourceState;
 }) {
   void _healthError;
   void _healthRequiredDate;
@@ -473,7 +442,7 @@ export function HealthWorkspace({
     <div id="health-h2" className="workspace-section health-full-section health-guidance-full-section" hidden={nativeChromeHidesSection(focusedSection, "h2")}>
       <CollapsibleSection number="H-2" title="Daily Optimism" note={healthIncognito ? "Daily Optimism hidden by Incognito" : SECTION_META.h2.note} headerAction={<span className={`pill ${healthIncognito ? "amber" : healthStatusTone}`}>{healthIncognito ? "INCOGNITO" : healthStatusLabel}</span>} defaultOpen={focusedSection === "h2"}>
         <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-          <HealthGuidanceWorkbench focusPage={route.section === "h2" ? parseHealthH2Page(route.page) : undefined} healthSnapshot={healthSnapshot} healthCurrent={healthCurrent} healthNote={healthNote} healthNoteSource={healthNoteSource}/>
+          <HealthGuidanceWorkbench focusPage={route.section === "h2" ? parseHealthH2Page(route.page) : undefined} healthSnapshot={healthSnapshot} healthCurrent={healthCurrent}/>
         </HealthIncognitoGate>
       </CollapsibleSection>
     </div>

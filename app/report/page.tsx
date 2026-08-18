@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { CheckCircle2, Download, ExternalLink, LogIn, RefreshCw } from "lucide-react";
+import { openKiteLogin } from "../kite-auth-presentation";
 import Link from "next/link";
 import { analystCalls, earningsCalendar, podcastNotes, scenarios, sources } from "../portfolio-data";
 import type { ContentDigestSnapshot } from "../content-types";
@@ -351,7 +352,7 @@ export default function Report() {
       || (snapshot?.authUrl && snapshot?.status !== "partial" && snapshot?.status !== "live"),
     );
     const authUrl = needsAuth
-      ? snapshot?.authUrl || "/api/kite/login?force=1&redirect=1"
+      ? snapshot?.authUrl || "/api/kite/login?force=1"
       : undefined;
     const isPartialSession = snapshot?.status === "partial" || authStatus === "partial";
     const navLabel = refreshing
@@ -397,7 +398,7 @@ export default function Report() {
         <h1>{title}</h1>
         <p>{detail}</p>
         <div className={styles.gateActions}>
-          {authUrl && <a href={authUrl} target="_blank" rel="noreferrer"><LogIn size={16}/> {authStatus === "expired" ? "Re-authenticate Kite" : "Authenticate Kite"} <ExternalLink size={13}/></a>}
+          {authUrl && <button type="button" onClick={() => void openKiteLogin(snapshot?.authUrl)}><LogIn size={16}/> {authStatus === "expired" ? "Re-authenticate Kite" : "Authenticate Kite"} <ExternalLink size={13}/></button>}
           <button type="button" onClick={() => void refreshLatest(true)} disabled={refreshing}><RefreshCw className={refreshing ? styles.spin : ""} size={16}/>{retryLabel}</button>
         </div>
         <small>Zerodha requires a fresh Kite Connect login each trading day (~06:00 IST expiry). That is expected broker behavior, not a dashboard bug. After an explicit token-expired state: Authenticate/Re-auth → complete Zerodha login → Retry. Partial secondary-source failures should be retried or diagnosed without invalidating a valid session.</small>

@@ -12,6 +12,7 @@ import type { HealthLiveSnapshot } from "../health-live-types";
 import type { ContentDigestSnapshot } from "../content-types";
 import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
+import { assertCatalogIds, type SectorCatalogId } from "../sector-catalog.ts";
 import { sectorCompanies } from "../sector-company-data";
 import { earningsEventDateKey } from "../earnings-verify";
 import { calendarSchedulingMetadata, exactEarningsCalendarItems } from "../calendar-earnings";
@@ -24,7 +25,7 @@ export const analysisDay = new Intl.DateTimeFormat("en-IN", { day: "numeric", mo
 export const currentIstDateKey = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 export const currentIstDateLabel = () => analysisDay.format(new Date(`${currentIstDateKey()}T12:00:00+05:30`));
 
-export const sectorSearchTerms: Record<string, string[]> = {
+export const sectorSearchTerms: Record<SectorCatalogId, string[]> = {
   it: ["it services", "software", "infosys", "tcs", "wipro", "hcl", "tech mahindra", "coforge", "ltts"],
   pharma: ["pharma", "healthcare", "drug", "hospital", "diagnostic", "cipla", "sun pharma", "lupin"],
   power: ["power", "utility", "utilities", "renewable", "electricity", "ntpc", "adani green", "jsw energy"],
@@ -39,6 +40,7 @@ export const sectorSearchTerms: Record<string, string[]> = {
   metals: ["metal", "steel", "aluminium", "mining", "zinc", "jsw steel", "tata steel", "hindalco", "coal india"],
   defence: ["defence", "defense", "aerospace", "hal", "bel", "mazdock", "bdl", "shipyard", "drone", "missile"],
 };
+assertCatalogIds(Object.keys(sectorSearchTerms), "sectorSearchTerms");
 
 export function matchesSelectedSector(sectorId: string, ...values: Array<string | undefined>) {
   const haystack = values.filter(Boolean).join(" ").toLowerCase();

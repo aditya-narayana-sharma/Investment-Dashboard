@@ -1,3 +1,5 @@
+import { assertCatalogIds, type SectorCatalogId } from "./sector-catalog.ts";
+
 export type ImpactSignal = "tailwind" | "headwind" | "two-way" | "na";
 
 export type SectorImpactExtras = {
@@ -18,8 +20,8 @@ export type SectorImpactRow = SectorImpactExtras & {
   color: string;
 };
 
-/** Impact-matrix narrative keyed by canonical `sectors[].id`. Ids/labels come from `sectors`. */
-export const sectorImpactExtras: Record<string, SectorImpactExtras> = {
+/** Impact-matrix narrative keyed by canonical catalog ids. Ids/labels come from `SECTOR_CATALOG` / `sectors`. */
+export const sectorImpactExtras: Record<SectorCatalogId, SectorImpactExtras> = {
   it: { stance: "Constructive", subsectors: ["Services", "ER&D", "Product / SaaS", "Platforms"], crude: "two-way", inr: "tailwind", rates: "two-way", monsoon: "na", aiCapex: "tailwind", earnings: "tailwind", read: "AI-led deal conversion and margin execution matter more than broad demand commentary." },
   pharma: { stance: "Two-way", subsectors: ["US generics", "Domestic branded", "CDMO / CRAMS", "Hospitals", "Diagnostics"], crude: "two-way", inr: "tailwind", rates: "two-way", monsoon: "na", aiCapex: "two-way", earnings: "two-way", read: "US generic tariff roadmap (0→100→200%) is the new policy overhang; USFDA and valuation still bind." },
   power: { stance: "Two-way", subsectors: ["Thermal", "Renewables", "Transmission", "Exchanges", "Equipment"], crude: "two-way", inr: "headwind", rates: "tailwind", monsoon: "tailwind", aiCapex: "tailwind", earnings: "two-way", read: "270.8 GW peak and >50% clean daytime share help; BESS, grid and receivables decide quality." },
@@ -34,6 +36,7 @@ export const sectorImpactExtras: Record<string, SectorImpactExtras> = {
   metals: { stance: "Two-way", subsectors: ["Steel", "Aluminium", "Mining", "Speciality", "Recycling"], crude: "headwind", inr: "tailwind", rates: "two-way", monsoon: "headwind", aiCapex: "two-way", earnings: "two-way", read: "China demand, spreads, safeguard policy and input inflation drive the cycle." },
   defence: { stance: "Constructive", subsectors: ["Aerospace", "Electronics", "Shipbuilding", "Missiles", "Drones / Space"], crude: "na", inr: "two-way", rates: "two-way", monsoon: "na", aiCapex: "tailwind", earnings: "tailwind", read: "Budget plus fresh HAL/MoD orders support the cycle; delivery schedules and valuation remain binding." },
 };
+assertCatalogIds(Object.keys(sectorImpactExtras), "sectorImpactExtras");
 
 const UNMAPPED_IMPACT: SectorImpactExtras = {
   stance: "Two-way",

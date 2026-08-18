@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("primary canvas is a vertical tree with Add a Block kinds and no wires", async () => {
-  const [editor, canvas, picker, panel, ops, workspace, css] = await Promise.all([
+  const [editor, canvas, picker, panel, ops, workspace, canvasCss, jsonCss] = await Promise.all([
     readFile(new URL("../app/dashboard/builder/SymphonyEditor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/TreeCanvas.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/AssetInstrumentPicker.tsx", import.meta.url), "utf8"),
@@ -11,7 +11,9 @@ test("primary canvas is a vertical tree with Add a Block kinds and no wires", as
     readFile(new URL("../app/strategy/tree-ops.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/BuilderWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/algorithm-builder.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/builder/algorithm-builder-json.css", import.meta.url), "utf8"),
   ]);
+  const css = `${canvasCss}\n${jsonCss}`;
 
   assert.match(workspace, /SymphonyEditor/);
   assert.doesNotMatch(workspace, /<AlgorithmBuilder/);

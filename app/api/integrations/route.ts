@@ -8,9 +8,9 @@ import {
   readStoredIntegrationsConfig,
   writeIntegrationsConfig,
 } from "../../integrations-config-server";
-import { publicIntegrationsConfig, settingsIntegrationsConfig } from "../../integrations-types";
+import { publicIntegrationsConfig } from "../../integrations-types";
 import {
-  isLoopbackRequest,
+  isLocalOperatorRequest,
   overlayLocalLlmSecrets,
   readLocalLlmSecrets,
 } from "../../local-llm-secrets";
@@ -24,7 +24,8 @@ export async function GET(request: Request) {
   const existing = await readStoredIntegrationsConfig();
   const stored = overlayLocalLlmSecrets(existing, await readLocalLlmSecrets());
   const runtime = await detectRuntimeTools();
-  const wantSecrets = new URL(request.url).searchParams.get("secrets") === "1" && isLoopbackRequest(request);
+  const localOperator = isLocalOperatorRequest(request);
+  const wantSecrets = new URL(request.url).searchParams.get("secrets") === "1" && localOperator;
   if (wantSecrets) {
     const before = JSON.stringify(publicIntegrationsConfig(existing).llm);
     const after = JSON.stringify(publicIntegrationsConfig(stored).llm);
@@ -32,11 +33,17 @@ export async function GET(request: Request) {
       await writeIntegrationsConfig(stored);
     }
   }
-  const payload = wantSecrets ? settingsIntegrationsConfig(stored) : publicIntegrationsConfig(stored);
+  const payload = publicIntegrationsConfig(stored);
   return Response.json({ ...payload, runtime }, { headers: NO_STORE });
 }
 
 export async function PUT(request: Request) {
+  if (!isLocalOperatorRequest(request)) {
+    return Response.json(
+      { error: "Integrations writes are only available on the author Mac." },
+      { status: 403, headers: NO_STORE },
+    );
+  }
   try {
     const body = await request.json() as unknown;
     const merged = mergeIntegrationsUpdate(await readStoredIntegrationsConfig(), body);
@@ -46,9 +53,7 @@ export async function PUT(request: Request) {
         ? merged
         : overlayLocalLlmSecrets(merged, await readLocalLlmSecrets()),
     );
-    const payload = isLoopbackRequest(request)
-      ? settingsIntegrationsConfig(saved)
-      : publicIntegrationsConfig(saved);
+    const payload = publicIntegrationsConfig(saved);
     return Response.json(payload, { headers: NO_STORE });
   } catch (error) {
     return Response.json(

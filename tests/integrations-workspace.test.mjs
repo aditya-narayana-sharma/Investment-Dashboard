@@ -259,7 +259,7 @@ test("native Stratji Settings is a SwiftUI form, not a live dashboard WebView", 
   const [settings, appDelegate, nativeViews, permissions, onboarding, info, entitlements] = await Promise.all([
     readFile(new URL("../apple-app/Stratji/StratjiSettingsWindow.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/Stratji/AppDelegate.swift", import.meta.url), "utf8"),
-    readFile(new URL("../apple-app/Shared/StratjiNativeViews.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Stratji/StratjiNativeViews.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/Stratji/StratjiApplePermissions.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/Stratji/StratjiPermissionsOnboarding.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/Stratji/Info.plist", import.meta.url), "utf8"),
@@ -336,7 +336,7 @@ test("native Stratji Settings wraps live-feed freshness chips from the refresh p
   const [settings, models, session, visual, refresh] = await Promise.all([
     readFile(new URL("../apple-app/Stratji/StratjiSettingsWindow.swift", import.meta.url), "utf8"),
     readFile(new URL("../apple-app/Shared/StratjiModels.swift", import.meta.url), "utf8"),
-    readFile(new URL("../apple-app/Shared/StratjiSessionModel.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Stratji/StratjiSessionModel.swift", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/dashboard/refresh/route.ts", import.meta.url), "utf8"),
   ]);
@@ -380,9 +380,23 @@ test("committed seed LLM keys stay empty and overlay only fills from local secre
   assert.equal(filled.pipelines.llm.status, "partial");
   const publicConfig = publicIntegrationsConfig(filled);
   assert.equal("openaiApiKey" in publicConfig.llm, false);
+  assert.equal("anthropicApiKey" in publicConfig.llm, false);
   const settings = settingsIntegrationsConfig(filled);
-  assert.equal(settings.llm.openaiApiKey, "sk-test-openai-local");
+  assert.equal("openaiApiKey" in settings.llm, false);
+  assert.equal(settings.llm.openaiKeyConfigured, true);
   assert.deepEqual(filledLocalLlmProviders({ openaiApiKey: "sk-test-openai-local" }), ["OpenAI"]);
+  const flaskShaped = new Request("http://127.0.0.1:3000/api/integrations?secrets=1", {
+    headers: { host: "127.0.0.1:3000", "x-forwarded-host": "example.ts.net", "x-forwarded-for": "100.64.1.9" },
+  });
+  assert.equal(isLoopbackRequest(flaskShaped), false);
+  const operator = new Request("http://127.0.0.1:3000/api/integrations?secrets=1", {
+    headers: {
+      host: "127.0.0.1:3000",
+      "x-forwarded-for": "127.0.0.1",
+      "x-stratji-local-operator": "1",
+    },
+  });
+  assert.equal(isLoopbackRequest(operator), true);
   assert.equal(isLoopbackRequest(new Request("http://127.0.0.1:5050/api/integrations?secrets=1")), true);
   assert.equal(isLoopbackRequest(new Request("http://example.ts.net/api/integrations?secrets=1")), false);
 });

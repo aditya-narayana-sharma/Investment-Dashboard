@@ -23,7 +23,7 @@ import {
   retainHealthOnFailure,
   retainKiteOnFailure,
 } from "./dashboard-refresh-merge";
-import { kiteAuthPresentation, kiteLoginHref } from "./kite-auth-presentation";
+import { kiteAuthPresentation, kiteLoginHref, openKiteLogin } from "./kite-auth-presentation";
 import { sanitizeKiteStatusNote } from "./kite-status-note";
 import { sectorCompanies } from "./sector-company-data";
 import { emptyBenchmarkSnapshot, emptySectorSnapshot, isUsableSectorMarketStatus, type SectorBenchmarkSnapshot, type SectorMarketSnapshot } from "./sector-live-types";
@@ -814,7 +814,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
               ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
               : kiteAuthControl === "cached" && !showAuthAction
                 ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing retained Kite data; a confirmed session still exists for the retained snapshot"><Activity size={15}/><span>Kite cached</span></button>
-                : <a className="kite-auth-control" href={kiteLoginHref(snapshot.authUrl)} target="_blank" rel="noreferrer" title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login. Stratji.app opens this in Safari so the dashboard stays put."}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>}
+                : <a className="kite-auth-control" href={kiteLoginHref(snapshot.authUrl)} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); void openKiteLogin(snapshot.authUrl); }} title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login. Stratji.app opens this in Safari so the dashboard stays put."}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>}
           {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
           <button onClick={()=>void refreshAll(true)} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
           <em>On request</em>
@@ -923,8 +923,6 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         healthError={healthError}
         healthRequiredDate={healthRequiredDate}
         healthMissingDates={healthMissingDates}
-        healthNote={content.healthNote}
-        healthNoteSource={content.sources.healthNote}
       />
         )
         : <LicenseGate feature="health" license={license} title="Health & Wellness" />}

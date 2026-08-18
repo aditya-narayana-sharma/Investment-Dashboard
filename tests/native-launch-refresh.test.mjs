@@ -6,14 +6,14 @@ const root = new URL("..", import.meta.url);
 
 test("Mac Stratji maps splash progress through named refresh stages instead of a single Kite percentage", async () => {
   const [session, supervisor, client, browser, appDelegate, page, workspace, views, script, digest, flask] = await Promise.all([
-    readFile(new URL("apple-app/Shared/StratjiSessionModel.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiSessionModel.swift", root), "utf8"),
     readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
     readFile(new URL("apple-app/Shared/StratjiAPIClient.swift", root), "utf8"),
     readFile(new URL("apple-app/Shared/StratjiDocumentBrowser.swift", root), "utf8"),
     readFile(new URL("apple-app/Stratji/AppDelegate.swift", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("apple-app/Shared/StratjiWorkspace.swift", root), "utf8"),
-    readFile(new URL("apple-app/Shared/StratjiNativeViews.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiNativeViews.swift", root), "utf8"),
     readFile(new URL("scripts/refresh-dashboard-data.sh", root), "utf8"),
     readFile(new URL("scripts/content-digest-server.mjs", root), "utf8"),
     readFile(new URL("flask_gateway.py", root), "utf8"),
@@ -49,6 +49,9 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(supervisor, /removeValue\(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP"\)/);
   assert.match(supervisor, /onProgress/);
   assert.match(supervisor, /latestRefreshProgress/);
+  assert.match(supervisor, /return process.terminationStatus == 0/);
+  assert.match(supervisor, /if timedOut \{ return false \}/);
+  assert.match(script, /SECTORS=\(it pharma power infrastructure auto telecom banking nbfc fmcg consumer energy metals defence\)/);
   assert.match(client, /URLQueryItem\(name: "force", value: "1"\)/);
   assert.match(client, /forcedRequestTimeout/);
   assert.match(client, /_startup\/progress/);
@@ -203,7 +206,7 @@ test("Mac Stratji starts Flask and Next headlessly without Terminal.app", async 
 
 test("native splash runs a complete Health ZIP ingest; later ticks are incremental", async () => {
   const [session, coordinator, page, contentView, browser, supervisor, script, health] = await Promise.all([
-    readFile(new URL("apple-app/Shared/StratjiSessionModel.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiSessionModel.swift", root), "utf8"),
     readFile(new URL("apple-app/InvestmentDashboard/NativeRefreshCoordinator.swift", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("apple-app/InvestmentDashboard/ContentView.swift", root), "utf8"),
@@ -242,6 +245,8 @@ test("native splash runs a complete Health ZIP ingest; later ticks are increment
   assert.match(health, /import_health_shortcut\.py/);
   assert.match(health, /prepare_apple_health_export\.py/);
   assert.match(health, /import_apple_health\.py/);
+  assert.match(health, /if import_health_shortcut_if_present; then/);
+  assert.match(health, /run_apple_health_import/);
 });
 
 test("iOS splash refresh does not schedule a second complete refresh on become-active", async () => {

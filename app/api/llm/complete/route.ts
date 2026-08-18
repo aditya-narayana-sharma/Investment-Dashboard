@@ -5,7 +5,7 @@ import {
   parseTreeFromLlmText,
 } from "../../../local-llm-assist.ts";
 import { completeLocalLlm } from "../../../local-llm-client.ts";
-import { llmAssistAvailability, readLocalLlmSecrets } from "../../../local-llm-secrets.ts";
+import { llmAssistAvailability, isLocalOperatorRequest, readLocalLlmSecrets } from "../../../local-llm-secrets.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!isLocalOperatorRequest(request)) {
+    return Response.json(
+      { ok: false, disabled: false, error: "LLM complete is only available on the author Mac." },
+      { status: 403, headers: NO_STORE },
+    );
+  }
   try {
     const body = await request.json() as {
       task?: string;

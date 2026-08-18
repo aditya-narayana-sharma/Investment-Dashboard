@@ -491,6 +491,7 @@ enum NativeActionCatalog {
 }
 
 enum NativeSectorCatalog {
+    // Keep ids/titles aligned with app/sector-catalog.ts SECTOR_CATALOG.
     static let all: [(id: String, title: String)] = [
         ("it", "IT / Tech"),
         ("pharma", "Pharma"),

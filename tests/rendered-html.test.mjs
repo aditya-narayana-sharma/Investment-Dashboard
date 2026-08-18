@@ -7,7 +7,11 @@ import { portfolioReturnTone } from "../app/portfolio-concentration.mjs";
 import {
   BUILDER_CHROME_CANDIDATES,
   BUILDER_WORKSPACE_CANDIDATES,
+  GLOBAL_CSS_CANDIDATES,
+  INTELLIGENCE_SOURCE_CANDIDATES,
+  INVESTMENT_SOURCE_CANDIDATES,
   ROUTING_SOURCE_CANDIDATES,
+  VISUAL_CSS_CANDIDATES,
   firstExisting,
   readJoined,
 } from "./helpers/algorithm-canvas.mjs";
@@ -46,8 +50,8 @@ test("portfolio concentration return colors keep neutral boundary values", () =>
 
 test("portfolio concentration tiles preserve complete primary labels", async () => {
   const [workspace, globalCss] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
   assert.match(workspace, /function worstAspect\(/);
   assert.match(workspace, /const density = .*"micro".*"compact".*"roomy"/);
@@ -59,7 +63,7 @@ test("portfolio concentration tiles preserve complete primary labels", async () 
 
 test("Kite ticker orders require an exact reviewed confirmation before place_order", async () => {
   const [workspace, ticket, route, server, page] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/KiteOrderTicket.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/kite/order/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8"),
@@ -92,7 +96,7 @@ test("Kite ticker orders require an exact reviewed confirmation before place_ord
 
 test("Portfolio activity GTT and TSL creates require reviewed confirmation before create_gtt", async () => {
   const [workspace, ticket, route, server] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/KiteGttTicket.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/kite/gtt/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8"),
@@ -115,7 +119,7 @@ test("Portfolio activity GTT and TSL creates require reviewed confirmation befor
 
 test("Portfolio activity price alerts require reviewed confirmation before create_alert", async () => {
   const [workspace, ticket, route, server, page] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/KiteAlertTicket.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/kite/alert/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/kite-live-server.ts", import.meta.url), "utf8"),
@@ -139,7 +143,7 @@ test("Portfolio activity price alerts require reviewed confirmation before creat
 
 test("focused I-2 keeps ticket entry points and mounts tickets outside exclusive hide", async () => {
   const [workspace, orderTicket, gttTicket, alertTicket, portal, orderRoute, gttRoute, alertRoute, page, browser, stratjiBrowser, iosShell] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/KiteOrderTicket.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/KiteGttTicket.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/KiteAlertTicket.tsx", import.meta.url), "utf8"),
@@ -193,7 +197,7 @@ test("focused I-2 keeps ticket entry points and mounts tickets outside exclusive
 });
 
 test("nested portfolio allocation markup remains protected", async () => {
-  const investmentWorkspace = await readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8");
+  const investmentWorkspace = await readJoined(INVESTMENT_SOURCE_CANDIDATES);
   const start = investmentWorkspace.indexOf('<section className="panel chart-panel nested-chart-panel">');
   const end = investmentWorkspace.indexOf('<section className="portfolio-management"', start);
   assert.ok(start >= 0 && end > start, "protected donut JSX boundaries must exist");
@@ -203,8 +207,8 @@ test("nested portfolio allocation markup remains protected", async () => {
 
 test("Podcast sender groups expose collapsible masonry and a Playwright geometry contract", async () => {
   const [intelligenceWorkspace, globalCss, geometryTest] = await Promise.all([
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
+    readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("./podcast-masonry.playwright.mjs", import.meta.url), "utf8"),
   ]);
   assert.match(intelligenceWorkspace, /layout\?: DigestGroupLayout/);
@@ -231,12 +235,13 @@ test("Podcast sender groups expose collapsible masonry and a Playwright geometry
 });
 
 test("M-2 Interrogate LLM is full-width with source-of-truth copy and suggestion chips", async () => {
-  const [intelligenceWorkspace, llmPanel, symphonyEditor, globalCss, visualOverhaul] = await Promise.all([
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+  const [intelligenceWorkspace, llmPanel, symphonyEditor, globalCss, visualOverhaul, hoverPop] = await Promise.all([
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/LlmAssistPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/SymphonyEditor.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
+    readJoined(VISUAL_CSS_CANDIDATES),
+    readFile(new URL("../app/dashboard/hover-pop.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(intelligenceWorkspace, /title="Interrogate LLM"/);
@@ -288,18 +293,18 @@ test("M-2 Interrogate LLM is full-width with source-of-truth copy and suggestion
   assert.match(globalCss, /\.llm-assist-dock\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*24/s);
   assert.match(intelligenceWorkspace, /EARNINGS_LLM_SUGGESTIONS/);
   assert.match(intelligenceWorkspace, /Verified prints this week/);
-  assert.doesNotMatch(visualOverhaul, /\.llm-assist:hover/);
-  assert.match(visualOverhaul, /@media \(hover: hover\) and \(pointer: fine\)/);
-  assert.match(visualOverhaul, /\.llm-assist textarea:hover/);
-  assert.match(visualOverhaul, /\.llm-assist-run:hover/);
+  assert.doesNotMatch(`${visualOverhaul}\n${hoverPop}`, /\.llm-assist:hover/);
+  assert.match(hoverPop, /@media \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(hoverPop, /\.llm-assist textarea:hover/);
+  assert.match(hoverPop, /\.llm-assist-run:hover/);
 });
 
 test("Market Intelligence digests collapse newsletters by sender and Axis by topic with source links", async () => {
   const [intelligenceWorkspace, contentServer, contentTypes, globalCss, pdfRoute] = await Promise.all([
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8"),
     readFile(new URL("../app/content-types.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("../app/api/axis-research/pdf/route.ts", import.meta.url), "utf8"),
   ]);
 
@@ -343,7 +348,7 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
     readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SectorDecisionLab.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
 
   assert.match(workspace, /className="sector-workspace-shell sector-full-workspace"/);
@@ -413,12 +418,12 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
 
 test("Phase 3 Market Intelligence automation remains wired to local source paths", async () => {
   const [workspace, contentServer, podcastSummarizer, contentTypes, dashboardRefresh, globalCss, cron] = await Promise.all([
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8"),
     readFile(new URL("../scripts/podcast-summarizer.mjs", import.meta.url), "utf8"),
     readFile(new URL("../app/content-types.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/dashboard/refresh/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("../config/scheduler/content-refresh.cron", import.meta.url), "utf8"),
   ]);
   assert.match(contentServer, /exactMailbox\(account, "Axis Research"\)/);
@@ -485,10 +490,11 @@ test("server-renders the portfolio dashboard", async () => {
 });
 
 test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections", async () => {
-  const [page, routing, globalCss, layout, visual, sharedUi, iosShell, iosBrowser] = await Promise.all([
+  const [page, routing, globalCss, nativeChromeCssFile, layout, visual, sharedUi, iosShell, iosBrowser] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
+    readFile(new URL("../app/native-chrome.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
@@ -521,6 +527,8 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.match(page, /workspace === "strategies"/);
   assert.match(layout, /import "\.\/globals\.css"/);
   assert.match(layout, /import "\.\/visual-overhaul\.css"/);
+  assert.match(layout, /import "\.\/dashboard\/hover-pop\.css"/);
+  assert.match(layout, /import "\.\/native-chrome\.css"/);
   assert.match(layout, /nativeChromeFoucScript/);
   assert.match(layout, /nativeChrome\|native/);
   assert.match(sharedUi, /className="workspace-section-nav"/);
@@ -531,29 +539,29 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.match(visual, /export function TriggerDial/);
   assert.match(visual, /export function SparkFilament/);
   assert.match(visual, /export function WaveformStrip/);
-  assert.match(globalCss, /html\.native-chrome-embed \.masthead/);
-  assert.match(globalCss, /html\.native-chrome-embed \.workspace-navigation\.mode-dial/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.masthead/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.workspace-navigation\.mode-dial/);
   assert.doesNotMatch(globalCss, /padding:\s*var\(--chrome-stack-gap\) 10px 8px/);
-  assert.doesNotMatch(globalCss, /html\.native-chrome-embed \.live-feed-banner[\s\S]{0,120}margin:\s*0 0 6px/);
+  assert.doesNotMatch(nativeChromeCssFile, /html\.native-chrome-embed \.live-feed-banner[\s\S]{0,120}margin:\s*0 0 6px/);
   assert.match(globalCss, /--chrome-stack-gap:\s*16px/);
   assert.match(globalCss, /--section-nav-clearance:\s*28px/);
   assert.match(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--section-nav-clearance\)/s);
   assert.doesNotMatch(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin:\s*var\(--control-gap\) 0/s);
   assert.doesNotMatch(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--chrome-stack-gap\)/s);
-  assert.match(globalCss, /html\.native-chrome-embed \.health-workspace-shell\.health-full-workspace/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*source-freshness[^\n]*display:\s*none|source-freshness[^\n]*native-chrome[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,180}display:\s*none/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.health-workspace-shell\.health-full-workspace/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*source-freshness[^\n]*display:\s*none|source-freshness[^\n]*native-chrome[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,180}display:\s*none/);
   assert.match(globalCss, /\[data-focus-section\]/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*kanban-board[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*collapsible-section[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*pulse-constellation[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*appearance-toggle[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*incognito-toggle[^\n]*display:\s*none/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*workspace-panel[^\n]*overflow:\s*hidden/);
-  assert.doesNotMatch(globalCss, /native-chrome[^\n]*health-workspace-shell[^\n]*overflow:\s*hidden/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*kanban-board[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*collapsible-section[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*pulse-constellation[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*appearance-toggle[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*incognito-toggle[^\n]*display:\s*none/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*workspace-panel[^\n]*overflow:\s*hidden/);
+  assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*health-workspace-shell[^\n]*overflow:\s*hidden/);
   assert.doesNotMatch(page, /nativeChrome && <PulseConstellation/);
   assert.doesNotMatch(page, /!nativeChrome && <InvestmentWorkspace/);
-  const nativeChromeCss = `${globalCss}\n${visual}`.replace(/\/\*[\s\S]*?\*\//g, "");
+  const nativeChromeCss = `${globalCss}\n${nativeChromeCssFile}`.replace(/\/\*[\s\S]*?\*\//g, "");
   const nativeChromeHideSelectors = [...nativeChromeCss.matchAll(/([^{}]*native-chrome[^{]*)\{([^}]*)\}/g)]
     .filter(([, , body]) => /display:\s*none/i.test(body))
     .flatMap(([, selector]) => selector.split(",").map((part) => part.trim()).filter(Boolean));
@@ -603,7 +611,7 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
     ["strategies", [/class="strategy-card"|license-gate/, /strategies-gallery|Strategies/]],
   ];
   const [investmentSource, sectorsSource] = await Promise.all([
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(investmentSource, /ResponsiveContainer/);
@@ -628,12 +636,13 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
 });
 
 test("sticky workspace section nav sits fully above section headings", async () => {
-  const [layout, globalCss, visualCss] = await Promise.all([
+  const [layout, globalCss, visualCss, nativeChromeCss] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
+    readJoined(VISUAL_CSS_CANDIDATES),
+    readFile(new URL("../app/native-chrome.css", import.meta.url), "utf8"),
   ]);
-  assert.match(layout, /import "\.\/globals\.css"[\s\S]*?import "\.\/visual-overhaul\.css"/);
+  assert.match(layout, /import "\.\/globals\.css"[\s\S]*?import "\.\/visual-overhaul\.css"[\s\S]*?import "\.\/dashboard\/hover-pop\.css"[\s\S]*?import "\.\/native-chrome\.css"/);
   const lastWinsIdx = visualCss.lastIndexOf("LAST-WINS");
   assert.ok(lastWinsIdx >= 0, "visual-overhaul.css must end with the heading-clearance last-wins block");
   const lastWins = visualCss.slice(lastWinsIdx);
@@ -654,18 +663,18 @@ test("sticky workspace section nav sits fully above section headings", async () 
   assert.match(lastWins, /\.workspace-section \.section-heading h2\s*\{[^}]*overflow:\s*visible/s);
   assert.match(lastWins, /\[data-focus-section\][^{]*\.collapsible-content\s*\{[^}]*overflow:\s*auto/s);
 
-  assert.match(lastWins, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,280}margin-bottom:\s*var\(--section-nav-clearance\)/);
-  assert.match(lastWins, /html\.native-chrome-embed \.workspace-section \.section-heading[\s\S]{0,180}margin-top:\s*var\(--section-nav-clearance\)/);
-  assert.doesNotMatch(lastWins, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,160}margin(?:-bottom)?:\s*0/);
+  assert.match(nativeChromeCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,280}margin-bottom:\s*var\(--section-nav-clearance\)/);
+  assert.match(nativeChromeCss, /html\.native-chrome-embed \.workspace-section \.section-heading[\s\S]{0,180}margin-top:\s*var\(--section-nav-clearance\)/);
+  assert.doesNotMatch(nativeChromeCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,160}margin(?:-bottom)?:\s*0/);
   assert.match(globalCss, /--section-nav-clearance:\s*28px/);
 });
 
 test("CollapsibleSection defaults to collapsed with v2 open-only persistence", async () => {
   const [sharedUi, investment, sectors, intelligence, health, strategies] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
   ]);
@@ -685,9 +694,9 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
 test("workspaces honor section/page from the URL on first paint and popstate", async () => {
   const [sharedUi, investment, sectors, intelligence, health, page] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   ]);
@@ -707,7 +716,7 @@ test("workspaces honor section/page from the URL on first paint and popstate", a
 test("collapsed section preview is not constrained by the section-number badge", async () => {
   const [sharedUi, globalCss] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
   assert.match(sharedUi, /className="shutter-preview"[\s\S]*?<em>preview<\/em>/);
   assert.match(globalCss, /\.section-heading>span:first-child\s*\{[^}]*width:36px;[^}]*height:36px;/s);
@@ -715,7 +724,7 @@ test("collapsed section preview is not constrained by the section-number badge",
 });
 
 test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", async () => {
-  const workspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const workspace = await readJoined(INTELLIGENCE_SOURCE_CANDIDATES);
   for (const [number, title] of [
     ["M-1", "Action Board"],
     ["M-2", "Live Intelligence"],
@@ -747,12 +756,12 @@ test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", 
 test("all four workspaces share consistent cyan section navigation bars", async () => {
   const [sharedUi, investment, sectors, intelligence, health, strategies, globalCss] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
 
   assert.match(sharedUi, /export function WorkspaceSectionNav/);
@@ -838,10 +847,10 @@ test("server-renders the print report and keeps controls interactive", async () 
       readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8"),
+      readJoined(INVESTMENT_SOURCE_CANDIDATES),
       readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/SectorDecisionLab.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+      readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
       readFile(new URL("../app/calendar-action-feeds.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/calendar-holiday-feeds.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/dashboard/EarningsMonthCalendar.tsx", import.meta.url), "utf8"),
@@ -872,7 +881,7 @@ test("server-renders the print report and keeps controls interactive", async () 
     readFile(new URL("../app/sector-live-server.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/sector-company-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/sector-data.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
   assert.equal(response.status, 200);
 
@@ -881,7 +890,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(html, /Latest Kite session required before PDF generation/);
   assert.match(reportPage, /Kite is signed in, but the live snapshot is incomplete/);
   assert.match(reportPage, /Retry full Kite refresh/);
-  assert.match(reportPage, /\/api\/kite\/login\?force=1/);
+  assert.match(reportPage, /openKiteLogin\(snapshot\?\.authUrl\)/);
+  assert.doesNotMatch(reportPage, /redirect=1/);
   assert.doesNotMatch(reportPage, /reauthSuggested/);
 
   assert.match(page, /setMacroEventKey/);
@@ -969,7 +979,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Authenticate Kite/);
   assert.doesNotMatch(page, /Kite unavailable<\/span>/);
   assert.doesNotMatch(page, /Re-auth Kite/);
-  assert.match(page, /kiteLoginHref\(snapshot\.authUrl\)/);
+  assert.match(page, /openKiteLogin\(snapshot\.authUrl\)/);
   assert.match(page, /kiteAuthControl/);
   assert.match(page, /authStatus/);
   assert.match(page, /tokenExpiresAt/);
@@ -1310,10 +1320,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(contentServer, /mailbox\.messages\.whose/);
   assert.match(contentServer, /group\.com\.apple\.calendar\/Calendar\.sqlitedb/);
   assert.match(contentServer, /FROM CalendarItem i/);
-  assert.match(contentServer, /settle\(readCalendar\)/);
+  assert.match(contentServer, /refreshSource\("calendar", "Apple Calendar", readCalendar\)/);
   assert.doesNotMatch(contentServer, /Application\("Calendar"\)/);
-  assert.match(contentServer, /settle\(readNewsletters\)/);
-  assert.match(contentServer, /settle\(readAxisResearch\)/);
+  assert.match(contentServer, /refreshSource\("mail", "iCloud Newsletters", readNewsletters\)/);
+  assert.match(contentServer, /refreshSource\("axis", "iCloud Axis Research", readAxisResearch\)/);
   assert.doesNotMatch(contentServer, /Promise\.allSettled\(\[readNewsletters\(\), readAxisResearch\(\)/);
   assert.doesNotMatch(contentServer, /\[newsletters, axisResearch, podcasts, reminders, calendar, healthNote\] = await Promise\.all/);
   assert.match(contentServer, /NEWSLETTER_DIGEST_LIMIT = 500/);
@@ -1322,7 +1332,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(contentServer, /readNewsletterBodies/);
   assert.match(contentServer, /displayedCount: newsletterValue\.items\.length/);
   assert.match(contentServer, /message\.properties\(\)/);
-  assert.match(contentServer, /settle\(readPodcasts\)/);
+  assert.match(contentServer, /refreshSource\("podcasts", "Apple Podcasts", readPodcasts\)/);
   assert.match(contentServer, /group\.com\.apple\.reminders\/Container_v1\/Stores/);
   assert.match(contentServer, /execFileAsync\("sqlite3", \["-readonly", "-json", store, remindersQuery\]/);
   assert.match(contentServer, /reminder\.ZCOMPLETED AS completed/);
@@ -1377,11 +1387,12 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(reportPage, /Holdings · weight \+ U\/Day P&amp;L/);
   assert.match(reportPage, /Shaded = negative day P&amp;L/);
   assert.match(reportPage, /holdings\.map\(\(holding\) =>/);
-  assert.match(healthData, / Health Daily Note/);
+  assert.doesNotMatch(healthData, / Health Daily Note/);
+  assert.doesNotMatch(healthData, /Health Daily/);
   assert.match(healthData, /Body measurements are intentionally excluded/);
   assert.match(healthData, /913 kcal/);
   assert.match(healthData, /10,495/);
-  assert.match(healthData, /complete 16 Jul entry includes 4\.08 km\/h walking speed/);
+  assert.match(healthData, /Health Shortcut recorded 4\.08 km\/h/);
   assert.match(healthData, /Walking speed.*2\.2-5\.9 km\/h/s);
   assert.match(healthData, /Step length.*42-101 cm/s);
   assert.match(healthData, /2,539 kcal/);
@@ -1409,10 +1420,13 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Vital cadence/);
   assert.doesNotMatch(page, /Default comparison/);
   assert.doesNotMatch(page, /Daily optimisation/);
-  assert.match(page, /healthNote=\{content\.healthNote\}/);
-  assert.match(page, /dailyOptimism/);
-  assert.match(contentServer, /function extractDailyOptimism/);
-  assert.match(contentServer, /dailyOptimism:/);
+  assert.doesNotMatch(page, /healthNote=\{content\.healthNote\}/);
+  assert.doesNotMatch(page, /dailyOptimism/);
+  assert.doesNotMatch(contentServer, /function extractDailyOptimism/);
+  assert.doesNotMatch(contentServer, / Health Daily/);
+  assert.match(contentServer, /requiredSources = \[newsletters, axisResearch, reminders, calendar\]/);
+  assert.match(contentServer, /requiredKeys = \["newsletters", "axisResearch", "reminders", "calendar"\]/);
+  assert.doesNotMatch(contentServer, /dailyOptimism:/);
   assert.doesNotMatch(page, /Health Daily v2/);
   {
     const healthWorkspace = await readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8");
@@ -1609,7 +1623,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(sectorData, /name: "IT \/ Tech"/);
   assert.match(sectorData, /id: "metals"/);
   assert.match(sectorData, /name: "Metals"/);
-  assert.match(sectorData, /export const sectorCatalogIds = sectors\.map/);
+  assert.match(sectorData, /export \{ sectorCatalogIds \} from "\.\/sector-catalog(?:\.ts)?"/);
   assert.match(sectorCompanies, /it: \[/);
   assert.match(sectorCompanies, /metals: \[/);
   assert.match(sectorCompanies, /company\("TCS"/);
@@ -1703,12 +1717,13 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
 });
 
 test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", async () => {
-  const [sharedUi, page, layout, globalCss, visualCss] = await Promise.all([
+  const [sharedUi, page, layout, globalCss, visualCss, hoverPopCss] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
+    readJoined(VISUAL_CSS_CANDIDATES),
+    readFile(new URL("../app/dashboard/hover-pop.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(sharedUi, /export function AppearanceToggle/);
@@ -1788,34 +1803,36 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.sector-news-sentiment-column[\s\S]*?background:var\(--bg-panel\)/);
   assert.doesNotMatch(globalCss, /Intentional dark chrome islands/);
 
+  const motionCss = `${visualCss}\n${hoverPopCss}`;
   assert.match(visualCss, /\.vo-pop/);
   assert.match(visualCss, /@keyframes vo-pop-press/);
   assert.match(visualCss, /--brutalist-shadow-lg/);
-  assert.match(visualCss, /translateY\(-2px\)\s*scale\(1\.02\)/);
-  assert.match(visualCss, /\.panel:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.kanban-lane:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.impact-matrix-panel:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.collapsible-section \.collapsible-heading:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.analyst-group-header:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.analyst-matrix \.analyst-table:hover[\s\S]*?transform:\s*none !important/);
-  assert.match(visualCss, /\.analyst-matrix \.analyst-table tbody:hover[\s\S]*?transform:\s*none !important/);
-  assert.match(visualCss, /\.analyst-matrix \.analyst-table tbody tr:hover \.pill[\s\S]*?transform:\s*none !important/);
-  assert.match(visualCss, /\.analyst-matrix \.analyst-table tbody tr \{[\s\S]*?display:\s*grid/);
-  assert.match(visualCss, /\.axis-pick-group:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.axis-category-strip > button:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.sender-group-header:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.sector-selector button:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.impact-row\.selectable:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.mece-row:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.industry-breadth-table tbody tr:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.axis-pick-list button:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.analyst-table tbody tr:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.digest-panel \.digest-item:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
-  assert.match(visualCss, /\.impact-read:hover[\s\S]*?transform:\s*none/);
-  assert.match(visualCss, /\.kanban-card:hover/);
-  assert.match(visualCss, /\.axis-pick-list button:hover/);
-  assert.doesNotMatch(visualCss, /\.panel:hover,\s*\.kanban-card:hover/);
-  assert.doesNotMatch(visualCss, /\.axis-pick-list button:hover,\s*\.axis-category-strip > button:hover/);
+  assert.match(motionCss, /translateY\(-2px\)\s*scale\(1\.02\)/);
+  assert.match(hoverPopCss, /\.panel:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.kanban-lane:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.impact-matrix-panel:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.collapsible-section \.collapsible-heading:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.analyst-group-header:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table:hover[\s\S]*?transform:\s*none !important/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody:hover[\s\S]*?transform:\s*none !important/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody tr:hover \.pill[\s\S]*?transform:\s*none !important/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody tr \{[\s\S]*?display:\s*grid/);
+  assert.match(hoverPopCss, /\.industry-breadth-table tbody tr \{[\s\S]*?display:\s*grid/);
+  assert.match(hoverPopCss, /\.axis-pick-group:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.axis-category-strip > button:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.sender-group-header:hover[\s\S]*?transform:\s*none/);
+  assert.match(hoverPopCss, /\.sector-selector button:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.impact-row\.selectable:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.mece-row:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.industry-breadth-table tbody tr:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.axis-pick-list button:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.analyst-table tbody tr:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.digest-panel \.digest-item:hover[\s\S]*?translateY\(-1px\)\s*scale\(1\.01\)/);
+  assert.match(hoverPopCss, /\.impact-read:hover[\s\S]*?transform:\s*none/);
+  assert.match(motionCss, /\.kanban-card:hover/);
+  assert.match(hoverPopCss, /\.axis-pick-list button:hover/);
+  assert.doesNotMatch(motionCss, /\.panel:hover,\s*\.kanban-card:hover/);
+  assert.doesNotMatch(motionCss, /\.axis-pick-list button:hover,\s*\.axis-category-strip > button:hover/);
   assert.match(visualCss, /border-radius:\s*var\(--radius\)/);
   assert.match(visualCss, /Last-wins rounded brutalist clip/);
   assert.match(visualCss, /\.collapsible-content[\s\S]*border-radius:\s*var\(--radius\)\s*!important/);
@@ -1852,7 +1869,7 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
 test("source freshness details reserve layout space above the sticky workspace navigation", async () => {
   const [visualComponents, visualCss] = await Promise.all([
     readFile(new URL("../app/dashboard/visual-components.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8"),
+    readJoined(VISUAL_CSS_CANDIDATES),
   ]);
 
   assert.match(visualComponents, /className="source-freshness-region"/);
@@ -1908,7 +1925,7 @@ test("Integrations is Settings chrome, not a seventh DailyKanbanBoard workspace"
     readFile(new URL("../app/dashboard/types.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/IntegrationsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readJoined(GLOBAL_CSS_CANDIDATES),
   ]);
 
   assert.match(utils, /key: "investment", label: "Portfolio Overview"/);
@@ -1969,7 +1986,7 @@ test("Settings / Integrations chrome omits dashboard masthead, tiles, and freshn
 });
 
 test("S-2 pulse orb cores keep KPI values inside the 12px rounded well", async () => {
-  const visualCss = await readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8");
+  const visualCss = await readJoined(VISUAL_CSS_CANDIDATES);
   const orb = visualCss.match(/\.pulse-orb \.orb-core\s*\{[\s\S]*?\n\}/);
   assert.ok(orb, "expected .pulse-orb .orb-core rule");
   assert.match(orb[0], /min-width:\s*88px/);

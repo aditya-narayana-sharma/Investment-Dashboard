@@ -37,6 +37,7 @@ import { TreeBrokerConfirm, type TreeBrokerDraft } from "./TreeBrokerConfirm";
 import { KpiRegistryPanel } from "./KpiRegistryPanel";
 import { TreeCanvas } from "./TreeCanvas";
 import "./algorithm-builder.css";
+import "./algorithm-builder-json.css";
 
 const DESKTOP_QUERY = "(min-width: 1080px)";
 const INTERVALS: CandleInterval[] = ["day", "week", "month"];

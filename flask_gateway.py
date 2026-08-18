@@ -297,6 +297,13 @@ def _lan_path_is_public() -> bool:
 
 @app.before_request
 def _require_paired_phone_on_lan() -> Response | None:
+    path = (request.path or "/").lstrip("/")
+    if _operator_only_proxy(path) and not _is_loopback_request():
+        return Response(
+            '{"error":"This action is only available on the author Mac."}',
+            status=403,
+            content_type="application/json",
+        )
     if _is_loopback_request() or _lan_path_is_public():
         return None
     if _authorized_health_post():
@@ -341,6 +348,17 @@ def _valid_health_snapshot(payload: object) -> bool:
     return True
 
 
+def _operator_only_proxy(path: str) -> bool:
+    method = (request.method or "").upper()
+    if path == "api/llm/complete" and method == "POST":
+        return True
+    if path == "api/license" and method in {"PUT", "PATCH"}:
+        return True
+    if path == "api/integrations" and method in {"PUT", "PATCH"}:
+        return True
+    return False
+
+
 def _upstream_url(path: str) -> str:
     target = urljoin(UPSTREAM, path)
     if request.query_string:
@@ -352,13 +370,20 @@ def _request_headers() -> dict[str, str]:
     headers: dict[str, str] = {}
     for key, value in request.headers.items():
         lowered = key.lower()
-        if lowered in HOP_BY_HOP_HEADERS or lowered in {"host", "content-length", "accept-encoding"}:
+        if lowered in HOP_BY_HOP_HEADERS or lowered in {
+            "host",
+            "content-length",
+            "accept-encoding",
+            "x-stratji-local-operator",
+        }:
             continue
         headers[key] = value
     headers["Accept-Encoding"] = "identity"
     headers["X-Forwarded-Host"] = request.host
     headers["X-Forwarded-Proto"] = request.scheme
     headers["X-Forwarded-For"] = request.remote_addr or ""
+    if _is_loopback_request():
+        headers["X-Stratji-Local-Operator"] = "1"
     return headers
 
 
@@ -730,6 +755,12 @@ def install() -> Response:
 @app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 def proxy(path: str) -> Response:
+    if _operator_only_proxy(path) and not _is_loopback_request():
+        return Response(
+            '{"error":"This action is only available on the author Mac."}',
+            status=403,
+            content_type="application/json",
+        )
     body = request.get_data(cache=False) if request.method not in {"GET", "HEAD"} else None
     upstream_request = UpstreamRequest(
         _upstream_url(path),

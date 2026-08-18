@@ -36,6 +36,7 @@ import {
   type HelpMode,
 } from "./BuilderHelpOverlay";
 import "./algorithm-builder.css";
+import "./algorithm-builder-json.css";
 
 const NODE_WIDTH = 176;
 const NODE_HEIGHT = 76;

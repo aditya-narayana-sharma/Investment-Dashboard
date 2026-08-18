@@ -328,12 +328,14 @@ test("palette includes COMPARATOR and canvas keeps click-to-connect handles", as
   assert.equal(close.kind, "kpi");
   assert.equal(close.params.kpiId, "close");
 
-  const [palette, builder, css, overlay] = await Promise.all([
+  const [palette, builder, canvasCss, jsonCss, overlay] = await Promise.all([
     readFile(new URL("../app/dashboard/builder/BuilderPalette.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/AlgorithmBuilder.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/algorithm-builder.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/builder/algorithm-builder-json.css", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/BuilderHelpOverlay.tsx", import.meta.url), "utf8"),
   ]);
+  const css = `${canvasCss}\n${jsonCss}`;
   assert.match(palette, /kind: "comparator"/);
   assert.match(palette, /COMPARATOR/);
   assert.match(builder, /beginLink/);

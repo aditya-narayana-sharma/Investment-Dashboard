@@ -210,13 +210,28 @@ export function llmAssistAvailability(secrets: LocalLlmSecrets): LlmAssistAvaila
   };
 }
 
+export const STRATJI_LOCAL_OPERATOR_HEADER = "x-stratji-local-operator";
+
+/**
+ * True only for the author Mac talking to Next.
+ *
+ * Flask sets X-Stratji-Local-Operator from TCP remote_addr (never from Host).
+ * A Flask hop without that header is not an operator even if Host is 127.0.0.1.
+ * Direct Next on localhost (no X-Forwarded-For) remains operator for local `next start`.
+ */
+export function isLocalOperatorRequest(request: Request): boolean {
+  const forwarded = (request.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() ?? "";
+  const operator = request.headers.get(STRATJI_LOCAL_OPERATOR_HEADER) === "1";
+  if (operator) {
+    return !forwarded || isLoopbackHost(forwarded);
+  }
+  if (forwarded) return false;
+  return isLoopbackHost(request.headers.get("host")) || isLoopbackHost(safeHostname(request.url));
+}
+
+/** @deprecated Use isLocalOperatorRequest. Host-OR loopback is not a secret gate. */
 export function isLoopbackRequest(request: Request): boolean {
-  const hosts = [
-    safeHostname(request.url),
-    request.headers.get("x-forwarded-host"),
-    request.headers.get("host"),
-  ];
-  return hosts.some((host) => isLoopbackHost(host));
+  return isLocalOperatorRequest(request);
 }
 
 function safeHostname(url: string): string {

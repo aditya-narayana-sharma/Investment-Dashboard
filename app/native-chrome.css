@@ -1,0 +1,130 @@
+/* Native chrome embed: Stratji overlay owns workspace tabs; WKWebView is full-height. */
+/* html.native-chrome-embed must not zero --section-nav-clearance — glass bar is an overlay, not a host. */
+
+html.native-chrome-embed,
+html[data-native-chrome],
+html.native-chrome-embed body,
+html[data-native-chrome] body{
+  min-height:100dvh;
+  margin:0;
+}
+/* nativeChrome hide allowlist: web masthead and in-page workspace tab bar.
+   Stratji.app owns the six-workspace liquid-glass overlay (auto-hidden).
+   Do not reserve padding-top for that overlay — WKWebView is full-height.
+   I-1–I-4 section navs stay visible. */
+html.native-chrome-embed .masthead,
+html[data-native-chrome] .masthead,
+.dashboard-app.native-chrome>.masthead{
+  display:none!important;
+  margin:0!important;
+  padding:0!important;
+  height:0!important;
+  min-height:0!important;
+  border:0!important;
+  overflow:hidden!important;
+}
+html.native-chrome-embed .dashboard-app,
+html[data-native-chrome] .dashboard-app,
+.dashboard-app.native-chrome{
+  width:100%;
+  max-width:none;
+  min-height:100dvh;
+  margin:0;
+  border:0;
+}
+.native-chrome-tools{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin:0 0 6px;
+  padding:4px 0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+html.native-chrome-embed .source-freshness-region,
+html[data-native-chrome] .source-freshness-region,
+.dashboard-app.native-chrome .source-freshness-region{
+  margin:0;
+}
+html.native-chrome-embed .workspace-panel,
+html[data-native-chrome] .workspace-panel,
+.dashboard-app.native-chrome .workspace-panel,
+html.native-chrome-embed .builder-workspace-shell,
+html[data-native-chrome] .builder-workspace-shell,
+html.native-chrome-embed .strategies-workspace-shell,
+html[data-native-chrome] .strategies-workspace-shell,
+html.native-chrome-embed .investment-workspace-shell,
+html[data-native-chrome] .investment-workspace-shell,
+html.native-chrome-embed .intelligence-workspace-shell,
+html[data-native-chrome] .intelligence-workspace-shell,
+html.native-chrome-embed .integrations-workspace,
+html[data-native-chrome] .integrations-workspace,
+html.native-chrome-embed .sector-workspace-shell,
+html[data-native-chrome] .sector-workspace-shell,
+html.native-chrome-embed .health-workspace-shell,
+html[data-native-chrome] .health-workspace-shell,
+html.native-chrome-embed .health-workspace-shell.health-full-workspace,
+html[data-native-chrome] .health-workspace-shell.health-full-workspace{
+  width:100%;
+  max-width:none;
+}
+html.native-chrome-embed .live-feed-actions .masthead-pdf,
+html[data-native-chrome] .live-feed-actions .masthead-pdf{
+  white-space:nowrap;
+}
+html.native-chrome-embed .dashboard-app>footer,
+html[data-native-chrome] .dashboard-app>footer,
+.dashboard-app.native-chrome>footer{
+  margin:8px 0 0;
+  padding:8px 0 0;
+  font-size:13px;
+}
+
+html.native-chrome-embed .dashboard-app,
+html[data-native-chrome] .dashboard-app,
+.dashboard-app.native-chrome {
+  display:flex;
+  flex-direction:column;
+  min-height:100dvh;
+  height:100dvh;
+}
+html.native-chrome-embed .workspace-panel,
+html[data-native-chrome] .workspace-panel,
+.dashboard-app.native-chrome .workspace-panel {
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:auto;
+}
+html.native-chrome-embed .workspace-panel > *,
+html[data-native-chrome] .workspace-panel > *,
+.dashboard-app.native-chrome .workspace-panel > * {
+  flex:1;
+  min-height:0;
+}
+
+html.native-chrome-embed .workspace-navigation.mode-dial,
+html[data-native-chrome] .workspace-navigation.mode-dial,
+.dashboard-app.native-chrome>.workspace-navigation.mode-dial {
+  display:none !important;
+  height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:0 !important;
+}
+
+/* LAST-WINS native reaffirm: overlay is not a host; keep section-nav clearance. */
+html.native-chrome-embed .workspace-section-nav,
+html[data-native-chrome] .workspace-section-nav,
+html.native-chrome-embed .intelligence-section-nav,
+html[data-native-chrome] .intelligence-section-nav {
+  margin-bottom: var(--section-nav-clearance);
+}
+html.native-chrome-embed .workspace-section .section-heading,
+html[data-native-chrome] .workspace-section .section-heading {
+  margin-top: var(--section-nav-clearance);
+}

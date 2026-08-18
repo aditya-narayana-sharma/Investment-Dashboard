@@ -122,7 +122,6 @@ export const healthSources = [
   { source: "Apple Health", status: "Read", detail: "Direct 16 Jul Activity, Nutrition, Sleep, Heart, Mobility and Respiratory Rate records were read through iPhone Mirroring/screenshots, including Health chart weekly/monthly comparisons where displayed.", tone: "green" },
   { source: "Lifesum", status: "Read", detail: "15 Jul: 731 kcal consumed; carbs 77/378 g, protein 12/151 g, fat 44/101 g, water 3.5 L; 6,285 steps and 741 active kcal imported from Apple Health", tone: "green" },
   { source: "Guava", status: "Synced", detail: "15 Jul: HRV 45.1 ms, resting HR 72 bpm and sleep 6h 16m; stage detail shows 52m deep, 35m REM and 1h 29m awake. Sleep total differs from the direct Apple Health view.", tone: "amber" },
-  { source: " Health Daily Note", status: "Read", detail: "The complete 16 Jul entry includes 4.08 km/h walking speed, 9,619 steps and 51 workout minutes. It is an earlier shortcut snapshot; later direct Apple Health totals take precedence where they differ.", tone: "green" },
 ];
 
 export const healthActions = [

@@ -4,7 +4,16 @@ import { PwaRuntime } from "./pwa-runtime";
 import { readDashboardLicense } from "./license-server";
 import { LicenseSnapshotProvider } from "./license-snapshot";
 import "./globals.css";
+import "./globals-investment.css";
+import "./globals-sectors.css";
+import "./globals-health.css";
+import "./appearance-themes.css";
+import "./appearance-sepia.css";
 import "./visual-overhaul.css";
+import "./visual-overhaul-instruments.css";
+import "./visual-overhaul-sepia.css";
+import "./dashboard/hover-pop.css";
+import "./native-chrome.css";
 
 export const dynamic = "force-dynamic";
 

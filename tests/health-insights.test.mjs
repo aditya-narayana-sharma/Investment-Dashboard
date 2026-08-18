@@ -33,7 +33,7 @@ test("Health workspace inlines Insights, Guidance and Guardrails into Daily Opti
   assert.match(workspaceSource, /<h3>Guidance<\/h3>/);
   assert.match(workspaceSource, /Livity \/ iPhone Mirroring unavailable/);
   assert.match(workspaceSource, /enrichHealthGuidanceActions/);
-  assert.match(workspaceSource, /parseHealthDailyNoteStats/);
+  assert.doesNotMatch(workspaceSource, /parseHealthDailyNoteStats/);
   assert.match(workspaceSource, /Daily Optimism/);
   assert.match(workspaceSource, /TODAY’S HEALTH BRIEF/);
   assert.match(workspaceSource, /route\.section === "h3" && pages\.length > 1/);

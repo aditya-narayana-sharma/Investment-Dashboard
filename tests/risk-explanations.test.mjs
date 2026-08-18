@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  GLOBAL_CSS_CANDIDATES,
+  INVESTMENT_SOURCE_CANDIDATES,
+  VISUAL_CSS_CANDIDATES,
+  readJoined,
+} from "./helpers/algorithm-canvas.mjs";
 import test from "node:test";
 import { portfolioRiskProfiles, riskAxes } from "../app/portfolio-data.ts";
 import { buildRiskExplanation, riskScoreBand } from "../app/risk-explanations.ts";
 
-const workspacePath = new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url);
-const cssPath = new URL("../app/globals.css", import.meta.url);
-const visualCssPath = new URL("../app/visual-overhaul.css", import.meta.url);
 const utilsPath = new URL("../app/dashboard/utils.ts", import.meta.url);
 
 test("selected-company explanations switch without including unselected companies", () => {
@@ -69,9 +72,9 @@ test("generated bullets avoid probability and investment-advice claims", () => {
 
 test("risk panel uses selected tab semantics and remains content-sized", async () => {
   const [workspace, css, visualCss, utils] = await Promise.all([
-    readFile(workspacePath, "utf8"),
-    readFile(cssPath, "utf8"),
-    readFile(visualCssPath, "utf8"),
+    readJoined(INVESTMENT_SOURCE_CANDIDATES),
+    readJoined(GLOBAL_CSS_CANDIDATES),
+    readJoined(VISUAL_CSS_CANDIDATES),
     readFile(utilsPath, "utf8"),
   ]);
 

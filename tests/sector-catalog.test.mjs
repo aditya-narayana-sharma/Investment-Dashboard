@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { sectorCatalogIds as catalogModuleIds, SECTOR_CATALOG } from "../app/sector-catalog.ts";
 import { sectorCompanies, sectorUniverseLabels } from "../app/sector-company-data.ts";
 import { alignSectorImpactRows, lifeCyclePoints, marketStructurePoints, sectorImpactExtras } from "../app/sector-analytics-data.ts";
 import { sectorCatalogIds, sectors } from "../app/sector-data.ts";
@@ -10,6 +11,11 @@ const catalogNames = Object.fromEntries(sectors.map((sector) => [sector.id, sect
 
 test("S-2 Industry Selection, S-2A impact matrix, and S-3 share one industry catalog", async () => {
   assert.deepEqual(catalogIds, sectorCatalogIds);
+  assert.deepEqual(sectorCatalogIds, catalogModuleIds);
+  assert.deepEqual(
+    SECTOR_CATALOG.map((sector) => sector.id),
+    catalogIds,
+  );
   assert.ok(catalogIds.includes("it"));
   assert.equal(catalogNames.it, "IT / Tech");
   assert.ok(catalogIds.includes("metals"));
@@ -40,7 +46,7 @@ test("S-2 Industry Selection, S-2A impact matrix, and S-3 share one industry cat
     assert.ok((sectorCompanies[id] ?? []).length > 0, `${id} missing company universe`);
     assert.ok(sectorUniverseLabels[id], `${id} missing universe label`);
     assert.match(utils, new RegExp(`^\\s+${id}: \\[`, "m"), `${id} missing search terms`);
-    assert.match(newsServer, new RegExp(`\\["${id}",`), `${id} missing news matcher`);
+    assert.match(newsServer, new RegExp(`^\\s+${id}: /`, "m"), `${id} missing news matcher`);
     assert.ok(lifeCyclePoints.some((point) => point.id === id), `${id} missing life-cycle anchor`);
     assert.ok(marketStructurePoints.some((point) => point.id === id), `${id} missing market-structure anchor`);
   }
@@ -77,4 +83,16 @@ test("native S-2 catalog matches the web industry ids and labels", async () => {
     nativeEntries,
     sectors.map((sector) => [sector.id, sector.name]),
   );
+});
+
+test("splash refresh SECTORS covers every catalog id including it and metals", async () => {
+  const refresh = await readFile(new URL("../scripts/refresh-dashboard-data.sh", import.meta.url), "utf8");
+  const match = refresh.match(/^SECTORS=\(([^)]+)\)/m);
+  assert.ok(match, "refresh-dashboard-data.sh must declare SECTORS=(...)");
+  const refreshIds = match[1].trim().split(/\s+/);
+  for (const id of catalogIds) {
+    assert.ok(refreshIds.includes(id), `SECTORS missing ${id}`);
+  }
+  assert.ok(refreshIds.includes("it"));
+  assert.ok(refreshIds.includes("metals"));
 });

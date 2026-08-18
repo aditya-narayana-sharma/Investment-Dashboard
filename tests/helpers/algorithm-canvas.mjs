@@ -1,5 +1,33 @@
 import { access, readFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, readFileSync } from "node:fs";
+
+const app = (relative) => new URL(`../../app/${relative}`, import.meta.url);
+
+export const GLOBAL_CSS_CANDIDATES = [
+  app("globals.css"),
+  app("globals-investment.css"),
+  app("globals-sectors.css"),
+  app("globals-health.css"),
+  app("appearance-themes.css"),
+  app("appearance-sepia.css"),
+];
+
+export const VISUAL_CSS_CANDIDATES = [
+  app("visual-overhaul.css"),
+  app("visual-overhaul-instruments.css"),
+  app("visual-overhaul-sepia.css"),
+];
+
+export const INVESTMENT_SOURCE_CANDIDATES = [
+  app("dashboard/InvestmentWorkspace.tsx"),
+  app("dashboard/InvestmentPanels.tsx"),
+];
+
+export const INTELLIGENCE_SOURCE_CANDIDATES = [
+  app("dashboard/IntelligenceWorkspace.tsx"),
+  app("dashboard/IntelligenceDigest.tsx"),
+  app("dashboard/IntelligenceEarnings.tsx"),
+];
 
 export const BUILDER_WORKSPACE_CANDIDATES = [
   new URL("../../app/dashboard/BuilderWorkspace.tsx", import.meta.url),
@@ -38,6 +66,16 @@ export async function readOptional(url) {
 export async function readJoined(urls) {
   const parts = await Promise.all(urls.map((url) => readOptional(url)));
   return parts.filter(Boolean).join("\n");
+}
+
+export function readJoinedSync(urls) {
+  return urls.map((url) => {
+    try {
+      return readFileSync(url, "utf8");
+    } catch {
+      return "";
+    }
+  }).filter(Boolean).join("\n");
 }
 
 export async function firstExisting(urls) {

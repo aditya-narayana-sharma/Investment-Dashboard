@@ -1,0 +1,324 @@
+/* Hover-pop allowlist / denylist and WKWebView table isolation. */
+.vo-pop:hover,
+.vo-pop:focus-visible,
+.kanban-card:hover,
+.kanban-board[data-visual="mission-chips"] .kanban-card:hover,
+.pulse-constellation .pulse-node:hover,
+.pulse-constellation .pulse-node:focus-visible,
+.strategy-card:hover,
+.strategy-card:focus-visible,
+.workspace-section-nav button:hover,
+.workspace-section-nav button:focus-visible,
+.intelligence-section-nav button:hover,
+.intelligence-section-nav button:focus-visible,
+.macro-dial-chips > div:hover,
+.sector-page-nav > div button:hover,
+.sector-page-nav > div button:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--brutalist-shadow-lg);
+}
+/* Whole panels, matrices, charts, lanes, collapsibles, digest chrome, and
+   Axis/BUY group wrappers stay still. Hover-pop belongs on rows and cards. */
+.panel:hover,
+.masthead:hover,
+.kanban-summary:hover,
+.kanban-lane:hover,
+.kanban-board:hover,
+.collapsible-section:hover,
+.collapsible-section .collapsible-heading:hover,
+.collapsible-section .section-heading:hover,
+.collapse-button:hover,
+.collapse-button:focus-visible,
+.collapsible-content:hover,
+.workspace-section:hover,
+.chart-panel:hover,
+.nested-chart-panel:hover,
+.macro-chart-panel:hover,
+.mece-panel:hover,
+.impact-matrix-panel:hover,
+.digest-panel:hover,
+.intelligence-feed-section:hover,
+.table-scroll:hover,
+.holdings-panel:hover,
+.analyst-matrix:hover,
+.analyst-group-block:hover,
+.analyst-group-header:hover,
+.analyst-group-header:focus-visible,
+.axis-workbench:hover,
+.axis-visual-grid:hover,
+.axis-pick-group:hover,
+.axis-pick-group-title:hover,
+.axis-pick-list:hover,
+.axis-category-strip:hover,
+.axis-category-strip > div:hover,
+.axis-category-strip > button:hover,
+.axis-category-strip > button:focus-visible,
+.axis-audit-strip:hover,
+.pill:hover,
+.scenario-shell:hover,
+.risk-panel:hover,
+.metrics-strip:hover,
+.metrics-strip article:hover,
+.portfolio-management-card:hover,
+.sender-group:hover,
+.sender-group-header:hover,
+.sender-group-collapsible > summary:hover,
+.health-direction-row:hover,
+.health-direction-header:hover,
+.health-direction-header:focus-visible,
+.health-organ-portal:hover,
+.health-organ-portal:focus-visible {
+  transform: none;
+}
+.sector-selector,
+.impact-matrix,
+.mece-matrix,
+.industry-breadth-table,
+.industry-breadth-table tbody,
+.axis-pick-list,
+.digest-panel .digest-list {
+  isolation: isolate;
+}
+.analyst-table,
+.industry-breadth-table table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.sector-selector button,
+.impact-row.selectable,
+.mece-row,
+.industry-breadth-table tbody tr,
+.axis-pick-list button,
+.analyst-table tbody tr,
+.digest-panel .digest-item {
+  position: relative;
+  transform-origin: center center;
+  transition:
+    transform var(--vo-motion) var(--vo-ease),
+    box-shadow var(--vo-motion) var(--vo-ease),
+    filter var(--vo-motion) var(--vo-ease),
+    opacity var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    background-color var(--vo-motion) var(--vo-ease);
+}
+.sector-selector button:hover,
+.sector-selector button:focus-visible,
+.impact-row.selectable:hover,
+.impact-row.selectable:focus-visible,
+.mece-row:hover,
+.mece-row:focus-visible,
+.industry-breadth-table tbody tr:hover,
+.axis-pick-list button:hover,
+.axis-pick-list button:focus-visible,
+.analyst-table tbody tr:hover,
+.digest-panel .digest-item:hover {
+  z-index: 2;
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: var(--brutalist-shadow);
+}
+/* WKWebView promotes transform on display:table-row to the whole table, so a
+   tbody tr:hover scale lifts thead + every ticker together. Give each Axis row
+   its own box; freeze the matrix card, BUY headers, table chrome, and cells. */
+.panel.analyst-matrix:hover,
+.analyst-matrix:hover,
+.analyst-matrix .panel-title:hover,
+.analyst-matrix-controls:hover,
+.analyst-matrix .llm-assist-anchor:hover,
+.analyst-matrix .table-scroll:hover,
+.analyst-matrix .analyst-table:hover,
+.analyst-matrix .analyst-table thead:hover,
+.analyst-matrix .analyst-table thead tr:hover,
+.analyst-matrix .analyst-table thead th:hover,
+.analyst-matrix .analyst-table tbody:hover,
+.analyst-matrix .analyst-group-block:hover,
+.analyst-matrix .analyst-group-header:hover,
+.analyst-matrix .analyst-group-header:focus-visible,
+.analyst-matrix .table-note:hover {
+  transform: none !important;
+  filter: none !important;
+}
+.panel.analyst-matrix:hover,
+.analyst-matrix:hover {
+  box-shadow: var(--brutalist-shadow) !important;
+}
+.analyst-matrix .analyst-group-header:hover,
+.analyst-matrix .analyst-table:hover,
+.analyst-matrix .analyst-table thead:hover,
+.analyst-matrix .analyst-table thead tr:hover,
+.analyst-matrix .analyst-table tbody:hover,
+.analyst-matrix .table-scroll:hover {
+  box-shadow: none !important;
+}
+.analyst-matrix .analyst-table tbody tr:hover td,
+.analyst-matrix .analyst-table tbody tr:hover .pill,
+.analyst-matrix .analyst-table .pill:hover,
+.analyst-matrix .analyst-table .pill:focus-visible,
+.analyst-matrix .thesis-bullet-list:hover,
+.analyst-matrix .thesis-bullet-list li:hover {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Same WKWebView table-row isolation for S-2 industry breadth. */
+.industry-breadth-table:hover,
+.industry-breadth-table table:hover,
+.industry-breadth-table thead:hover,
+.industry-breadth-table thead tr:hover,
+.industry-breadth-table thead th:hover,
+.industry-breadth-table tbody:hover {
+  transform: none !important;
+  filter: none !important;
+}
+.industry-breadth-table:hover,
+.industry-breadth-table table:hover,
+.industry-breadth-table thead:hover,
+.industry-breadth-table thead tr:hover,
+.industry-breadth-table tbody:hover {
+  box-shadow: none !important;
+}
+.industry-breadth-table tbody tr:hover td,
+.industry-breadth-table tbody tr:hover .pill,
+.industry-breadth-table .pill:hover,
+.industry-breadth-table .pill:focus-visible {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+@media (min-width: 621px) {
+  .analyst-matrix,
+  .analyst-matrix .table-scroll {
+    overflow: visible;
+  }
+  .analyst-matrix .analyst-table,
+  .analyst-matrix .analyst-table thead,
+  .analyst-matrix .analyst-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .analyst-matrix .analyst-table thead tr,
+  .analyst-matrix .analyst-table tbody tr {
+    display: grid;
+    width: 100%;
+    grid-template-columns:
+      minmax(7.5rem, 0.9fr)
+      minmax(9rem, 1.3fr)
+      6.5rem
+      minmax(6.25rem, 0.7fr)
+      minmax(6.25rem, 0.7fr)
+      minmax(6.5rem, 0.75fr)
+      5.5rem
+      minmax(10rem, 1.55fr);
+    align-items: stretch;
+  }
+  .analyst-matrix .analyst-table thead tr,
+  .analyst-matrix .analyst-table thead tr:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .analyst-matrix .analyst-table tbody tr {
+    isolation: isolate;
+  }
+  .analyst-matrix .analyst-table th,
+  .analyst-matrix .analyst-table td {
+    min-width: 0;
+  }
+  .industry-breadth-table table,
+  .industry-breadth-table thead,
+  .industry-breadth-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .industry-breadth-table thead tr,
+  .industry-breadth-table tbody tr {
+    display: grid;
+    width: 100%;
+    grid-template-columns:
+      minmax(7.5rem, 1.3fr)
+      minmax(5rem, 0.7fr)
+      minmax(5.5rem, 0.75fr)
+      minmax(4.5rem, 0.55fr)
+      minmax(5.5rem, 0.7fr)
+      minmax(5.5rem, 0.7fr)
+      minmax(4.5rem, 0.6fr)
+      minmax(5rem, 0.7fr);
+    align-items: stretch;
+  }
+  .industry-breadth-table thead tr,
+  .industry-breadth-table thead tr:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .industry-breadth-table tbody tr {
+    isolation: isolate;
+  }
+  .industry-breadth-table th,
+  .industry-breadth-table td {
+    min-width: 0;
+  }
+}
+.impact-row.selectable.selected:hover,
+.impact-row.selectable.selected:focus-visible,
+.mece-row.selected:hover,
+.mece-row.selected:focus-visible {
+  box-shadow: inset 4px 0 var(--sector), var(--brutalist-shadow);
+}
+.impact-matrix-panel .analytics-subhead,
+.mece-panel > .panel-title,
+.impact-row.impact-head {
+  position: relative;
+  z-index: 3;
+}
+.impact-row.impact-head:hover,
+.impact-read,
+.impact-read:hover,
+.mece-row > .mece-cell,
+.mece-row > .mece-cell:hover {
+  transform: none;
+  box-shadow: none;
+}
+.workspace-navigation.glass-bar .workspace-tabs button:hover,
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible {
+  box-shadow: none;
+  animation: none;
+  transform: scale(1.05);
+  transform-origin: center bottom;
+}
+.workspace-navigation.glass-bar .workspace-tabs button:active {
+  box-shadow: none;
+  animation: none;
+  transform: scale(0.99);
+  transform-origin: center bottom;
+}
+.live-feed-actions a,
+.live-feed-actions button,
+.live-feed-actions .masthead-pdf,
+.live-feed-actions a:hover,
+.live-feed-actions a:focus-visible,
+.live-feed-actions a:active,
+.live-feed-actions button:hover,
+.live-feed-actions button:focus-visible,
+.live-feed-actions button:active {
+  transform: none !important;
+  animation: none !important;
+}
+.llm-assist textarea,
+.llm-assist-composer,
+.llm-assist-run {
+  transition:
+    box-shadow var(--vo-motion) var(--vo-ease),
+    transform var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    background-color var(--vo-motion) var(--vo-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .llm-assist textarea:hover:not(:disabled),
+  .llm-assist textarea:focus-visible:not(:disabled),
+  .llm-assist-composer:hover:not(:disabled),
+  .llm-assist-composer:focus-visible:not(:disabled),
+  .llm-assist-run:hover:not(:disabled),
+  .llm-assist-run:focus-visible:not(:disabled) {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--llm-accent, var(--blue)) 45%, transparent);
+  }
+}

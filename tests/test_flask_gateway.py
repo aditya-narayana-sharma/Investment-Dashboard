@@ -14,6 +14,20 @@ from unittest.mock import patch
 import flask_gateway
 
 
+def _request_header(upstream_request, name: str) -> str | None:
+    target = name.lower()
+    if hasattr(upstream_request, "header_items"):
+        for key, value in upstream_request.header_items():
+            if key.lower() == target:
+                return value
+    headers = getattr(upstream_request, "headers", {})
+    if hasattr(headers, "items"):
+        for key, value in headers.items():
+            if str(key).lower() == target:
+                return value
+    return None
+
+
 class FakeUpstream:
     def __init__(self, body: bytes, status: int = 200, headers: dict[str, str] | None = None):
         self._body = io.BytesIO(body)
@@ -77,6 +91,59 @@ class FlaskGatewayTests(unittest.TestCase):
         self.assertEqual(upstream_request.full_url, "http://127.0.0.1:3000/api/llm/complete")
         self.assertEqual(upstream_request.data, body)
         self.assertEqual(response.headers["X-Portfolio-Gateway"], "Flask")
+        self.assertEqual(_request_header(upstream_request, "X-Stratji-Local-Operator"), "1")
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_cannot_post_llm_complete(self, mocked_urlopen):
+        response = self.client.post(
+            "/api/llm/complete",
+            data=b'{"task":"composite","prompt":"top picks"}',
+            content_type="application/json",
+            environ_base={"REMOTE_ADDR": "100.64.1.9"},
+        )
+        mocked_urlopen.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", Path(directory) / "pairings.json"):
+                code = self.client.post("/_health/pair/code").get_json()["code"]
+                token = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-llm-install",
+                    "label": "LAN iPhone",
+                }, environ_base={"REMOTE_ADDR": "100.64.1.9"}).get_json()["token"]
+                paired = self.client.post(
+                    "/api/llm/complete",
+                    data=b'{"task":"composite","prompt":"top picks"}',
+                    content_type="application/json",
+                    headers={"Authorization": f"Bearer {token}"},
+                    environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                )
+        mocked_urlopen.assert_not_called()
+        self.assertEqual(paired.status_code, 403)
+
+    @patch("flask_gateway.urlopen")
+    def test_strips_spoofed_operator_header_on_lan(self, mocked_urlopen):
+        mocked_urlopen.return_value = FakeUpstream(b"<html>ok</html>", headers={"Content-Type": "text/html"})
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", Path(directory) / "pairings.json"):
+                code = self.client.post("/_health/pair/code").get_json()["code"]
+                token = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-spoof-install",
+                    "label": "LAN iPhone",
+                }, environ_base={"REMOTE_ADDR": "100.64.1.9"}).get_json()["token"]
+                self.client.get(
+                    "/",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "X-Stratji-Local-Operator": "1",
+                    },
+                    environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                )
+        upstream_request = mocked_urlopen.call_args.args[0]
+        self.assertIsNone(_request_header(upstream_request, "X-Stratji-Local-Operator"))
+        self.assertEqual(_request_header(upstream_request, "X-Forwarded-For"), "100.64.1.9")
 
     @patch("flask_gateway.urlopen")
     def test_health_reports_upstream_state(self, mocked_urlopen):

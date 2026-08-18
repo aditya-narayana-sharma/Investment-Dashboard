@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { GLOBAL_CSS_CANDIDATES, VISUAL_CSS_CANDIDATES, readJoinedSync } from "./helpers/algorithm-canvas.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { healthCategories } from "../app/health-data.ts";
@@ -9,7 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const utilsSource = readFileSync(join(root, "app/dashboard/utils.ts"), "utf8");
 const sharedUiSource = readFileSync(join(root, "app/dashboard/shared-ui.tsx"), "utf8");
 const workspaceSource = readFileSync(join(root, "app/dashboard/HealthWorkspace.tsx"), "utf8");
-const globalCss = readFileSync(join(root, "app/globals.css"), "utf8");
+const globalCss = readJoinedSync(GLOBAL_CSS_CANDIDATES);
 
 test("direction helpers and category accents are exported from utils", () => {
   assert.match(utilsSource, /export function healthMetricDirectionBucket/);
@@ -71,7 +72,7 @@ test("Vital Metrics UI uses three collapsible direction rows with category colou
 
 test("SparkFilament renders from per-metric history and has no hardcoded shared path", () => {
   const visualSource = readFileSync(join(root, "app/dashboard/visual-components.tsx"), "utf8");
-  const overhaulCss = readFileSync(join(root, "app/visual-overhaul.css"), "utf8");
+  const overhaulCss = readJoinedSync(VISUAL_CSS_CANDIDATES);
   assert.match(visualSource, /export function sparkFilamentPath/);
   assert.match(visualSource, /export function sparkFilamentPoints/);
   assert.match(visualSource, /export function SparkFilament/);

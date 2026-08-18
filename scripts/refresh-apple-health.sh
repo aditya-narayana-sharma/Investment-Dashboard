@@ -61,6 +61,17 @@ import_health_shortcut_if_present() {
       return 0
     fi
   done
+  return 1
+}
+
+run_apple_health_import() {
+  PYTHONPYCACHEPREFIX=/tmp/portfolio-health-pycache /usr/bin/python3 \
+    "$ROOT_DIR/scripts/import_apple_health.py" \
+    --xml "$XML_PATH" \
+    --db "$DB_PATH" \
+    --snapshot "$SNAPSHOT_PATH" \
+    --archive-state "$ARCHIVE_STATE" \
+    --overrides "$OVERRIDES_PATH"
 }
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -76,6 +87,10 @@ trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
 if [[ "$IF_CHANGED" == "1" ]] && health_export_unchanged; then
   printf 'Apple Health export unchanged; skipped re-extract.\n'
+  if import_health_shortcut_if_present; then
+    mkdir -p "$ROOT_DIR/artifacts/private" /tmp/portfolio-health-pycache
+    run_apple_health_import
+  fi
   exit 0
 fi
 
@@ -91,12 +106,6 @@ if [[ ! -f "$XML_PATH" ]]; then
   exit 1
 fi
 
-import_health_shortcut_if_present
+import_health_shortcut_if_present || true
 
-PYTHONPYCACHEPREFIX=/tmp/portfolio-health-pycache /usr/bin/python3 \
-  "$ROOT_DIR/scripts/import_apple_health.py" \
-  --xml "$XML_PATH" \
-  --db "$DB_PATH" \
-  --snapshot "$SNAPSHOT_PATH" \
-  --archive-state "$ARCHIVE_STATE" \
-  --overrides "$OVERRIDES_PATH"
+run_apple_health_import

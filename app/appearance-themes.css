@@ -1,0 +1,798 @@
+/* Appearance contrast bridge and sepia paperization (part 1) */
+/* ——— Appearance contrast bridge: theme tokens for chrome, digests, tables ——— */
+.source-freshness-strip>div { border-color:var(--line); }
+.source-freshness-strip b { color:var(--ink); }
+.source-freshness-strip small { color:var(--muted); }
+.metrics-strip article { border-color:var(--line); }
+.metrics-strip b { color:var(--ink); }
+.metrics-strip span,.metrics-strip small { color:var(--muted); }
+.portfolio-management-heading,
+.portfolio-management-card,
+.portfolio-management-sources,
+.signal,.market-ticker,
+.kanban-summary,.kanban-lane { border-color:var(--line); }
+.portfolio-management-heading b,
+.portfolio-management-card>b,
+.signal b { color:var(--ink); }
+.portfolio-management-heading small,
+.portfolio-management-card>span,
+.portfolio-management-card small,
+.portfolio-management-sources { color:var(--muted); }
+.workspace-tabs button { color:rgba(248,250,252,0.86); background:transparent; border-color:transparent; }
+.workspace-tabs button:hover { border-color:transparent; background:transparent; color:#fff; }
+.workspace-tabs button.active { color:#fff; background:transparent; }
+.segmented button { color:var(--muted); }
+.segmented button.active { color:#fff; }
+th { background:var(--bg-table-head); color:var(--ink); border-bottom-color:var(--line); }
+tbody tr:nth-child(even) td { background:color-mix(in srgb,var(--bg-panel) 88%, var(--bg-elevated)); }
+tbody tr:hover td { background:var(--bg-hover); }
+td { color:var(--ink); border-color:var(--line); }
+.panel-title,.panel-title h3 { color:var(--ink); }
+.topic-feed section { background:var(--bg-elevated); border-color:var(--line); color:var(--ink); }
+.topic-feed h4 { color:var(--ink); }
+.topic-feed h4 span { color:var(--blue); }
+.topic-feed p,.topic-feed-item { color:var(--ink); border-top-color:var(--line); }
+.topic-feed-item strong { color:var(--ink); }
+.topic-feed p small,.topic-feed-item strong small { color:var(--muted); }
+.digest-empty { padding:20px; color:var(--muted); text-align:center; }
+.pulse-constellation .pulse-node b { color:var(--ink); }
+.pulse-constellation .pulse-node small { color:var(--muted); }
+.earnings-month-calendar.earnings-observatory {
+  background:
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, #6366f1 16%, transparent), transparent 35%),
+    radial-gradient(circle at 80% 70%, color-mix(in srgb, #a855f7 10%, transparent), transparent 30%),
+    var(--bg-app);
+}
+.earnings-result-telemetry td.sealed::after {
+  color:var(--muted);
+  background:repeating-linear-gradient(-45deg, var(--bg-panel), var(--bg-panel) 4px, var(--bg-elevated) 4px, var(--bg-elevated) 8px);
+}
+/* ——— Sepia: paperize all dark #0…/#1… chrome islands ——— */
+html[data-appearance="sepia"] .live-feed-banner {
+  background:color-mix(in srgb, var(--green) 12%, var(--bg-panel));
+  border-color:color-mix(in srgb, var(--green) 45%, var(--line));
+}
+html[data-appearance="sepia"] .live-feed-banner b { color:var(--ink); }
+html[data-appearance="sepia"] .live-feed-banner small { color:color-mix(in srgb, var(--green) 55%, var(--ink)); }
+
+/* Control chrome exceptions (high-contrast buttons / selected states) */
+html[data-appearance="sepia"] .workspace-tabs {
+  background:
+    linear-gradient(180deg, rgba(255,248,235,0.48) 0%, rgba(255,236,205,0.16) 36%, rgba(90,68,42,0.14) 100%),
+    rgba(92, 68, 40, 0.22);
+  border-color: rgba(255, 236, 205, 0.42);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,248,235,0.7),
+    inset 0 -0.5px 0 rgba(90,62,32,0.12),
+    0 10px 28px rgba(70, 48, 20, 0.16);
+}
+html[data-appearance="sepia"] .workspace-tabs::after {
+  background: linear-gradient(180deg, rgba(255,248,235,0.55) 0%, rgba(255,248,235,0.08) 22%, transparent 48%);
+  opacity:0.8;
+}
+html[data-appearance="sepia"] .workspace-tabs::before {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--glass-tint) 38%, rgba(255,248,235,0.82)) 0%,
+      color-mix(in srgb, var(--glass-tint) 52%, rgba(255,236,205,0.42)) 100%);
+  border-color: color-mix(in srgb, var(--glass-tint) 28%, rgba(255,248,235,0.62));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    0 6px 16px color-mix(in srgb, var(--glass-tint) 22%, rgba(70, 48, 20, 0.14));
+}
+html[data-appearance="sepia"] .workspace-tabs button {
+  background:transparent;
+  color:color-mix(in srgb, var(--ink) 88%, transparent);
+  border:0;
+  box-shadow:none;
+}
+html[data-appearance="sepia"] .workspace-tabs button:hover {
+  background:transparent;
+  color:var(--ink);
+  border:0;
+}
+html[data-appearance="sepia"] .workspace-tabs em {
+  background:transparent;
+  color:var(--ink);
+  border:0;
+}
+html[data-appearance="sepia"] .workspace-tabs button.active {
+  background:transparent;
+  border:0;
+  color:var(--ink);
+  box-shadow:none;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"],
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
+  background:transparent;
+  border:0;
+  box-shadow:none;
+}
+html[data-appearance="sepia"] .workspace-tabs button.active>svg,
+html[data-appearance="sepia"] .workspace-tabs button.active em { color:var(--ink); }
+html[data-appearance="sepia"] .workspace-tabs button.active em {
+  background:transparent;
+  border:0;
+}
+html[data-appearance="sepia"] .section-heading>span {
+  background:var(--btn-bg);
+  color:var(--btn-fg);
+  border-color:var(--btn-border);
+}
+html[data-appearance="sepia"] .digest-show-all,
+html[data-appearance="sepia"] .digest-show-more {
+  color:var(--btn-fg);
+  background:var(--btn-bg);
+  border-color:var(--btn-border);
+}
+/* Paper-first page/section navs (Decision Lab + S-2 + Health): black text on cream */
+html[data-appearance="sepia"] .sector-page-nav {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-page-nav>button {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-page-nav>div button {
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .sector-page-nav>div button i {
+  background:var(--ink);
+}
+html[data-appearance="sepia"] .sector-page-nav>div button.active {
+  background:color-mix(in srgb, var(--blue) 14%, var(--bg-hover));
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .sector-page-nav>div button.active i {
+  background:var(--blue);
+}
+
+/* Workspace / Intelligence sticky section navs → paper + black */
+html[data-appearance="sepia"] .workspace-section-nav,
+html[data-appearance="sepia"] .intelligence-section-nav {
+  background:var(--line);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .workspace-section-nav button,
+html[data-appearance="sepia"] .intelligence-section-nav button {
+  background:var(--bg-panel);
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .workspace-section-nav button span,
+html[data-appearance="sepia"] .intelligence-section-nav button span {
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .workspace-section-nav button.active,
+html[data-appearance="sepia"] .intelligence-section-nav button.active {
+  background:var(--bg-hover);
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .workspace-section-nav button:focus-visible,
+html[data-appearance="sepia"] .intelligence-section-nav button:focus-visible {
+  outline-color:var(--ink);
+}
+
+/* Paper panel titles + shared ink */
+html[data-appearance="sepia"] .panel-title,
+html[data-appearance="sepia"] .panel-title h3,
+html[data-appearance="sepia"] .mece-panel>.panel-title,
+html[data-appearance="sepia"] .mece-panel>.panel-title h3,
+html[data-appearance="sepia"] .sector-news-title,
+html[data-appearance="sepia"] .sector-news-title h3,
+html[data-appearance="sepia"] .analytics-subhead,
+html[data-appearance="sepia"] .analytics-subhead b,
+html[data-appearance="sepia"] .analytics-subhead span,
+html[data-appearance="sepia"] .analytics-subhead em,
+html[data-appearance="sepia"] .kanban-summary b,
+html[data-appearance="sepia"] .kanban-card,
+html[data-appearance="sepia"] .kanban-card strong { color:var(--ink); }
+html[data-appearance="sepia"] .panel-title p,
+html[data-appearance="sepia"] .mece-panel>.panel-title p,
+html[data-appearance="sepia"] .kanban-summary small,
+html[data-appearance="sepia"] .kanban-card p,
+html[data-appearance="sepia"] .kanban-empty { color:var(--muted); }
+
+/* Hardcoded gray/blue-gray body copy → black on paper (bypass tokens) */
+html[data-appearance="sepia"] .status-panel small,
+html[data-appearance="sepia"] .portfolio-management-heading small,
+html[data-appearance="sepia"] .workspace-tabs button:not(.active) small,
+html[data-appearance="sepia"] .bubble-axis-legend small,
+html[data-appearance="sepia"] .impact-row .signal::after,
+html[data-appearance="sepia"] .eyebrow { color:var(--ink) !important; }
+
+/* Chart / allocation / risk panels → paper (incl. nested orbital) */
+html[data-appearance="sepia"] .nested-chart-panel,
+html[data-appearance="sepia"] .chart-panel,
+html[data-appearance="sepia"] .macro-chart-panel,
+html[data-appearance="sepia"] .exposure-composition-panel,
+html[data-appearance="sepia"] .risk-panel {
+  background:var(--bg-panel) !important;
+  color:var(--ink);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .nested-chart-panel .panel-title,
+html[data-appearance="sepia"] .nested-chart-panel .panel-title h3,
+html[data-appearance="sepia"] .nested-chart-panel .panel-title svg,
+html[data-appearance="sepia"] .chart-panel .panel-title,
+html[data-appearance="sepia"] .chart-panel .panel-title h3,
+html[data-appearance="sepia"] .macro-chart-panel .panel-title,
+html[data-appearance="sepia"] .macro-chart-panel .panel-title h3 { color:var(--ink) !important; }
+html[data-appearance="sepia"] .nested-chart-panel .panel-title p,
+html[data-appearance="sepia"] .nested-chart-panel .ring-key,
+html[data-appearance="sepia"] .nested-chart-panel .nested-center span { color:var(--muted) !important; }
+html[data-appearance="sepia"] .nested-chart-panel .ring-key { border-top-color:var(--line); }
+html[data-appearance="sepia"] .nested-center strong { color:var(--ink); }
+html[data-appearance="sepia"] .macro-chart-header { border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .macro-chart-header b,
+html[data-appearance="sepia"] .macro-panel-caption b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .macro-chart-header small,
+html[data-appearance="sepia"] .macro-panel-caption span,
+html[data-appearance="sepia"] .macro-dial-list small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .macro-dial-list>div header { color:var(--ink); }
+html[data-appearance="sepia"] .macro-dial-list>div>div { background:var(--line); }
+html[data-appearance="sepia"] .macro-dial-list em { border-left-color:var(--ink); }
+html[data-appearance="sepia"] .viewport-earnings { background:var(--bg-app); }
+html[data-appearance="sepia"] .sector-rank-row b,
+html[data-appearance="sepia"] .sector-rank-row strong { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-rank-row em {
+  background:color-mix(in srgb, var(--sector) 18%, var(--bg-elevated));
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-rank-row small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .portfolio-map-tooltip {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+  color:var(--ink);
+  box-shadow:var(--brutalist-shadow-sm);
+}
+html[data-appearance="sepia"] .portfolio-map-tooltip b { color:var(--ink); }
+html[data-appearance="sepia"] .bubble-axis-legend small { color:var(--muted) !important; }
+
+/* Nested allocation / exposure / activity */
+html[data-appearance="sepia"] .exposure-driver-map { border-color:var(--line); }
+html[data-appearance="sepia"] .exposure-driver-head {
+  background:var(--bg-table-head);
+  color:var(--muted);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .exposure-driver-row {
+  color:var(--muted);
+  border-top-color:var(--line);
+}
+html[data-appearance="sepia"] .exposure-driver-row:nth-child(odd) { background:var(--bg-elevated); }
+html[data-appearance="sepia"] .exposure-driver-row b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .exposure-driver-row b small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .exposure-driver-list li { background:rgba(0,0,0,.04); }
+html[data-appearance="sepia"] .exposure-driver-list li[data-tone="positive"] { background:rgba(47,158,98,.12); }
+html[data-appearance="sepia"] .exposure-driver-list li[data-tone="neutral"] { background:rgba(192,138,43,.12); }
+html[data-appearance="sepia"] .exposure-driver-list li[data-tone="negative"] { background:rgba(196,91,82,.12); }
+html[data-appearance="sepia"] .exposure-driver-kpi { color:var(--ink) !important; }
+html[data-appearance="sepia"] .exposure-driver-detail { color:var(--muted) !important; }
+html[data-appearance="sepia"] .live-empty {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+  color:var(--muted);
+}
+html[data-appearance="sepia"] .portfolio-activity-panel>.panel-title { border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .activity-create-bar {
+  background:var(--bg-elevated);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .activity-create-bar button {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .portfolio-activity-matrix th,
+html[data-appearance="sepia"] .portfolio-activity-matrix td { border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .portfolio-activity-matrix thead th,
+html[data-appearance="sepia"] .portfolio-activity-matrix tbody th {
+  color:var(--ink) !important;
+  background:var(--bg-table-head) !important;
+}
+html[data-appearance="sepia"] .portfolio-activity-matrix td {
+  background:var(--bg-panel) !important;
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .portfolio-activity-matrix tr:nth-child(even) td {
+  background:var(--bg-elevated) !important;
+}
+html[data-appearance="sepia"] .portfolio-activity-matrix .holding-column-active {
+  background:color-mix(in srgb, var(--blue) 14%, var(--bg-elevated));
+  box-shadow:inset 2px 0 var(--blue), inset -2px 0 var(--blue);
+}
+html[data-appearance="sepia"] .portfolio-activity-matrix thead .holding-column-active {
+  color:var(--ink);
+  background:color-mix(in srgb, var(--blue) 18%, var(--bg-table-head));
+}
+html[data-appearance="sepia"] .portfolio-activity-mobile article {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .portfolio-activity-mobile article.holding-column-active {
+  background:color-mix(in srgb, var(--blue) 14%, var(--bg-elevated));
+  box-shadow:inset 3px 0 var(--blue);
+}
+html[data-appearance="sepia"] .portfolio-activity-mobile header {
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .portfolio-activity-mobile header b,
+html[data-appearance="sepia"] .portfolio-activity-mobile dd { color:var(--ink) !important; }
+html[data-appearance="sepia"] .portfolio-activity-mobile header strong { color:var(--blue); }
+html[data-appearance="sepia"] .portfolio-activity-mobile dt,
+html[data-appearance="sepia"] .portfolio-activity-mobile dd small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .portfolio-map {
+  background:var(--bg-app);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .portfolio-map-tile {
+  border-color:color-mix(in srgb, var(--ink) 35%, transparent);
+}
+html[data-appearance="sepia"] th {
+  background:var(--bg-table-head) !important;
+  color:var(--ink) !important;
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] tbody tr:nth-child(odd) td { background:var(--bg-panel) !important; }
+html[data-appearance="sepia"] tbody tr:nth-child(even) td { background:var(--bg-elevated) !important; }
+html[data-appearance="sepia"] tbody tr:hover td { background:var(--bg-hover) !important; }
+html[data-appearance="sepia"] tbody td { color:var(--ink) !important; }
+html[data-appearance="sepia"] .position-tags i {
+  background:var(--chip-bg);
+  color:var(--chip-fg);
+  border-color:var(--chip-border);
+}
+html[data-appearance="sepia"] .position-symbol { color:var(--blue); }
+html[data-appearance="sepia"] .pill.blue {
+  color:var(--blue);
+  background:color-mix(in srgb, var(--blue) 14%, var(--bg-panel));
+}
+html[data-appearance="sepia"] .classification-audit {
+  background:var(--green-bg);
+  border-color:color-mix(in srgb, var(--green) 40%, var(--line));
+  color:color-mix(in srgb, var(--green) 55%, var(--ink));
+}
+html[data-appearance="sepia"] .classification-audit.pending {
+  background:var(--amber-bg);
+  border-color:color-mix(in srgb, var(--amber) 40%, var(--line));
+  color:color-mix(in srgb, var(--amber) 45%, var(--ink));
+}
+html[data-appearance="sepia"] .analyst-table tbody tr {
+  background:var(--bg-panel);
+  border-color:var(--line);
+}
+
+/* Macro scenario lab + evidence */
+html[data-appearance="sepia"] .scenario-shell {
+  background:var(--bg-panel);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .scenario-tabs button {
+  background:var(--bg-elevated);
+  color:var(--ink);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .scenario-tabs button.active {
+  background:var(--bg-hover);
+  box-shadow:inset 0 -3px 0 var(--blue);
+}
+html[data-appearance="sepia"] .scenario-body.green {
+  background:color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+}
+html[data-appearance="sepia"] .scenario-body.amber {
+  background:color-mix(in srgb, var(--amber) 12%, var(--bg-panel));
+}
+html[data-appearance="sepia"] .scenario-body.red {
+  background:color-mix(in srgb, var(--red) 10%, var(--bg-panel));
+}
+html[data-appearance="sepia"] .macro-event-tabs button {
+  background:var(--bg-elevated);
+  color:var(--muted);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .macro-event-tabs button:hover {
+  background:var(--bg-hover);
+  border-color:var(--chip-border);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .macro-event-tabs button.active {
+  background:var(--btn-bg);
+  border-color:var(--btn-border);
+  color:var(--btn-fg);
+  box-shadow:inset 0 -3px 0 var(--blue);
+}
+html[data-appearance="sepia"] .macro-regime-card,
+html[data-appearance="sepia"] .macro-selected-evidence,
+html[data-appearance="sepia"] .flows-donut-card {
+  background:var(--bg-panel);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .macro-regime-card>strong,
+html[data-appearance="sepia"] .macro-regime-card .mail-evidence b,
+html[data-appearance="sepia"] .macro-selected-evidence>header b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .macro-regime-card p,
+html[data-appearance="sepia"] .macro-regime-card em,
+html[data-appearance="sepia"] .macro-selected-evidence>header small,
+html[data-appearance="sepia"] .macro-regime-card .mail-evidence { color:var(--muted) !important; }
+html[data-appearance="sepia"] .macro-regime-card small {
+  background:var(--bg-elevated);
+  color:var(--ink);
+  border:1px solid var(--line);
+}
+html[data-appearance="sepia"] .macro-regime-card .mail-evidence {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .macro-selected-evidence>header {
+  background:var(--bg-table-head);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .macro-selected-evidence>header svg,
+html[data-appearance="sepia"] .macro-selected-evidence section span { color:var(--blue); }
+html[data-appearance="sepia"] .macro-selected-evidence section { border-right-color:var(--line); }
+html[data-appearance="sepia"] .macro-selected-evidence section b,
+html[data-appearance="sepia"] .macro-selected-evidence section p { color:var(--ink); }
+html[data-appearance="sepia"] .flows-evidence-panel .flows-evidence-list section { border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .flows-evidence-panel .flows-evidence-list section.primary {
+  background:var(--bg-elevated);
+}
+html[data-appearance="sepia"] .flows-mail-empty { background:var(--bg-elevated); }
+html[data-appearance="sepia"] .flows-donut-center b,
+html[data-appearance="sepia"] .flows-donut-legend span { color:var(--ink) !important; }
+html[data-appearance="sepia"] .flows-donut-center span,
+html[data-appearance="sepia"] .flows-donut-note { color:var(--muted) !important; }
+html[data-appearance="sepia"] .macro-method {
+  background:var(--bg-panel) !important;
+  border-color:var(--line) !important;
+  color:var(--muted) !important;
+}
+html[data-appearance="sepia"] .macro-method b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .investment-mail-source {
+  background:color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+  border-color:color-mix(in srgb, var(--green) 40%, var(--line));
+  color:var(--muted);
+}
+html[data-appearance="sepia"] .investment-mail-source.partial {
+  background:var(--amber-bg);
+  border-color:color-mix(in srgb, var(--amber) 40%, var(--line));
+}
+html[data-appearance="sepia"] .investment-mail-source.unavailable {
+  background:var(--red-bg);
+  border-color:color-mix(in srgb, var(--red) 40%, var(--line));
+}
+html[data-appearance="sepia"] .investment-mail-source b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .investment-mail-source small { color:var(--muted) !important; }
+
+/* Risk panels */
+html[data-appearance="sepia"] .risk-selector button {
+  background:var(--bg-elevated);
+  color:var(--muted);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .risk-selector button.active {
+  background:var(--btn-bg);
+  color:var(--btn-fg);
+  border-color:var(--btn-border);
+}
+html[data-appearance="sepia"] .risk-explanation {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .risk-explanation>header {
+  background:var(--bg-table-head);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .risk-explanation>header span,
+html[data-appearance="sepia"] .risk-explanation h5 { color:var(--blue); }
+html[data-appearance="sepia"] .risk-explanation h4,
+html[data-appearance="sepia"] .risk-axis-list b,
+html[data-appearance="sepia"] .risk-overview-list li,
+html[data-appearance="sepia"] .risk-axis-list li { color:var(--ink) !important; }
+html[data-appearance="sepia"] .risk-axis-list span,
+html[data-appearance="sepia"] .risk-axis-list p { color:var(--muted) !important; }
+html[data-appearance="sepia"] .risk-explanation section+section { border-top-color:var(--line); }
+
+/* Sectoral Analytics paper surfaces */
+html[data-appearance="sepia"] .sector-lead {
+  background:linear-gradient(105deg, color-mix(in srgb, var(--sector) 14%, var(--bg-panel)), var(--bg-panel) 58%);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-lead h3,
+html[data-appearance="sepia"] .sector-lead-score,
+html[data-appearance="sepia"] .sector-lead-score b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-lead>div:first-child>span,
+html[data-appearance="sepia"] .sector-lead p,
+html[data-appearance="sepia"] .sector-lead-score span { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-lead-score { border-left-color:color-mix(in srgb, var(--sector) 45%, var(--line)); }
+html[data-appearance="sepia"] .sector-lead-score em { color:var(--btn-fg); }
+html[data-appearance="sepia"] .sector-selector button {
+  background:var(--bg-elevated);
+  color:var(--ink);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-filter-status {
+  background:color-mix(in srgb, var(--sector) 10%, var(--bg-panel));
+  border-color:color-mix(in srgb, var(--sector) 45%, var(--line));
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-filter-status b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-filter-status span,
+html[data-appearance="sepia"] .sector-filter-status small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-kpi-grid article {
+  background:var(--bg-panel);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-kpi-grid b,
+html[data-appearance="sepia"] .sector-kpi-grid span,
+html[data-appearance="sepia"] .sector-watch p { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-kpi-grid small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-breadth-strip { background:var(--line); border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .sector-breadth-strip>div {
+  background:var(--bg-panel);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-breadth-strip b,
+html[data-appearance="sepia"] .industry-breadth-name b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-breadth-strip span,
+html[data-appearance="sepia"] .sector-breadth-strip small,
+html[data-appearance="sepia"] .industry-breadth-name small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .industry-breadth-table th {
+  background:var(--bg-table-head) !important;
+  color:var(--muted) !important;
+}
+html[data-appearance="sepia"] .sector-ranking-controls {
+  background:var(--bg-table-head);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-ranking-controls label,
+html[data-appearance="sepia"] .sector-ranking-controls select {
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-ranking-controls select {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-rank-grid { background:var(--line); }
+html[data-appearance="sepia"] .sector-rank-grid>section { background:var(--bg-panel); }
+html[data-appearance="sepia"] .sector-rank-heading {
+  background:var(--bg-table-head);
+  border-bottom-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-rank-heading small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-market-source-note {
+  background:var(--amber-bg);
+  border-color:color-mix(in srgb, var(--amber) 40%, var(--line));
+  color:color-mix(in srgb, var(--amber) 40%, var(--ink));
+}
+html[data-appearance="sepia"] .sector-market-empty {
+  background:var(--bg-elevated);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-market-empty b { color:var(--ink); }
+html[data-appearance="sepia"] .sector-market-empty p { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-model-note {
+  background:var(--amber-bg);
+  border-bottom-color:var(--line);
+  color:color-mix(in srgb, var(--amber) 40%, var(--ink)) !important;
+}
+html[data-appearance="sepia"] .sector-company-table td { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-company-table td small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .portfolio-company>b { color:var(--blue); }
+html[data-appearance="sepia"] .portfolio-company small { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-company-toggle {
+  background:var(--bg-table-head);
+  color:var(--blue);
+  border-top-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-company-toggle:hover { background:var(--bg-hover); }
+html[data-appearance="sepia"] .cage-grid b { color:var(--ink); }
+html[data-appearance="sepia"] .cage-ring { background:conic-gradient(var(--sector) var(--score), var(--line) 0); }
+html[data-appearance="sepia"] .cage-ring::after { background:var(--bg-panel); }
+html[data-appearance="sepia"] .cage-ring span { color:var(--ink); }
+html[data-appearance="sepia"] .mece-head,
+html[data-appearance="sepia"] .mece-row { background:var(--line); }
+html[data-appearance="sepia"] .mece-head span {
+  background:var(--bg-table-head);
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .mece-row>b,
+html[data-appearance="sepia"] .mece-row>.mece-cell {
+  background:color-mix(in srgb, var(--sector) 12%, var(--bg-panel));
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .mece-row>b i { background:var(--ink); }
+html[data-appearance="sepia"] .mece-row>b small,
+html[data-appearance="sepia"] .mece-cell li,
+html[data-appearance="sepia"] .mece-cell li span { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-source-note {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-source-note span,
+html[data-appearance="sepia"] .sector-source-note a { color:var(--ink); }
+html[data-appearance="sepia"] .sector-news-sentiment-grid { border-top-color:var(--line); }
+html[data-appearance="sepia"] .sector-news-sentiment-column {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .sector-news-sentiment-column > header {
+  background:var(--bg-table-head);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-news-sentiment-column > header h4 { color:var(--ink); }
+html[data-appearance="sepia"] .sector-news-sentiment-column > header b {
+  color:var(--muted);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .sector-news-sentiment-column.positive > header h4,
+html[data-appearance="sepia"] .sector-news-sentiment-column.positive > header b {
+  color:color-mix(in srgb, var(--green) 55%, var(--ink));
+}
+html[data-appearance="sepia"] .sector-news-sentiment-column.neutral > header h4,
+html[data-appearance="sepia"] .sector-news-sentiment-column.neutral > header b {
+  color:color-mix(in srgb, var(--amber) 50%, var(--ink));
+}
+html[data-appearance="sepia"] .sector-news-sentiment-column.negative > header h4,
+html[data-appearance="sepia"] .sector-news-sentiment-column.negative > header b {
+  color:color-mix(in srgb, var(--red) 50%, var(--ink));
+}
+html[data-appearance="sepia"] .sector-news-list { border-top-color:var(--line); }
+html[data-appearance="sepia"] .sector-news-list a { color:var(--ink) !important; }
+html[data-appearance="sepia"] .sector-news-list small,
+html[data-appearance="sepia"] .sector-news-column-empty { color:var(--muted) !important; opacity:1 !important; }
+html[data-appearance="sepia"] .impact-row {
+  background:color-mix(in srgb, var(--sector) 10%, var(--bg-panel));
+  border-bottom-color:var(--line);
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .impact-row:hover,
+html[data-appearance="sepia"] .impact-row.selected {
+  background:color-mix(in srgb, var(--sector) 18%, var(--bg-elevated));
+}
+html[data-appearance="sepia"] .impact-row>span { border-right-color:var(--line); }
+html[data-appearance="sepia"] .impact-row b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .impact-row small {
+  color:color-mix(in srgb, var(--sector) 55%, var(--ink)) !important;
+}
+html[data-appearance="sepia"] .impact-head {
+  background:var(--bg-table-head) !important;
+  color:var(--muted) !important;
+}
+html[data-appearance="sepia"] .subsector-chips i {
+  background:color-mix(in srgb, var(--sector) 14%, var(--bg-elevated));
+  border-color:color-mix(in srgb, var(--sector) 40%, var(--line));
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .impact-read { color:var(--muted) !important; opacity:1 !important; }
+html[data-appearance="sepia"] .analytics-band { background:var(--bg-panel); border-color:var(--line); color:var(--ink); }
+html[data-appearance="sepia"] .bubble-label { fill:var(--ink); stroke:var(--bg-panel); }
+
+/* Axis Research / decision / earnings paper */
+html[data-appearance="sepia"] .axis-category-strip>div,
+html[data-appearance="sepia"] .axis-category-strip>button {
+  background:var(--bg-panel);
+  border-color:var(--line);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .axis-category-strip>button.active {
+  background:var(--bg-hover);
+  outline-color:color-mix(in srgb, var(--blue) 45%, var(--line));
+}
+html[data-appearance="sepia"] .axis-category-strip span { color:var(--muted); }
+html[data-appearance="sepia"] .axis-category-strip b { color:var(--ink); }
+html[data-appearance="sepia"] .axis-pick-list button {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .axis-pick-list button:hover,
+html[data-appearance="sepia"] .axis-pick-list button.active {
+  background:color-mix(in srgb, var(--blue) 12%, var(--bg-hover));
+  border-color:var(--blue);
+}
+html[data-appearance="sepia"] .axis-pick-list small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .axis-pick-list .axis-pick-cmp,
+html[data-appearance="sepia"] .axis-pick-list em { color:var(--ink) !important; }
+html[data-appearance="sepia"] .axis-numeric-grid>div,
+html[data-appearance="sepia"] .axis-target-progress {
+  background:var(--bg-elevated);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .axis-numeric-grid span,
+html[data-appearance="sepia"] .axis-target-progress-meta span,
+html[data-appearance="sepia"] .axis-target-progress>small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .axis-numeric-grid b,
+html[data-appearance="sepia"] .axis-target-progress-meta b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .axis-target-progress-track { background:var(--line); }
+html[data-appearance="sepia"] .axis-pick-heading h3,
+html[data-appearance="sepia"] .axis-pick-heading .axis-target-line,
+html[data-appearance="sepia"] .axis-evidence,
+html[data-appearance="sepia"] .thesis-bullet-list li,
+html[data-appearance="sepia"] .axis-thesis-bullets li,
+html[data-appearance="sepia"] .table-note { color:var(--ink) !important; opacity:1 !important; }
+html[data-appearance="sepia"] .axis-pick-heading p { color:var(--muted) !important; }
+html[data-appearance="sepia"] .decision-sector-tabs button,
+html[data-appearance="sepia"] .decision-tabs button {
+  background:var(--bg-elevated);
+  color:var(--muted);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .decision-sector-tabs button.active,
+html[data-appearance="sepia"] .decision-tabs button.active {
+  background:color-mix(in srgb, var(--sector, var(--blue)) 16%, var(--bg-hover));
+  color:var(--ink);
+  border-color:var(--sector, var(--blue));
+}
+html[data-appearance="sepia"] .decision-question,
+html[data-appearance="sepia"] .decision-card-grid>div {
+  background:var(--bg-panel);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .decision-question b,
+html[data-appearance="sepia"] .decision-card-grid b { color:var(--ink); }
+html[data-appearance="sepia"] .decision-question span,
+html[data-appearance="sepia"] .decision-card-grid span,
+html[data-appearance="sepia"] .decision-card-grid p { color:var(--muted); }
+html[data-appearance="sepia"] .decision-sequence { background:var(--line); border-color:var(--line); }
+html[data-appearance="sepia"] .decision-sequence span {
+  background:var(--bg-elevated);
+  color:var(--ink);
+}
+html[data-appearance="sepia"] .decision-sector-tabs { border-bottom-color:var(--line); }
+
+/* Kanban lane headers → paper (not dark islands) */
+html[data-appearance="sepia"] .kanban-lane>header {
+  background:var(--bg-table-head);
+  color:var(--ink);
+  border-bottom-color:var(--line);
+}
+html[data-appearance="sepia"] .kanban-lane>header b { color:var(--ink) !important; }
+html[data-appearance="sepia"] .kanban-lane>header span {
+  background:color-mix(in srgb, var(--blue) 14%, var(--bg-elevated));
+  border-color:color-mix(in srgb, var(--blue) 40%, var(--line));
+  color:var(--ink) !important;
+}
+html[data-appearance="sepia"] .mission-chips .kanban-card.completed,
+html[data-appearance="sepia"] .kanban-board[data-visual="mission-chips"] .kanban-card.completed,
+html[data-appearance="sepia"] .kanban-card.completed,
+html[data-appearance="sepia"] .kanban-card.completed strong {
+  opacity:1;
+  color:var(--ink) !important;
+}
+
+/* Earnings calendar paper */
+html[data-appearance="sepia"] .earnings-progress {
+  background:var(--bg-table-head);
+  color:var(--muted);
+}
+html[data-appearance="sepia"] .earnings-progress>i { background:var(--line); }
+html[data-appearance="sepia"] .earnings-month-calendar {
+  background:var(--bg-app);
+  border-top-color:var(--line);
+}
+html[data-appearance="sepia"] .earnings-month-head { border-bottom-color:var(--line); }
+html[data-appearance="sepia"] .earnings-month-head h4 { color:var(--ink); }
+html[data-appearance="sepia"] .earnings-month-head p { color:var(--muted); }
+html[data-appearance="sepia"] .earnings-month-nav button {
+  background:var(--bg-elevated);
+  color:var(--ink);
+  border-color:var(--line);
+}
+html[data-appearance="sepia"] .earnings-month-nav button:not(:disabled):hover {
+  background:var(--bg-hover);
+  border-color:var(--chip-border);
+}
+html[data-appearance="sepia"] .earnings-month-weekdays,
+html[data-appearance="sepia"] .earnings-month-grid { background:var(--line); }
+html[data-appearance="sepia"] .earnings-month-weekdays span {

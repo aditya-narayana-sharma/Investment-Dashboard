@@ -506,19 +506,9 @@ export function publicIntegrationsConfig(config: StoredIntegrationsConfig | Inte
   };
 }
 
-/** Loopback Settings only. Still never a committed seed. */
-export function settingsIntegrationsConfig(config: StoredIntegrationsConfig): StoredIntegrationsConfig {
-  const publicConfig = publicIntegrationsConfig(config);
-  return {
-    ...publicConfig,
-    llm: {
-      ...publicConfig.llm,
-      ...(config.llm.anthropicApiKey ? { anthropicApiKey: config.llm.anthropicApiKey } : {}),
-      ...(config.llm.openaiApiKey ? { openaiApiKey: config.llm.openaiApiKey } : {}),
-      ...(config.llm.geminiApiKey ? { geminiApiKey: config.llm.geminiApiKey } : {}),
-      ...(config.llm.cursorApiKey ? { cursorApiKey: config.llm.cursorApiKey } : {}),
-    },
-  };
+/** Settings JSON is the public shape. API keys stay on disk / env and are never serialized. */
+export function settingsIntegrationsConfig(config: StoredIntegrationsConfig): IntegrationsConfig {
+  return publicIntegrationsConfig(config);
 }
 
 function asString(value: unknown, fallback: string): string {

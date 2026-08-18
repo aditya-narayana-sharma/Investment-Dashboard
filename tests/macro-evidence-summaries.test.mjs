@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  INVESTMENT_SOURCE_CANDIDATES,
+  VISUAL_CSS_CANDIDATES,
+  readJoined,
+} from "./helpers/algorithm-canvas.mjs";
 
-const workspace = await readFile(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8");
-const visualCss = await readFile(new URL("../app/visual-overhaul.css", import.meta.url), "utf8");
+const workspace = await readJoined(INVESTMENT_SOURCE_CANDIDATES);
+const visualCss = await readJoined(VISUAL_CSS_CANDIDATES);
 
 test("macro evidence summaries stay source-derived and follow the selected event", () => {
   assert.match(workspace, /function buildMacroEvidenceSummaries/);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { INVESTMENT_SOURCE_CANDIDATES, readJoinedSync } from "./helpers/algorithm-canvas.mjs";
 import {
   INSUFFICIENT_BUY_FUNDS_MESSAGE,
   assertBuyOrderFunds,
@@ -106,7 +107,7 @@ test("unknown margin is not treated as zero and charges are added only when alre
 
 test("order ticket and place_order path wire the BUY funds gate", () => {
   const ticket = readFileSync(new URL("../app/dashboard/KiteOrderTicket.tsx", import.meta.url), "utf8");
-  const workspace = readFileSync(new URL("../app/dashboard/InvestmentWorkspace.tsx", import.meta.url), "utf8");
+  const workspace = readJoinedSync(INVESTMENT_SOURCE_CANDIDATES);
   const server = readFileSync(new URL("../app/kite-live-server.ts", import.meta.url), "utf8");
   const confirm = readFileSync(new URL("../app/dashboard/builder/TreeBrokerConfirm.tsx", import.meta.url), "utf8");
 

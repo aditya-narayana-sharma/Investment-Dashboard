@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  GLOBAL_CSS_CANDIDATES,
+  INTELLIGENCE_SOURCE_CANDIDATES,
+  readJoined,
+} from "./helpers/algorithm-canvas.mjs";
 import test from "node:test";
 import { buildEarningsSnapshot, earningsEventDateKey } from "../app/earnings-verify.ts";
 import { kiteAuthPresentation, kiteLoginHref } from "../app/kite-auth-presentation.ts";
@@ -79,7 +84,7 @@ test("earningsEventDateKey parses calendar labels into IST keys", () => {
 
 test("earnings labels resolve company names instead of opaque CAL codes", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
-  const intelligenceWorkspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const intelligenceWorkspace = await readJoined(INTELLIGENCE_SOURCE_CANDIDATES);
   const utils = await readFile(new URL("../app/dashboard/utils.ts", import.meta.url), "utf8");
   assert.doesNotMatch(sectorsWorkspace, /CAL-\$/);
   assert.doesNotMatch(sectorsWorkspace, /`CAL-/);
@@ -140,6 +145,9 @@ test("bundled dashboard refresh can force Mail Calendar Reminders and Podcasts",
   assert.doesNotMatch(route, /refreshAppleHealth/);
   assert.match(flask, /api\/dashboard\/refresh/);
   assert.match(flask, /force_content/);
+  assert.match(flask, /X-Stratji-Local-Operator/);
+  assert.match(flask, /_operator_only_proxy/);
+  assert.match(flask, /api\/llm\/complete/);
   assert.match(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
   assert.match(script, /PORTFOLIO_REFRESH_MODE:-complete/);
   assert.match(script, /--if-changed/);
@@ -147,10 +155,10 @@ test("bundled dashboard refresh can force Mail Calendar Reminders and Podcasts",
 
 test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains unfiltered", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
-  const intelligenceWorkspace = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const intelligenceWorkspace = await readJoined(INTELLIGENCE_SOURCE_CANDIDATES);
   const analytics = await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const css = await readJoined(GLOBAL_CSS_CANDIDATES);
 
   assert.match(sectorsWorkspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\} onToggle=\{onToggleSector\} market=\{sectorMarket\} marketsBySector=\{sectorMarketById\} news=\{sectorNews\} holdings=\{holdings\} page=\{activePages\.s2 as SectorAnalyticsPage\} benchmarks=\{benchmarks\}\/>/);
   assert.match(sectorsWorkspace, /aggregateSectorMarketStatus/);
@@ -235,7 +243,8 @@ test("unavailable or unknown cached Kite still offers Authenticate Kite", () => 
     control: "cached",
     showAuthAction: false,
   });
-  assert.equal(kiteLoginHref(undefined), "/api/kite/login?force=1&redirect=1");
+  assert.equal(kiteLoginHref(undefined), "/api/kite/login?force=1");
+  assert.doesNotMatch(kiteLoginHref(undefined), /redirect=1/);
   assert.equal(kiteLoginHref("https://kite.zerodha.com/connect/login"), "https://kite.zerodha.com/connect/login");
 });
 

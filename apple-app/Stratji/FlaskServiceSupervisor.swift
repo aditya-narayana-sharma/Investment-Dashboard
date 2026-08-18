@@ -140,19 +140,23 @@ enum FlaskServiceSupervisor {
                 try? handle.close()
                 return false
             }
+            var timedOut = false
             while process.isRunning {
                 publishProgress()
                 if Date() > deadline {
                     process.terminate()
                     appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(timeout))s\n")
+                    timedOut = true
                     break
                 }
                 try? await Task.sleep(for: .milliseconds(400))
             }
+            process.waitUntilExit()
             try? handle.close()
             publishProgress()
             appendDesktopLog("refresh-dashboard-data.sh finished (\(process.terminationStatus))\n")
-            return true
+            if timedOut { return false }
+            return process.terminationStatus == 0
         }
 
         appendDesktopLog("Running \(script.lastPathComponent) (mode=\(mode); \(healthNote))\n")
@@ -162,18 +166,22 @@ enum FlaskServiceSupervisor {
             appendDesktopLog("refresh-dashboard-data.sh failed to start: \(error.localizedDescription)\n")
             return false
         }
+        var timedOut = false
         while process.isRunning {
             publishProgress()
             if Date() > deadline {
                 process.terminate()
                 appendDesktopLog("refresh-dashboard-data.sh timed out after \(Int(timeout))s\n")
+                timedOut = true
                 break
             }
             try? await Task.sleep(for: .milliseconds(400))
         }
+        process.waitUntilExit()
         publishProgress()
         appendDesktopLog("refresh-dashboard-data.sh finished (\(process.terminationStatus))\n")
-        return true
+        if timedOut { return false }
+        return process.terminationStatus == 0
     }
 
     static func latestRefreshProgress(repoRoot: URL, logFile: URL? = nil) -> StratjiRefreshProgressSnapshot? {

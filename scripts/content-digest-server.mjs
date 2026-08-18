@@ -368,20 +368,6 @@ ORDER BY c.title COLLATE NOCASE ASC, i.start_date ASC, id ASC
 LIMIT 5000;
 `;
 
-const healthNoteScript = String.raw`
-const Notes = Application("Notes");
-const account = Notes.accounts().find((candidate) => String(candidate.name()) === "iCloud");
-if (!account) throw new Error('Notes account "iCloud" was not found');
-const note = account.notes().find((candidate) => String(candidate.name()) === " Health Daily");
-if (!note) throw new Error('The exact note " Health Daily" was not found');
-const properties = note.properties();
-JSON.stringify({
-  title: " Health Daily",
-  modifiedAt: properties.modificationDate ? properties.modificationDate.toISOString() : "",
-  body: String(properties.plaintext || properties.body || "").slice(0, 24000),
-});
-`;
-
 function podcastQuery(episodeColumns, podcastColumns = new Set()) {
   // Modern Apple Podcasts stores episode copy on ZMTEPISODEDESCRIPTION (via ZDESCRIPTIONOBJECT).
   // Older schemas may still expose description columns directly on ZMTEPISODE.
@@ -674,69 +660,6 @@ function formatRepeatsOn(frequency, intervalCount) {
     return ({ 0: "Daily", 1: "Weekly", 2: "Monthly", 3: "Yearly" })[Number(frequency)] ?? "Repeats";
   }
   return `Every ${interval} ${unit[1]}`;
-}
-
-function extractDailyOptimism(sectionText) {
-  // Preserve line breaks so section headings remain detectable; cleanText flattens whitespace.
-  const text = String(sectionText ?? "")
-    .replace(/\uFFFC/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-  if (!text) return null;
-  const heading = /(?:^|\n|\|\s*)Daily\s+Optimism\s*[:\-–—]?\s*/gi;
-  let match;
-  let latest = null;
-  while ((match = heading.exec(text)) !== null) {
-    const start = match.index + match[0].length;
-    const rest = text.slice(start);
-    const stop = rest.search(/\n\s*(?:Daily\s+Optimism\b|Health\s+Stats\b|\d{1,2}\.?\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y|i)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\s*\|)/i);
-    const body = cleanText(stop >= 0 ? rest.slice(0, stop) : rest);
-    if (!body) continue;
-    latest = concise(body, 900);
-  }
-  return latest;
-}
-
-function latestHealthNoteEntry(value) {
-  const text = cleanText(value);
-  const marker = /\b([0-3]?\d)\.?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y|i)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})\s*\|\s*Health Stats\b/gi;
-  const monthIndex = {
-    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4,
-    jun: 5, june: 5, jul: 6, july: 6, juli: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8,
-    oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
-  };
-  const entries = [];
-  let match;
-  while ((match = marker.exec(text)) !== null) {
-    const month = monthIndex[match[2].toLowerCase()];
-    if (month === undefined) continue;
-    entries.push({ index: match.index, day: Number(match[1]), month, year: Number(match[3]) });
-  }
-  if (!entries.length) {
-    return {
-      summary: concise(text, 700),
-      observedDate: null,
-      dailyOptimism: extractDailyOptimism(text),
-    };
-  }
-
-  const latest = entries.reduce((best, entry) => {
-    const timestamp = Date.UTC(entry.year, entry.month, entry.day);
-    return !best || timestamp > best.timestamp ? { ...entry, timestamp } : best;
-  }, null);
-  const next = entries.find((entry) => entry.index > latest.index);
-  const section = text.slice(latest.index, next?.index ?? text.length);
-  return {
-    summary: concise(section, 700),
-    observedDate: `${latest.year}-${String(latest.month + 1).padStart(2, "0")}-${String(latest.day).padStart(2, "0")}`,
-    // Prefer the latest day's Optimism block; fall back to any note-wide Daily Optimism heading.
-    dailyOptimism: extractDailyOptimism(section) ?? extractDailyOptimism(text),
-  };
 }
 
 function senderName(sender) {
@@ -1215,13 +1138,6 @@ async function readCalendar() {
   ])).values()].sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
 }
 
-async function readHealthNote() {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", healthNoteScript], { timeout: 45000, maxBuffer: 2 * 1024 * 1024 });
-  const note = JSON.parse(stdout);
-  const latestEntry = latestHealthNoteEntry(note.body);
-  return { title: note.title, modifiedAt: note.modifiedAt, ...latestEntry };
-}
-
 async function settle(task) {
   try {
     return { status: "fulfilled", value: await task() };
@@ -1351,7 +1267,7 @@ async function refresh() {
   const axisResearch = await refreshSource("axis", "iCloud Axis Research", readAxisResearch);
   const reminders = await refreshSource("reminders", "Apple Reminders", readReminders);
   const podcasts = await refreshSource("podcasts", "Apple Podcasts", readPodcasts);
-  const healthNote = await settle(readHealthNote);
+  const healthNote = { status: "fulfilled", value: null };
   const newsletterValue = newsletters.status === "fulfilled" ? newsletters.value : { total: 0, items: [] };
   const axisValue = axisResearch.status === "fulfilled" ? axisResearch.value : { total: 0, items: [], targetItems: [] };
   const podcastValue = podcasts.status === "fulfilled" ? podcasts.value : [];
@@ -1369,7 +1285,7 @@ async function refresh() {
   const calendarValue = [...appleCalendarValue, ...marketCalendarValue.holidays]
     .sort((left, right) => new Date(left.startsAt) - new Date(right.startsAt));
   const healthNoteValue = healthNote.status === "fulfilled" ? healthNote.value : null;
-  const requiredSources = [newsletters, axisResearch, reminders, calendar, healthNote];
+  const requiredSources = [newsletters, axisResearch, reminders, calendar];
   const liveRequiredSources = requiredSources.filter((source) => source.status === "fulfilled").length;
   const sourceState = (result, count, permissionOptional = false) => ({
     status: result.status === "fulfilled" ? "live" : permissionOptional ? "permission_required" : "error",
@@ -1412,7 +1328,11 @@ async function refresh() {
         observedAt: marketCalendarValue.asOf || new Date().toISOString(),
         message: marketCalendarValue.message,
       },
-      healthNote: sourceState(healthNote, healthNoteValue ? 1 : 0),
+      healthNote: {
+        status: "live",
+        count: 0,
+        observedAt: new Date().toISOString(),
+      },
     },
   };
 }
@@ -1504,7 +1424,7 @@ function initializingSnapshot() {
       reminders: source("Apple Reminders refresh is running in the background."),
       calendar: source("Apple Calendar refresh is running in the background."),
       marketCalendar: source("Canonical NSE/US market calendar refresh is running in the background."),
-      healthNote: source("The exact  Health Daily note refresh is running in the background."),
+      healthNote: source("Health uses HealthKit export and Health Shortcut / Health Stats."),
     },
   };
 }
@@ -1567,7 +1487,7 @@ async function refreshAndCache() {
     retained.sources.axisResearch?.observedAt,
     { retainedAchievements: retainedAchievementEvidence },
   );
-  const requiredKeys = ["newsletters", "axisResearch", "reminders", "calendar", "healthNote"];
+  const requiredKeys = ["newsletters", "axisResearch", "reminders", "calendar"];
   retained.status = requiredKeys.every((key) => retained.sources[key]?.status === "live") ? "live" : "partial";
   const persisted = { ...retained, refreshedAt: new Date().toISOString() };
   mkdirSync(dirname(CONTENT_SNAPSHOT_PATH), { recursive: true });

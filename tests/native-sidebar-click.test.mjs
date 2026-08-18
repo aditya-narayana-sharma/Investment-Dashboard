@@ -10,7 +10,7 @@ test("Mac outline click loads the row URL including section=i3", async () => {
     readFile(new URL("apple-app/Outline/DashboardOutlineView.swift", root), "utf8"),
     readFile(new URL("apple-app/Shared/StratjiDocumentBrowser.swift", root), "utf8"),
     readFile(new URL("apple-app/Outline/DashboardNativeRoute.swift", root), "utf8"),
-    readFile(new URL("apple-app/Shared/StratjiSessionModel.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiSessionModel.swift", root), "utf8"),
   ]);
 
   assert.match(outline, /leaf\("investment\/i3"/);
