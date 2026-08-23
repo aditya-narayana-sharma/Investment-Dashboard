@@ -1,5 +1,10 @@
-/* Native chrome embed: Stratji overlay owns workspace tabs; WKWebView is full-height. */
-/* html.native-chrome-embed must not zero --section-nav-clearance — glass bar is an overlay, not a host. */
+/* Native chrome embed: Stratji overlay owns the combined workspace + section
+   droplet when `data-native-owns-sections="1"` (Mac Stratji bootstrap).
+   Without that flag, the web combined glass cluster stays visible so
+   localhost `?nativeChrome=1` and iOS still have one control.
+   html.native-chrome-embed must not zero --section-nav-clearance — glass bar is
+   an overlay, not a host. Clearance is nav margin-bottom only; heading
+   margin-top stays 0 (no second empty band). */
 
 html.native-chrome-embed,
 html[data-native-chrome],
@@ -7,11 +12,12 @@ html.native-chrome-embed body,
 html[data-native-chrome] body{
   min-height:100dvh;
   margin:0;
+  background:var(--bg-page);
+  background-color:var(--bg-page);
+  color:var(--ink);
 }
-/* nativeChrome hide allowlist: web masthead and in-page workspace tab bar.
-   Stratji.app owns the six-workspace liquid-glass overlay (auto-hidden).
-   Do not reserve padding-top for that overlay — WKWebView is full-height.
-   I-1–I-4 section navs stay visible. */
+/* nativeChrome hide allowlist: web masthead only. Combined workspace + section
+   droplet stays in the webview unless Stratji sets data-native-owns-sections. */
 html.native-chrome-embed .masthead,
 html[data-native-chrome] .masthead,
 .dashboard-app.native-chrome>.masthead{
@@ -89,6 +95,10 @@ html[data-native-chrome] .dashboard-app,
   flex-direction:column;
   min-height:100dvh;
   height:100dvh;
+  background:var(--bg-page);
+  color:var(--ink);
+  /* Overlay clearance. Mac Stratji hides the web droplet (owns-sections). */
+  padding-top:96px;
 }
 html.native-chrome-embed .workspace-panel,
 html[data-native-chrome] .workspace-panel,
@@ -99,6 +109,12 @@ html[data-native-chrome] .workspace-panel,
   flex-direction:column;
   overflow:auto;
 }
+html.native-chrome-embed .health-workspace-shell[data-focus-section] > .workspace-section.health-full-section:not([hidden]),
+html[data-native-chrome] .health-workspace-shell[data-focus-section] > .workspace-section.health-full-section:not([hidden]),
+.dashboard-app.native-chrome .health-workspace-shell[data-focus-section] > .workspace-section.health-full-section:not([hidden]) {
+  overflow-x:hidden;
+  overflow-y:auto;
+}
 html.native-chrome-embed .workspace-panel > *,
 html[data-native-chrome] .workspace-panel > *,
 .dashboard-app.native-chrome .workspace-panel > * {
@@ -106,18 +122,45 @@ html[data-native-chrome] .workspace-panel > *,
   min-height:0;
 }
 
+/* Mac Stratji overlay is the only toggle. Hide the web droplet for every
+   native-chrome-embed (even stale FOUC without owns-sections). iOS and
+   localhost ?nativeChrome=1 opt back in with data-native-web-nav. */
 html.native-chrome-embed .workspace-navigation.mode-dial,
 html[data-native-chrome] .workspace-navigation.mode-dial,
 .dashboard-app.native-chrome>.workspace-navigation.mode-dial {
   display:none !important;
   height:0 !important;
+  min-height:0 !important;
   margin:0 !important;
   padding:0 !important;
   overflow:hidden !important;
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
   border:0 !important;
 }
+html[data-native-web-nav="1"] .workspace-navigation.mode-dial,
+html[data-native-web-nav="1"] .dashboard-app.native-chrome>.workspace-navigation.mode-dial {
+  display:flex !important;
+  height:auto !important;
+  min-height:40px !important;
+  margin:0 0 8px !important;
+  padding:0 !important;
+  overflow:visible !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  pointer-events:auto !important;
+  position:relative !important;
+  top:auto !important;
+  z-index:20;
+}
+html[data-native-web-nav="1"] .workspace-navigation .workspace-section-nav.glass-sections{display:flex !important}
 
-/* LAST-WINS native reaffirm: overlay is not a host; keep section-nav clearance. */
+html[data-native-owns-sections="1"] .dashboard-app {
+  padding-top:86px;
+}
+
+/* LAST-WINS native reaffirm: overlay is not a host; keep a single nav-to-heading gap. */
 html.native-chrome-embed .workspace-section-nav,
 html[data-native-chrome] .workspace-section-nav,
 html.native-chrome-embed .intelligence-section-nav,
@@ -126,5 +169,21 @@ html[data-native-chrome] .intelligence-section-nav {
 }
 html.native-chrome-embed .workspace-section .section-heading,
 html[data-native-chrome] .workspace-section .section-heading {
-  margin-top: var(--section-nav-clearance);
+  margin-top: 0;
+}
+
+/* LAST-WINS: Mac overlay is the only toggle. Beat embed display:flex !important. */
+html.native-chrome-embed[data-native-owns-sections="1"] .workspace-navigation,
+html.native-chrome-embed[data-native-owns-sections="1"] .workspace-navigation.mode-dial,
+html[data-native-owns-sections="1"] .workspace-navigation.mode-dial.glass-bar {
+  display:none !important;
+  height:0 !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:0 !important;
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
 }

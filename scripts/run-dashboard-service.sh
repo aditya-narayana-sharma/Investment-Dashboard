@@ -72,8 +72,9 @@ if [[ -n "$VINEXT_PID" ]] && ! kill -0 "$VINEXT_PID" 2>/dev/null; then
 fi
 
 # channel-timeout must cover long Mail/Podcast force refreshes proxied through Flask.
+# threads must cover complete-load fan-out: Kite + content + 13 sectors + news + benchmarks + earnings + Health snapshot.
 DASHBOARD_UPSTREAM="$UPSTREAM_URL" "$VENV_DIR/bin/waitress-serve" \
-  --listen="$BIND_HOST:$FLASK_PORT" --threads=8 --channel-timeout=360 \
+  --listen="$BIND_HOST:$FLASK_PORT" --threads=24 --channel-timeout=360 \
   flask_gateway:app >>"$LOG_DIR/flask.log" 2>&1 &
 FLASK_PID=$!
 
@@ -98,6 +99,10 @@ done
 
 if curl -sf --max-time 3 "http://127.0.0.1:$FLASK_PORT/_flask/health" >/dev/null 2>&1; then
   set +e
+  while IFS= read -r skip_var; do
+    unset "$skip_var"
+  done < <(compgen -v | grep '^PORTFOLIO_SKIP_' || true)
+  PORTFOLIO_REFRESH_MODE=complete \
   DASHBOARD_PUBLIC_URL="http://127.0.0.1:$FLASK_PORT" \
     "$ROOT_DIR/scripts/refresh-dashboard-data.sh" >"$LOG_DIR/startup-refresh.log" 2>&1
   AUDIT_EXIT=$?

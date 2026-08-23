@@ -9,7 +9,7 @@ The audit must validate payload semantics, not only HTTP success: Kite and secto
 Treat the dashboard as current only after independently checking all of these sources:
 
 - Kite: holdings, positions, orders, GTTs, margins, quotes, P&L, and classifications.
-- Apple Mail: only `iCloud -> Newsletters` for the newsletter digest and only `iCloud -> Axis Research` for Axis research.
+- Apple Mail: only `iCloud -> Newsletters` for the newsletter digest and only `iCloud -> Axis Research` for Axis research. Satya retrieval uses the same two-mailbox invariant — never a third mailbox. Named families inside Newsletters (sender display name, email domain, subject prefix) are Axis Mutual Fund (`axis_mutual_fund`; Axis MF / Axis AMC research, not Axis Direct brokerage promo or contract-note/KYC mail), Groww Digest (`groww_digest`), and Flipboard Tech Briefing (`flipboard_tech`). Remaining Newsletters senders auto-register as `newsletter_other` catalog rows on digest refresh.
 - Apple Reminders: read every item in the exact `Job 🔍` and `Earnings` lists. Preserve incomplete items as actionable; completed items are evidence only and must not be silently restored.
 - Apple Calendar: read earnings and all other events through D-1, then group the dashboard summary by topic. Calendar entries are scheduling evidence, not proof that a result was published.
 - Health reconciliation: use the **"Health" Apple Shortcut** and its **Health Stats** export as the daily reconciliation source, imported via `scripts/import_health_shortcut.py` into `artifacts/private/health-overrides.json` (the file `scripts/import_apple_health.py --overrides` already consumes). Run the Shortcut for historical data; if a date is missing, run it again for that date. The Apple Notes Health Daily and Health Daily v2 notes are **deprecated** and must not be run, displayed, or referenced. HealthKit `export.xml` remains the primary detailed source for Sleep, Heart, and Respiratory.
@@ -23,8 +23,9 @@ Treat the dashboard as current only after independently checking all of these so
 If any source fails, preserve the last validated snapshot, label it `Stale`, `Cached`, or `Unavailable`, and name the failed source. Never claim that the complete dashboard is updated when any audit row failed.
 
 Do not render a standalone or persistent "Startup refresh audit failed" banner.
-The audit remains mandatory, but its result is communicated through the compact
-per-source freshness strip, relevant section states, and
+The audit remains mandatory, but its result is communicated through Settings /
+Integrations source freshness (not a strip on the main canvas), relevant section
+states, and
 `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`. When every required
 source passes, no failure warning remains visible.
 
@@ -34,6 +35,37 @@ action, follow/subscribe requests, contact details, phone numbers, email
 addresses, and website links from displayed summaries. Deduplicate Podcasts by
 normalized episode title. Label Podcast evidence as a transcript only when a
 local transcript was actually available; otherwise label it as a description.
+
+Satya indexes eligible Mail and Podcasts into `artifacts/private/satya/corpus.sqlite`
+(FTS5) and writes `artifacts/private/satya/catalog.json` after a successful digest
+read. Backfill (`scripts/satya-backfill.sh`, default 90 days via `SATYA_BACKFILL_DAYS`)
+pages oldest-unseen → newest into that corpus only — it must not dump historical
+mail into a Market Intelligence browsing wall. Startup digest ingest
+(`ingestSatyaDigestRefresh`) is not that backfill; run `scripts/satya-backfill.sh`
+separately. Podcasts are supporting evidence
+(`podcasts`). Satya is M-2 (the full Live Intelligence canvas) plus a global
+companion orb — not a fifth Market Intelligence section (no M-5). Machine-drafted
+answers are never a source for numbers; Mail, Axis Research PDFs, podcasts, and
+independently verified IR/NSE earnings KPIs remain the source of truth. Open PDF,
+Mail, episode, and earnings links only inside Satya replies, as a combined compact
+icon cluster (mail / pdf / podcast / earnings) — not a citation wall of titles or
+URLs, and not digest-style “Open PDF” rows outside replies. Voice and
+`POST /api/satya/chat` are operator-Mac only (localhost Flask gateway); LAN and
+Tailscale clients cannot post chat. An empty corpus refuses rather than inventing
+research; a populated corpus with zero FTS hits refuses as a no-match (do not
+ask the operator to refresh mail). Retrieval uses only the two mailboxes above
+plus indexed Axis PDFs, podcasts, and verified earnings prints (`earnings` family
+when KPIs exist — unpublished fields stay blank). Filters selected families in SQL
+before the FTS window. Axis Research subjects
+classify into 28 named categories plus `other_research` (`app/satya/axis-categories`).
+Satya retrieval accepts `axisCategories[]` (SQL before the FTS window); default is
+every research category except `live_webinars`. Webinars are classified and indexed
+but excluded from default retrieval unless the operator selects that chip. Displayed
+webinar summaries still strip CTA/promo copy. Axis MF subject
+matching is a prefix (`^` / leading Axis MF|AMC branding), not a mid-subject
+mention from another sender. `GET /api/satya/sources` returns family counts and Axis
+category counts only (no sender emails). Digest ingest failures are recorded on Satya status
+(`corpus.ingestError`) instead of being swallowed.
 
 Before importing Apple Health, validate the newest ZIP in the configured iCloud
 Health folder and confirm that it contains
@@ -62,13 +94,15 @@ valid Health snapshot with a failed extraction.
 ## Workspace and industry-filter invariants
 
 - Keep the six top-level workspaces separate: Investment, Sectoral Analytics,
-  Market Intelligence, Health & Wellness, Algorithm Canvas, and Strategies.
+  Market Intelligence, My Feed, Algorithm Canvas, and Strategies.
   Preserve each workspace's collapsible state and URL selection
   (`?view=investment|sectors|intelligence|health|builder|strategies`). Alias
   `?view=market-intelligence` resolves to Market Intelligence. Alias
   `?view=algorithm-canvas` resolves to Algorithm Canvas (`builder`) and the
   canvas section (`?view=builder&section=canvas`). Alias
-  `?view=strategy-library` resolves to Strategies (`?view=strategies`).
+  `?view=strategy-library` resolves to Strategies (`?view=strategies`). Alias
+  `?view=feed` (and `?view=my-feed`) resolves to My Feed (`health`). Canonical
+  My Feed URLs stay `?view=health`; `?view=health` remains a supported alias.
 - Use `DailyKanbanBoard` as the only action-board implementation across all six
   workspaces. The Investment I-1 three-lane layout is canonical: summary header,
   `To Do Today`, `Monitor`, and `Completed Today` lanes, full action cards,
@@ -90,40 +124,49 @@ valid Health snapshot with a failed extraction.
   shared `DailyKanbanBoard` only. The library shows Composer-public
   `StrategyTreeV1` reconstructions (US symbols as published). Do not add
   industry filters, sector-dimming, earnings, or the Market Intelligence
-  digest here. Do not put Composer trees into Health, Sectors, or Intelligence.
-- Keep Health & Wellness as a non-scrolling three-panel console with H-1
-  Action Board, H-2 Daily Optimism, and H-3 Vital Metrics. Dense Health
-  content belongs on explicit URL-backed sub-pages, never in a vertically
-  scrolling workspace. Incognito must gate thumbnail values, drill-down values,
-  source/archive metadata, actions, recommendations, and accessibility text.
-  H-3 Vital Metrics groups KPIs into three comparison-direction collapsible
-  rows (favourable / context dependent / unfavourable), matching the Investment
-  BUY / HOLD group pattern, while retaining original
-  Health category colour accents on each tile. Metrics without a selected-period
-  average remain visible under Context dependent (no dedicated unavailable
-  column). Body Measurements and Hearing remain excluded.
+  digest here. Do not put Composer trees into My Feed, Sectors, or Intelligence.
+- Keep **My Feed** (nav label; URL key `health`, alias `?view=feed`) as a
+  URL-section console with H-1 Action Board, H-2 Daily Optimism, H-3 Vital
+  Metrics, and H-4 Calendar + Reminders (`?view=health&section=h4`). H-1–H-3
+  keep their HealthKit meaning and operational-day target. Dense Health content
+  belongs on explicit URL-backed sub-pages. Adding H-4 changes the former
+  three-panel console: Calendar + Reminders is the fourth exclusive section,
+  not an industry-filtered feed. Incognito must gate thumbnail values,
+  drill-down values, source/archive metadata, actions, recommendations,
+  accessibility text, and H-4 calendar/reminder rows. H-3 Vital Metrics groups
+  KPIs into three comparison-direction collapsible rows (favourable / context
+  dependent / unfavourable), matching the Investment BUY / HOLD group pattern,
+  while retaining original Health category colour accents on each tile.
+  Metrics without a selected-period average remain visible under Context
+  dependent (no dedicated unavailable column). Body Measurements and Hearing
+  remain excluded. Do not add industry filters to My Feed.
 - The shared Sectoral Analytics industry toggle is an **S-2-only control**.
   `selectedSectorId` may drive S-2 matrices, charts, rankings, company
   composition, and linked analytical panels, but it must not be passed into
   Market Intelligence or S-3 components.
 - **Market Intelligence is always complete and unfiltered** and owns exactly
-  four top-level sections: M-1 Action Board, M-2 Live Intelligence
-  (Newsletters, Axis Research, and Podcasts), M-3 Earnings Calendar, and M-4
-  Calendar + Reminders. Do not add
-  an industry filter banner, sector-match count, excluded-industry message,
-  dimming, or hidden records. Sectoral Analytics must not host a digest or
-  Market Intelligence promo/cross-link; the digest lives only in the Market
-  Intelligence workspace.
+  three top-level sections: M-1 Action Board, M-2 Satya, and M-3 Earnings
+  Calendar. Workspace URL stays `?view=intelligence`. Satya is the M-2 canvas
+  (full-width LLM chat + push-to-talk with multi-select source chips: Axis 28
+  research categories, newsletter families Axis MF / Groww / Flipboard / Other,
+  Podcasts, and verified earnings KPIs). Newsletters, Axis Research mail and
+  PDFs, Podcasts, and verified IR/NSE earnings KPIs remain Satya corpus /
+  retrieval source of truth — do not render those as M-2 collapsible digest
+  reading lists. Satya is not a fifth section (no M-5). Calendar + Reminders
+  is not in this workspace. Do not add an industry filter banner, sector-match
+  count, excluded-industry message, dimming, or hidden records. Sectoral
+  Analytics must not host a digest or Market Intelligence promo/cross-link.
+  M-1 intelligence actions are generated each IST day / last NSE trading day
+  from the live digest snapshot, earnings snapshot, and Satya corpus as-of —
+  not a static “overnight themes” catalog. If a source is stale, the action
+  says so; never invent KPIs. Completed-today persistence is unchanged.
 - **M-3 Earnings is the sole rendered complete earnings-calendar location.**
   Every tracked event remains visible, enabled, and selectable regardless of
   the S-2 industry selection. Apple Calendar Earnings rows are scheduling
   evidence only; only independently verified IR/NSE results may populate KPI
-  values or reported state. Do not duplicate earnings in Sectoral Analytics or
-  M-4, and do not add `sector-dimmed`, `sector-match`, `aria-disabled`, or
-  sector-gated click behavior to earnings events.
-- **M-4 Calendar + Reminders** contains exactly one inner Calendar collapsible
-  for complete non-earnings calendars and exactly one inner Reminders
-  collapsible with Completed, Scheduled Important, and Work / Job 🔍 groups.
+  values or reported state. Do not duplicate earnings in Sectoral Analytics,
+  and do not add `sector-dimmed`, `sector-match`, `aria-disabled`,
+  or sector-gated click behavior to earnings events.
 - The S-3 Decision Framework may remain sector-specific only through its own
   local selector. Its state must not read or mutate the S-2 industry selection.
 - Dimming classes and filter status UI are valid only inside S-2. When an S-2
@@ -133,6 +176,16 @@ valid Health snapshot with a failed extraction.
   industry unless the report explicitly labels a chart as a selected-industry
   view.
 
+## Localhost vs Mac App (mandatory agent sequence)
+
+When the work is **localhost** (`http://127.0.0.1:3000` or Flask `http://127.0.0.1:5050`) **versus Stratji.app** (WKWebView, native liquid-glass overlay, splash/hydrate, workspace/section chrome, Dock vs `apple-app/build/Stratji.app`), agents **must** run this sequence **in order** and **must not skip a step**:
+
+1. **`$project-status`** — inventory both surfaces (web chrome vs native overlay). Status artifacts go in `Project-Status/`. Do not implement in this step.
+2. **`$auditor`** — thermonuclear audit of the native/web chrome and launch path. Write under `Code-Reviews/`. Do not implement in this step.
+3. **`$rca-agent`** — root-cause localhost vs Mac drift. Write under `RCAs/` and a remediation plan under `Plans/`.
+
+Implement chrome or native fixes **only after** those three artifacts exist, and only when the operator asks to implement. Verify both localhost and Stratji.app. Do not treat Dock or `~/Applications/Stratji.app` as current if `apple-app/build/Stratji.app` is newer. Do not kill a healthy Flask listener on `:5050`.
+
 ## Required UI verification
 
 After changing Sectoral Analytics or Market Intelligence behavior:
@@ -141,9 +194,9 @@ After changing Sectoral Analytics or Market Intelligence behavior:
    `node --test tests/rendered-html.test.mjs`.
 2. Open `?view=sectors`, select a different S-2 industry, and confirm S-2 updates.
 3. Open `?view=intelligence` and confirm Market Intelligence has no
-   `.sector-intelligence-filter` or `.sector-dimmed` descendants, shows complete
-   source counts, exposes M-1 through M-4, renders the complete earnings calendar
-   only in M-3, and excludes Earnings-calendar rows from M-4.
+   `.sector-intelligence-filter` or `.sector-dimmed` descendants, shows Satya
+   source chips (not Newsletter / Axis / Podcast digest walls), exposes M-1
+   Action Board, M-2 Satya, and M-3 Earnings Calendar only, and has no M-4.
 4. Confirm Sectoral Analytics exposes S-1 through S-3 only, with no S-4,
    earnings grid, digest, promo, or cross-link.
 5. Confirm the S-3 local Decision Framework selector changes only its own cards,

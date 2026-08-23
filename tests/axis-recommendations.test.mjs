@@ -10,14 +10,15 @@ test("CreditAccess Grameen resolves to its NSE ticker", () => {
   assert.equal(recommendationSymbol("Manappuram Finance"), "MANAPPURAM");
 });
 
-test("Axis Research digest excludes OTP, security, webinar and marketing mail", () => {
+test("Axis Research digest excludes OTP, security, and marketing mail; webinars classify instead of dropping", () => {
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "Q1FY27 Result Updates" }), true);
   assert.equal(isAxisResearchMail({ sender: "Axis Securities Research <equity@axissecurities.in>", subject: "Daily Technical Outlook" }), true);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "Daily Morning Note & Trade Setup for the Day - July 22, 2026" }), true);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "966526 is your access code to log in" }), false);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "New device Security Alert!" }), false);
-  assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "LIVE Webinar: Simplifying the World of Options Trading | Register Now" }), false);
+  assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "LIVE Webinar: Simplifying the World of Options Trading | Register Now" }), true);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "Learn Account Offer Benefits" }), false);
+  assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "Build your retirement fund with Axis Direct NPS" }), false);
 });
 
 test("extractAxisRecommendations scopes multi-company digests per symbol", () => {

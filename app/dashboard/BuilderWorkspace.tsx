@@ -8,9 +8,10 @@ import { compileTreeToGraph } from "../strategy/tree-compile";
 import { createSeedTree } from "../strategy/seed-tree";
 import { SymphonyEditor } from "./builder/SymphonyEditor";
 import { BuilderJsonPanel } from "./builder/BuilderJsonPanel";
-import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { CollapsibleSection, DailyKanbanBoard, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { listenToStratjiLocation } from "./stratji-navigate";
 import type { BuilderSection } from "./types";
-import { builderSectionNumber, parseBuilderSection } from "./workspace-routing";
+import { builderSectionNumber, isLocationView, parseBuilderSection } from "./workspace-routing";
 
 const BUILDER_SECTIONS = [
   { id: "board", label: "Action Board", prefix: "B1" },
@@ -20,7 +21,8 @@ const BUILDER_SECTIONS = [
 
 function builderSectionFromUrl(): BuilderSection {
   if (typeof window === "undefined") return "canvas";
-  return parseBuilderSection(new URLSearchParams(window.location.search).get("section"));
+  const requested = new URLSearchParams(window.location.search).get("section");
+  return BUILDER_SECTIONS.some((section) => section.id === requested) ? parseBuilderSection(requested) : "canvas";
 }
 
 export function BuilderWorkspace() {
@@ -31,16 +33,17 @@ export function BuilderWorkspace() {
 
   useEffect(() => {
     const sync = () => {
+      if (!isLocationView("builder")) return;
       const section = builderSectionFromUrl();
       setActiveSection(section);
       expandDashboardSection(dashboardSectionNumberFromNavId(section));
     };
     sync();
     const retry = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
+    const stopListening = listenToStratjiLocation(sync);
     return () => {
       window.clearTimeout(retry);
-      window.removeEventListener("popstate", sync);
+      stopListening();
     };
   }, []);
 
@@ -63,19 +66,8 @@ export function BuilderWorkspace() {
       }).catch(() => undefined);
     };
     loadTreeFromUrl();
-    window.addEventListener("popstate", loadTreeFromUrl);
-    return () => window.removeEventListener("popstate", loadTreeFromUrl);
-  }, []);
-
-  const selectSection = useCallback((sectionId: string) => {
-    const section = parseBuilderSection(sectionId);
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", "builder");
-    url.searchParams.set("section", section);
-    url.searchParams.delete("page");
-    window.history.pushState({ view: "builder", section }, "", url);
-    setActiveSection(section);
-    expandDashboardSection(dashboardSectionNumberFromNavId(section));
+    const stopListening = listenToStratjiLocation(loadTreeFromUrl);
+    return stopListening;
   }, []);
 
   const applyDocument = useCallback((nextTree: StrategyTreeV1, nextGraph: StrategyGraphV2) => {
@@ -88,12 +80,6 @@ export function BuilderWorkspace() {
     <div className="builder-workspace-shell investment-workspace-shell" data-workspace="builder" data-active-section={activeSection} data-focus-section={activeSection}>
       <header className="builder-workspace-chrome">
         <h2>Algorithm Builder</h2>
-        <WorkspaceSectionNav
-          label="Algorithm Canvas sections"
-          sections={BUILDER_SECTIONS}
-          activeId={activeSection}
-          onSelect={selectSection}
-        />
       </header>
 
       <div id="builder-board" className="workspace-section action-board-workspace-section" hidden={activeSection !== "board"}>

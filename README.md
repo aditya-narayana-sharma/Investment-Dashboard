@@ -11,7 +11,7 @@ Open a workspace with `?view=`:
 | Investment | `investment` | — |
 | Sectoral Analytics | `sectors` | — |
 | Market Intelligence | `intelligence` | `market-intelligence` |
-| Health & Wellness | `health` | — |
+| My Feed | `health` | `feed`, `my-feed` |
 | Algorithm Canvas | `builder` | `algorithm-canvas` |
 | Strategies | `strategies` | `strategy-library` |
 
@@ -62,22 +62,24 @@ URLs such as `?view=sectors&section=s2&page=companies` preserve Back/Forward, re
 
 ### Market Intelligence (`?view=intelligence`)
 
-Always **complete and unfiltered**. Four top-level sections, no industry-filter banner, no sector-match counts, no dimming, no hidden records.
+Always **complete and unfiltered**. Three top-level sections, no industry-filter banner, no sector-match counts, no dimming, no hidden records.
 
-- **M-1 Action Board** — the shared three-lane board.
-- **M-2 Live Intelligence** — Newsletters, Axis Research, and Podcasts. Mail uses exactly `iCloud → Newsletters` and `iCloud → Axis Research`. Displayed digests keep research or editorial content only: no promotions, ads, registration or purchase CTAs, follow/subscribe asks, contact details, phone numbers, email addresses, or website links. Podcasts are deduplicated by normalized episode title and labelled as a transcript only when a local transcript was actually available; otherwise they are labelled as a description.
+- **M-1 Action Board** — the shared three-lane board, with daily source-backed actions.
+- **M-2 Satya** — full Live Intelligence canvas (LLM chat + push-to-talk). Newsletters, Axis Research mail and PDFs, Podcasts, and verified IR/NSE earnings KPIs are Satya’s source of truth — not a browsing wall.
 - **M-3 Earnings Calendar** — the **sole** rendered complete earnings calendar. Every tracked event stays visible, enabled, and selectable regardless of the S-2 industry. Apple Calendar Earnings rows are scheduling evidence only. KPI values and reported state come from independently verified IR/NSE (or reputable financial reporting as a cross-check). Unpublished KPI fields stay blank.
-- **M-4 Calendar + Reminders** — exactly one inner Calendar collapsible for complete **non-earnings** calendars, and exactly one inner Reminders collapsible with **Completed**, **Scheduled Important**, and **Work / Job 🔍** groups. Completed reminders are evidence only and are never silently restored.
 
-### Health & Wellness (`?view=health`)
+Calendar + Reminders is **not** in this workspace. It lives only on My Feed H-4.
 
-Private, **non-scrolling** three-panel console. Dense Health content lives on explicit URL-backed sub-pages such as `?view=health&section=h3&page=heart`, never in a vertically scrolling workspace. Nutrition is split across two metric pages so desktop and iPhone views stay scroll-free.
+### My Feed (`?view=health`, alias `?view=feed`)
+
+URL-section console. Dense Health content lives on explicit URL-backed sub-pages such as `?view=health&section=h3&page=heart`.
 
 - **H-1 Action Board** — the shared three-lane board.
 - **H-2 Daily Optimism** — optimism, insights, guidance, and interpretation guardrails.
 - **H-3 Vital Metrics** — KPIs grouped into three **collapsible rows**: favourable, context dependent, and unfavourable. Each tile keeps its original Health category colour accent (Activity, Sleep, Heart, Respiratory, Mobility, Nutrition). Metrics without a selected-period average remain visible under Context dependent — there is no dedicated unavailable column. **Body Measurements** and **Hearing** are excluded.
+- **H-4 Calendar + Reminders** — the only Calendar + Reminders surface. Exactly one inner Calendar collapsible for complete **non-earnings** calendars, and exactly one inner Reminders collapsible with **Completed**, **Scheduled Important**, and **Work / Job 🔍** groups. Completed reminders are evidence only and are never silently restored. `?view=intelligence&section=m4` redirects here.
 
-**Incognito** gates thumbnail values, drill-down values, source and archive metadata, actions, recommendations, and accessibility text.
+**Incognito** gates thumbnail values, drill-down values, source and archive metadata, actions, recommendations, accessibility text, and H-4 calendar/reminder rows.
 
 Operational date uses `healthTargetDate` in Asia/Kolkata:
 
@@ -123,7 +125,7 @@ Every service start or restart runs `scripts/refresh-dashboard-data.sh` after Fl
 - Earnings: `status=verified`
 - Health: `status=live` through the shared Asia/Kolkata operational target
 
-Results land in `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`. Failures surface in the compact per-source freshness strip and the affected section. There is no standalone “Startup refresh audit failed” banner. When every required source passes, no failure warning remains visible.
+Results land in `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`. Failures surface in Settings / Integrations source freshness and the affected section. There is no standalone “Startup refresh audit failed” banner, and the main canvas does not show a per-source freshness strip. When every required source passes, no failure warning remains visible.
 
 Health ZIP import validates the newest iCloud archive for `apple_health_export/export.xml` before extraction. A corrupt newest ZIP is reported as a fallback source; the last validated extracted XML stays in use.
 

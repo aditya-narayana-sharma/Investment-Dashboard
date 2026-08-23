@@ -10,7 +10,8 @@ import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "../sector-news
 import { alignSectorImpactRows, lifeCyclePoints, marketStructurePoints, type ImpactSignal } from "../sector-analytics-data";
 import type { LiveHolding } from "../live-types";
 import type { SectorRankingView } from "./types";
-import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
+import { useSatyaTaskContext } from "./satya-workspace";
+import type { SatyaSuggestion } from "./satya-suggestions";
 import { currentIstDateLabel, inr } from "./utils";
 
 const impactGlyph: Record<ImpactSignal, string> = { tailwind: "▲", headwind: "▼", "two-way": "●", na: "—" };
@@ -19,7 +20,7 @@ const axisLabelStyle = { fill: "#9ba6b2", fontSize: 13, fontWeight: 700 };
 
 export type SectorAnalyticsPage = "pulse" | "companies" | "rankings" | "lifecycle" | "structure" | "mece";
 
-function industryAnalyticsSuggestions(industryName: string | null): LlmAssistSuggestion[] {
+function industryAnalyticsSuggestions(industryName: string | null): SatyaSuggestion[] {
   const subject = industryName ?? "all industries in the supplied snapshot";
   return [
     {
@@ -623,6 +624,14 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     "Source of truth is the selected industry snapshot, rankings, constituents, and EOD benchmarks only. Not Mail or Podcasts.",
   ].join("\n");
 
+  useSatyaTaskContext("sectors-s2", {
+    task: "industry",
+    hint: "Uses the selected industry snapshot, rankings, constituents, and EOD benchmarks only — not Mail or Podcasts. Missing KPIs stay blank.",
+    context: interrogateContext,
+    placeholder: selected ? `e.g. How does ${selected.name} compare with Nifty 50 on the supplied snapshot?` : "e.g. What does all-industry breadth say versus Nifty 50?",
+    suggestions: industryAnalyticsSuggestions(selected?.name ?? null),
+  });
+
   return <section className={`sector-overview sector-analytics-page-${page}`} data-sector-filter={filterActive ? selectedIds.join(",") : "all"} style={{ "--selected-sector": accent } as CSSProperties}>
     {page === "pulse" && <div className="sector-lead" style={{ "--sector": accent } as CSSProperties}>
       <div>
@@ -647,18 +656,6 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
         return <button type="button" aria-pressed={selected} key={sector.id} onClick={() => { onToggle(sector.id); setCompanyPage(0); }} className={className} style={{ "--sector": sector.color } as CSSProperties}><i/><span>{sector.name}</span><small>{sectorComposite(sector).toFixed(1)}</small></button>;
       })}
     </div>
-    <LlmAssistPanel
-      task="industry"
-      className="llm-assist-span"
-      subtitle={selected
-        ? `${selected.name} snapshot + rankings + constituents + EOD benchmarks, as Source of Truth`
-        : "All-industry snapshot + rankings + constituents + EOD benchmarks, as Source of Truth"}
-      hint="Uses the selected industry snapshot, rankings, constituents, and EOD benchmarks only — not Mail or Podcasts. Missing KPIs stay blank."
-      suggestions={industryAnalyticsSuggestions(selected?.name ?? null)}
-      context={interrogateContext}
-      placeholder={selected ? `e.g. How does ${selected.name} compare with Nifty 50 on the supplied snapshot?` : "e.g. What does all-industry breadth say versus Nifty 50?"}
-    />
-
     {page === "pulse" && <SectorImpactMatrix selectedIds={selectedIds} onToggle={(sectorId) => { if (sectors.some((sector) => sector.id === sectorId)) onToggle(sectorId); }}/>}
 
     {selected ? <>
@@ -685,7 +682,7 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
           <section className="ladder laggards"><header><span>Top {laggards.length} laggards</span><small>{rankingView === "market" ? `${returnHorizon} price return` : fundamentalMetricLabels[fundamentalMetric]}</small></header><ol>{laggards.map((company, index) => <li key={`laggard-${company.symbol}`}><b>{index + 1}</b><div><strong>{company.name}</strong><small>{company.symbol} · {company.universeShare}% universe share</small></div><em className={rankingView === "market" && Number(company.rankValue) < 0 ? "negative" : "amber-text"}>{formatRankValue(company.rankValue)}</em></li>)}</ol></section>
         </div> : <div className="sector-market-empty"><Activity size={20}/><div><b>{market.status === "auth_required" ? "Authenticate Kite to load return rankings" : "Market return ranking is temporarily unavailable"}</b><p>{market.message}</p></div></div>)}
         {page === "rankings" && rankingView === "fundamentals" && <p className="sector-model-note">Fundamental values are transparent 1-5 research scores, not reported percentages. They rank relative growth, profitability, margin resilience and balance-sheet quality; company filing ingestion remains separately dated.</p>}
-        {page === "companies" && <><div className="sector-company-table table-scroll"><table><thead><tr><th>Company</th><th>Universe share</th><th>Live price</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>Growth</th><th>Profitability</th><th>Margin</th><th>Quality</th><th>Portfolio</th></tr></thead><tbody>{visibleCompanies.map((company) => <tr key={company.symbol}><td><b>{company.name}</b><small>{company.symbol} · {company.filingPeriod}</small></td><td>{company.universeShare.toFixed(1)}%</td><td>{company.market?.price === null || company.market?.price === undefined ? "—" : inr.format(company.market.price)}</td>{(["day", "week", "month", "quarter"] as SectorReturnHorizon[]).map((horizon) => { const value = company.market?.returns[horizon]; return <td key={horizon} className={value === null || value === undefined ? "" : value >= 0 ? "positive" : "negative"}>{value === null || value === undefined ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`}</td>; })}<td>{company.scores.growth.toFixed(1)}</td><td>{company.scores.profitability.toFixed(1)}</td><td>{company.scores.margin.toFixed(1)}</td><td>{company.scores.quality.toFixed(1)}</td><td>{company.holding ? <span className="portfolio-company"><b>OWNED</b><small>U {company.holding.pnl >= 0 ? "+" : ""}{inr.format(company.holding.pnl)} · Day {company.holding.dayPnl >= 0 ? "+" : ""}{inr.format(company.holding.dayPnl)}</small></span> : "—"}</td></tr>)}</tbody></table></div><div className="sector-table-pager"><button type="button" disabled={safeCompanyPage === 0} onClick={() => setCompanyPage((value) => Math.max(0, value - 1))}>Previous</button><span>Page {safeCompanyPage + 1} / {companyPageCount}</span><button type="button" disabled={safeCompanyPage >= companyPageCount - 1} onClick={() => setCompanyPage((value) => Math.min(companyPageCount - 1, value + 1))}>Next</button></div></>}
+        {page === "companies" && <><div className="sector-company-table table-scroll" aria-label="Company composition table. Scroll horizontally when columns exceed the pane."><table><caption className="sector-table-scroll-caption">Scroll this table horizontally for remaining columns</caption><thead><tr><th>Company</th><th>Universe share</th><th>Live price</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>Growth</th><th>Profitability</th><th>Margin</th><th>Quality</th><th>Portfolio</th></tr></thead><tbody>{visibleCompanies.map((company) => <tr key={company.symbol}><td><b>{company.name}</b><small>{company.symbol} · {company.filingPeriod}</small></td><td>{company.universeShare.toFixed(1)}%</td><td>{company.market?.price === null || company.market?.price === undefined ? "—" : inr.format(company.market.price)}</td>{(["day", "week", "month", "quarter"] as SectorReturnHorizon[]).map((horizon) => { const value = company.market?.returns[horizon]; return <td key={horizon} className={value === null || value === undefined ? "" : value >= 0 ? "positive" : "negative"}>{value === null || value === undefined ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`}</td>; })}<td>{company.scores.growth.toFixed(1)}</td><td>{company.scores.profitability.toFixed(1)}</td><td>{company.scores.margin.toFixed(1)}</td><td>{company.scores.quality.toFixed(1)}</td><td>{company.holding ? <span className="portfolio-company"><b>OWNED</b><small>U {company.holding.pnl >= 0 ? "+" : ""}{inr.format(company.holding.pnl)} · Day {company.holding.dayPnl >= 0 ? "+" : ""}{inr.format(company.holding.dayPnl)}</small></span> : "—"}</td></tr>)}</tbody></table></div><div className="sector-table-pager"><button type="button" disabled={safeCompanyPage === 0} onClick={() => setCompanyPage((value) => Math.max(0, value - 1))}>Previous</button><span>Page {safeCompanyPage + 1} / {companyPageCount}</span><button type="button" disabled={safeCompanyPage >= companyPageCount - 1} onClick={() => setCompanyPage((value) => Math.min(companyPageCount - 1, value + 1))}>Next</button></div></>}
       </article>}
     </> : <>
       {page === "pulse" && <div className="sector-kpi-grid">

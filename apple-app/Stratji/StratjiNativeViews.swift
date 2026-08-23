@@ -5,6 +5,7 @@ import WebKit
 
 struct StratjiLoadingView: View {
     @ObservedObject var session: StratjiSessionModel
+    @AppStorage(StratjiAppearanceStore.defaultsKey) private var appearanceRaw = StratjiAppearanceStore.defaultValue
 
     /// Compact two-row glyph strip. Keep these tight; a lazy grid between Spacers inflates row gap.
     private enum SplashMetrics {
@@ -14,6 +15,12 @@ struct StratjiLoadingView: View {
         static let glyphDrawSize: CGFloat = 16
         static let glyphLabelSpacing: CGFloat = 4
         static let cellPadding: CGFloat = 4
+        /// Idle glyphs stay colored at full opacity; saturation(0)×0.45 vanished on black.
+        static let idleGlyphOpacity: CGFloat = 1
+    }
+
+    private var appearance: StratjiAppearance {
+        StratjiAppearance(rawValue: appearanceRaw) ?? .black
     }
 
     var body: some View {
@@ -21,21 +28,22 @@ struct StratjiLoadingView: View {
             Spacer(minLength: 0)
             Text("Stratji")
                 .font(.largeTitle.bold())
+                .foregroundColor(appearance.canvasInk)
             Text(session.stageLabel)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundColor(appearance.canvasMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)
             ProgressView(value: session.progress, total: 1)
                 .progressViewStyle(.linear)
-                .tint(.accentColor)
+                .tint(Color(red: 0.25, green: 0.58, blue: 1.0))
                 .frame(maxWidth: 420)
                 .animation(.easeInOut(duration: SplashProgressInterpolator.animationDuration), value: session.progress)
                 .accessibilityLabel("Startup progress")
                 .accessibilityValue("\(Int((session.progress * 100).rounded())) percent")
             Text("\(Int((session.progress * 100).rounded()))% · \(session.stage.title)")
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundColor(appearance.canvasMuted)
             if session.kiteAuthPhase != .idle {
                 splashKiteAuthPrompt
             }
@@ -50,14 +58,16 @@ struct StratjiLoadingView: View {
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(appearance.canvasFill)
+        .preferredColorScheme(appearance.colorScheme)
+        .environment(\.colorScheme, appearance.colorScheme)
     }
 
     private var splashKiteAuthPrompt: some View {
         VStack(spacing: 10) {
             Text(session.kiteAuthMessage)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundColor(appearance.canvasMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
             HStack(spacing: 10) {
@@ -70,6 +80,7 @@ struct StratjiLoadingView: View {
                     session.skipKiteLogin()
                 }
                 .buttonStyle(.bordered)
+                .foregroundColor(appearance.canvasInk)
                 .accessibilityLabel("Continue without live Kite, using cached data")
             }
         }
@@ -92,21 +103,19 @@ struct StratjiLoadingView: View {
             splashStageGlyph(stage: stage, isCurrent: isCurrent, isComplete: isComplete)
             Text(stage.title)
                 .font(.caption2)
-                .foregroundStyle(isCurrent || isComplete ? Color.primary : Color.secondary)
+                .foregroundColor(isCurrent || isComplete ? appearance.canvasInk : appearance.canvasMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
         .padding(SplashMetrics.cellPadding)
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
-        .background(isCurrent ? Color.accentColor.opacity(0.18) : Color.clear)
+        .background(isCurrent ? Color(red: 0.10, green: 0.32, blue: 0.62).opacity(0.55) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .opacity(isComplete && !isCurrent ? 0.7 : 1)
     }
 
-    private func splashStageGlyph(stage: StratjiLoadStage, isCurrent: Bool, isComplete: Bool) -> some View {
-        let dimOpacity = isComplete ? 0.7 : 0.45
-        return splashStageIcon(stage: stage, isCurrent: isCurrent, dimOpacity: dimOpacity)
+    private func splashStageGlyph(stage: StratjiLoadStage, isCurrent: Bool, isComplete _: Bool) -> some View {
+        splashStageIcon(stage: stage, isCurrent: isCurrent, dimOpacity: SplashMetrics.idleGlyphOpacity)
             .frame(width: SplashMetrics.glyphSize, height: SplashMetrics.glyphSize)
     }
 
@@ -121,8 +130,7 @@ struct StratjiLoadingView: View {
                 .scaledToFit()
                 .frame(width: SplashMetrics.glyphSize, height: SplashMetrics.glyphSize)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .saturation(isCurrent ? 1 : 0)
-                .opacity(isCurrent ? 1 : dimOpacity)
+                .opacity(1)
                 .accessibilityLabel("Kite")
         case .service:
             splashSFSymbol("server.rack", isCurrent: isCurrent, dimOpacity: dimOpacity, tint: splashLoadingTint(stage))
@@ -147,13 +155,13 @@ struct StratjiLoadingView: View {
         }
     }
 
-    private func splashSFSymbol(_ name: String, isCurrent: Bool, dimOpacity: Double, tint: Color) -> some View {
+    private func splashSFSymbol(_ name: String, isCurrent _: Bool, dimOpacity _: Double, tint: Color) -> some View {
         Image(systemName: name)
             .resizable()
             .scaledToFit()
             .frame(width: SplashMetrics.glyphDrawSize, height: SplashMetrics.glyphDrawSize)
-            .foregroundStyle(isCurrent ? tint : Color.secondary)
-            .opacity(isCurrent ? 1 : dimOpacity)
+            .foregroundStyle(tint)
+            .opacity(1)
             .frame(width: SplashMetrics.glyphSize, height: SplashMetrics.glyphSize)
     }
 
@@ -169,14 +177,19 @@ struct StratjiLoadingView: View {
         case .sectors: Color(red: 0.18, green: 0.66, blue: 0.66)
         case .earnings: Color(red: 0.22, green: 0.72, blue: 0.36)
         case .health: Color(red: 0.86, green: 0.08, blue: 0.24)
-        case .hydrate: Color.accentColor
+        case .hydrate: Color(red: 0.25, green: 0.58, blue: 1.0)
         }
     }
 }
 
 struct StratjiOfflineView: View {
     @ObservedObject var session: StratjiSessionModel
+    @AppStorage(StratjiAppearanceStore.defaultsKey) private var appearanceRaw = StratjiAppearanceStore.defaultValue
     @State private var showTechnicalDetails = false
+
+    private var appearance: StratjiAppearance {
+        StratjiAppearance(rawValue: appearanceRaw) ?? .black
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -185,9 +198,10 @@ struct StratjiOfflineView: View {
                 .foregroundStyle(.orange)
             Text("Stratji is not ready")
                 .font(.title2.bold())
+                .foregroundStyle(appearance.canvasInk)
             Text(session.offlineMessage ?? "The local Stratji service did not start.")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(appearance.canvasMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
             HStack(spacing: 10) {
@@ -219,7 +233,12 @@ struct StratjiOfflineView: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(appearance.canvasFill)
+        .preferredColorScheme(appearance.colorScheme)
+        .environment(\.colorScheme, appearance.colorScheme)
+        .onAppear {
+            Task { await session.recoverIfServiceAlreadyLive() }
+        }
     }
 }
 

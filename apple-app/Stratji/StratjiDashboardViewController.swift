@@ -16,12 +16,6 @@ final class StratjiDashboardViewController: NSViewController {
     private var didConfigure = false
     private var lastLoadedDestinationID: String?
     private var didPersistApplePermissions = false
-    private var mouseMonitor: Any?
-    private var hideGlassWorkItem: DispatchWorkItem?
-    private var isGlassRevealed = false
-    private var isPointerInRevealStrip = false
-    private var isPointerInsideGlassBar = false
-    private var isInteractingWithGlass = false
 
     init(session: StratjiSessionModel) {
         self.session = session
@@ -33,19 +27,12 @@ final class StratjiDashboardViewController: NSViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        if let mouseMonitor {
-            NSEvent.removeMonitor(mouseMonitor)
-        }
-    }
-
     override func loadView() {
-        let root = StratjiDashboardRootView()
+        let root = NSView()
         root.wantsLayer = true
-        root.layer?.backgroundColor = NSColor.black.cgColor
-        root.onPointerLocationChange = { [weak self] location in
-            self?.handlePointerLocation(location)
-        }
+        root.layer?.backgroundColor = StratjiAppearanceStore.current.prefersDarkChrome
+            ? NSColor.black.cgColor
+            : NSColor(calibratedRed: 0.98, green: 0.97, blue: 0.95, alpha: 1).cgColor
         view = root
     }
 
@@ -58,8 +45,7 @@ final class StratjiDashboardViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        view.window?.acceptsMouseMovedEvents = true
-        installMouseMonitorIfNeeded()
+        applyNativeAppearance()
         installWebView()
         startBootstrapIfNeeded()
     }
@@ -84,10 +70,7 @@ final class StratjiDashboardViewController: NSViewController {
         didConfigure = true
 
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.black.cgColor
-
         webHostView.wantsLayer = true
-        webHostView.layer?.backgroundColor = NSColor.black.cgColor
         webHostView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webHostView)
 
@@ -96,24 +79,17 @@ final class StratjiDashboardViewController: NSViewController {
         glassOverlay.layer?.backgroundColor = NSColor.clear.cgColor
         glassOverlay.layer?.masksToBounds = false
         glassOverlay.translatesAutoresizingMaskIntoConstraints = false
-        glassOverlay.ignoresHits = true
         view.addSubview(glassOverlay)
 
-        let glass = NSHostingView(rootView: StratjiWorkspaceGlassBar(
-            session: session,
-            onPointerInsideChange: { [weak self] inside in
-                guard let self, inside else { return }
-                self.isPointerInsideGlassBar = true
-                self.cancelScheduledHide()
-                self.updateGlassReveal()
-            }
-        ))
+        let glass = NSHostingView(rootView: StratjiWorkspaceGlassBar(session: session))
         glass.wantsLayer = true
         glass.layer?.isOpaque = false
         glass.layer?.backgroundColor = NSColor.clear.cgColor
         glass.layer?.masksToBounds = false
         glass.translatesAutoresizingMaskIntoConstraints = false
-        glass.alphaValue = 0
+        glass.sizingOptions = [.intrinsicContentSize]
+        glass.setContentHuggingPriority(.required, for: .horizontal)
+        glass.alphaValue = 1
         glassOverlay.addSubview(glass)
         glassHosting = glass
 
@@ -126,14 +102,16 @@ final class StratjiDashboardViewController: NSViewController {
             glassOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             glassOverlay.topAnchor.constraint(equalTo: view.topAnchor),
             glassOverlay.heightAnchor.constraint(equalToConstant: StratjiWorkspaceChromeMetrics.barHostHeight),
-            glass.leadingAnchor.constraint(equalTo: glassOverlay.leadingAnchor),
-            glass.trailingAnchor.constraint(equalTo: glassOverlay.trailingAnchor),
+            glass.centerXAnchor.constraint(equalTo: glassOverlay.centerXAnchor),
             glass.topAnchor.constraint(equalTo: glassOverlay.topAnchor),
             glass.bottomAnchor.constraint(equalTo: glassOverlay.bottomAnchor),
+            glass.widthAnchor.constraint(lessThanOrEqualTo: glassOverlay.widthAnchor, constant: -24),
         ])
 
         let loading = NSHostingView(rootView: StratjiLoadingView(session: session))
         loading.translatesAutoresizingMaskIntoConstraints = false
+        loading.wantsLayer = true
+        loading.layer?.isOpaque = true
         loadingHosting = loading
         view.addSubview(loading)
 
@@ -153,6 +131,7 @@ final class StratjiDashboardViewController: NSViewController {
             offline.topAnchor.constraint(equalTo: view.topAnchor),
             offline.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        applyNativeAppearance()
     }
 
     private func bindSession() {
@@ -210,7 +189,14 @@ final class StratjiDashboardViewController: NSViewController {
             : NSColor(calibratedRed: 0.98, green: 0.97, blue: 0.95, alpha: 1)
         view.layer?.backgroundColor = fill.cgColor
         webHostView.layer?.backgroundColor = fill.cgColor
+        loadingHosting?.layer?.backgroundColor = fill.cgColor
+        loadingHosting?.layer?.isOpaque = true
+        offlineHosting?.layer?.backgroundColor = fill.cgColor
+        view.window?.backgroundColor = fill
         view.window?.appearance = StratjiAppearanceStore.current.nsAppearance
+        loadingHosting?.appearance = StratjiAppearanceStore.current.nsAppearance
+        offlineHosting?.appearance = StratjiAppearanceStore.current.nsAppearance
+        glassHosting?.appearance = StratjiAppearanceStore.current.nsAppearance
     }
 
     private func startBootstrapIfNeeded() {
@@ -224,6 +210,9 @@ final class StratjiDashboardViewController: NSViewController {
         let failed = session.serviceFailed && !loading
         loadingHosting?.isHidden = !loading
         offlineHosting?.isHidden = !failed
+        if failed {
+            Task { await session.recoverIfServiceAlreadyLive() }
+        }
         if !loading && !failed {
             installWebView()
         }
@@ -263,142 +252,12 @@ final class StratjiDashboardViewController: NSViewController {
         webView.translatesAutoresizingMaskIntoConstraints = true
         webView.frame = webHost.bounds
     }
-
-    private func installMouseMonitorIfNeeded() {
-        guard mouseMonitor == nil else { return }
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .leftMouseUp]) { [weak self] event in
-            self?.handleChromePointerEvent(event)
-            return event
-        }
-    }
-
-    private func handleChromePointerEvent(_ event: NSEvent) {
-        guard event.window == view.window else { return }
-        let location = view.convert(event.locationInWindow, from: nil)
-        switch event.type {
-        case .leftMouseDown:
-            if isGlassRevealed, glassOverlay.frame.contains(location) {
-                isInteractingWithGlass = true
-                cancelScheduledHide()
-            }
-            handlePointerLocation(location)
-        case .leftMouseUp:
-            isInteractingWithGlass = false
-            handlePointerLocation(location)
-        default:
-            handlePointerLocation(location)
-        }
-    }
-
-    private func handlePointerLocation(_ locationInView: NSPoint?) {
-        guard let locationInView, view.bounds.contains(locationInView) else {
-            isPointerInRevealStrip = false
-            if !isInteractingWithGlass {
-                isPointerInsideGlassBar = false
-            }
-            updateGlassReveal()
-            return
-        }
-
-        let contentTop = view.bounds.maxY - view.safeAreaInsets.top
-        let stripMinY = contentTop - StratjiWorkspaceChromeMetrics.hoverRevealStripHeight
-        isPointerInRevealStrip = locationInView.y >= stripMinY && locationInView.y <= contentTop + 1
-        if isGlassRevealed {
-            isPointerInsideGlassBar = glassOverlay.frame.contains(locationInView)
-        }
-        updateGlassReveal()
-    }
-
-    private func updateGlassReveal() {
-        let shouldShow = isPointerInRevealStrip || isPointerInsideGlassBar || isInteractingWithGlass
-        if shouldShow {
-            cancelScheduledHide()
-            revealGlass()
-            return
-        }
-        scheduleHide()
-    }
-
-    private func revealGlass() {
-        guard !isGlassRevealed else { return }
-        isGlassRevealed = true
-        glassOverlay.ignoresHits = false
-        glassHosting?.alphaValue = 0
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = StratjiWorkspaceChromeMetrics.revealAnimationDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            glassHosting?.animator().alphaValue = 1
-        }
-    }
-
-    private func scheduleHide() {
-        guard isGlassRevealed, hideGlassWorkItem == nil else { return }
-        let work = DispatchWorkItem { [weak self] in
-            self?.hideGlass()
-        }
-        hideGlassWorkItem = work
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + StratjiWorkspaceChromeMetrics.hideDelay,
-            execute: work
-        )
-    }
-
-    private func cancelScheduledHide() {
-        hideGlassWorkItem?.cancel()
-        hideGlassWorkItem = nil
-    }
-
-    private func hideGlass() {
-        hideGlassWorkItem = nil
-        guard isGlassRevealed else { return }
-        guard !isPointerInRevealStrip, !isPointerInsideGlassBar, !isInteractingWithGlass else { return }
-        isGlassRevealed = false
-        NSAnimationContext.runAnimationGroup { [weak self] context in
-            context.duration = StratjiWorkspaceChromeMetrics.revealAnimationDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self?.glassHosting?.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            if !self.isGlassRevealed {
-                self.glassOverlay.ignoresHits = true
-                self.isPointerInsideGlassBar = false
-            }
-        }
-    }
 }
 
-/// Overlay host that lets WKWebView receive clicks while the workspace bar is hidden.
+/// Overlay host that lets WKWebView receive clicks in empty chrome around the glass cluster.
 final class StratjiPassThroughOverlay: NSView {
-    var ignoresHits = true
-
     override func hitTest(_ point: NSPoint) -> NSView? {
-        ignoresHits ? nil : super.hitTest(point)
-    }
-}
-
-private final class StratjiDashboardRootView: NSView {
-    var onPointerLocationChange: ((NSPoint?) -> Void)?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        ))
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        onPointerLocationChange?(convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        onPointerLocationChange?(convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onPointerLocationChange?(nil)
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
     }
 }

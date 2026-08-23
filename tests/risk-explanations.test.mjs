@@ -88,13 +88,14 @@ test("risk panel uses selected tab semantics and remains content-sized", async (
   assert.match(workspace, /<h5>Evidence<\/h5>/);
   assert.match(workspace, /Kite \{evidenceContext\.asOf\}/);
   assert.match(workspace, /evidenceContext=\{\{ holdings, asOf: snapshot\.asOf, classification \}\}/);
-  assert.match(workspace, /const chartHeight = explainSelected \? 480 : 620/);
+  assert.match(workspace, /const chartHeight = explainSelected \? 480 : 420/);
   assert.match(workspace, /riskScoreColor|riskScoreBand/);
   assert.match(workspace, /renderScoreDot|renderAxisTick/);
   assert.match(workspace, /axis-risk-stack/);
   assert.match(workspace, /seriesColor/);
   assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.axis-risk-stack/);
-  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*620px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*420px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-chart \{[^}]*min-height:\s*480px/s);
   assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-selector button \{[^}]*min-width:\s*78px/s);
   assert.match(workspace, /risk-series-key/);
   assert.match(workspace, /holdings-risk-stack/);

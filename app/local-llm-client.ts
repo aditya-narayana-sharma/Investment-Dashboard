@@ -1,6 +1,9 @@
 import {
-  callableProvidersInPreferenceOrder,
+  completionProvidersInPreferenceOrder,
+  isLlmModelCircuitBroken,
   llmAssistAvailability,
+  rememberLlmAuthFailure,
+  rememberLlmMissingModel,
   type CallableLlmProvider,
   type LocalLlmSecrets,
 } from "./local-llm-secrets.ts";
@@ -104,6 +107,107 @@ function geminiText(payload: unknown): string {
   }).join("\n").trim();
 }
 
+function ollamaText(payload: unknown): string {
+  const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const message = record.message && typeof record.message === "object" ? record.message as Record<string, unknown> : {};
+  return asText(message.content).trim() || asText(record.response).trim();
+}
+
+function ollamaStreamDelta(payload: unknown): string {
+  const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const message = record.message && typeof record.message === "object" ? record.message as Record<string, unknown> : {};
+  return asText(message.content) || asText(record.response);
+}
+
+function ollamaOrigin(secrets: LocalLlmSecrets): string {
+  const raw = secrets.ollamaUrl?.trim() || "http://127.0.0.1:11434";
+  try {
+    const url = new URL(raw.includes("://") ? raw : `http://${raw}`);
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+      return "http://127.0.0.1:11434";
+    }
+    return url.origin;
+  } catch {
+    return "http://127.0.0.1:11434";
+  }
+}
+
+const PREFERRED_OLLAMA_MODELS = ["qwen2.5:7b-instruct", "qwen2.5", "llama3.1", "llama3.2", "mistral"] as const;
+
+function rankOllamaModels(names: string[], preferred?: string): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  const push = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    unique.push(trimmed);
+  };
+  if (preferred?.trim()) push(preferred.trim());
+  for (const needle of PREFERRED_OLLAMA_MODELS) {
+    for (const name of names) {
+      if (name === needle || name.startsWith(`${needle}:`) || name.startsWith(`${needle}-`)) push(name);
+    }
+  }
+  for (const name of names) push(name);
+  return unique;
+}
+
+async function resolveOllamaModels(options: {
+  secrets: LocalLlmSecrets;
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  const named = options.secrets.ollamaModel?.trim();
+  const origin = ollamaOrigin(options.secrets);
+  try {
+    const response = await options.fetchImpl(`${origin}/api/tags`, {
+      method: "GET",
+      signal: combinedAbortSignal(Math.min(options.timeoutMs, 5_000), options.signal),
+    });
+    if (!response.ok) {
+      if (named) return [named];
+      return [];
+    }
+    const payload = await response.json().catch(() => null);
+    const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const models = Array.isArray(record.models) ? record.models : [];
+    const names = models.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const name = asText((item as Record<string, unknown>).name).trim();
+      return name ? [name] : [];
+    });
+    const ranked = rankOllamaModels(names, named).filter(
+      (model) => !isLlmModelCircuitBroken("Ollama", model, options.secrets),
+    );
+    if (ranked.length) return ranked;
+  } catch (cause) {
+    if (options.signal?.aborted) throw cause;
+  }
+  if (named && !isLlmModelCircuitBroken("Ollama", named, options.secrets)) return [named];
+  return [];
+}
+
+/** Localhost `/api/tags` probe for Satya status. Never returns URLs or secrets. */
+export async function probeOllamaReachable(
+  secrets: LocalLlmSecrets,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = 1_500,
+): Promise<boolean> {
+  const origin = ollamaOrigin(secrets);
+  try {
+    const response = await fetchImpl(`${origin}/api/tags`, {
+      method: "GET",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 function isAuthFailure(error: LlmProviderHttpError): boolean {
   if (error.status === 401) return true;
   return error.errorType === "authentication_error" || error.errorType === "invalid_api_key" || error.errorType === "unauthorized";
@@ -113,6 +217,16 @@ function isMissingModel(error: LlmProviderHttpError): boolean {
   if (error.errorType === "model_not_found" || error.errorType === "not_found_error" || error.errorType === "not_found") return true;
   if (error.status === 404) return true;
   return error.status === 403 && !isAuthFailure(error);
+}
+
+function isContextOverflow(error: LlmProviderHttpError): boolean {
+  if (error.errorType === "context_length_exceeded" || error.errorType === "request_too_large") return true;
+  return error.status === 413;
+}
+
+/** Auth and context-window failures skip the rest of that provider; missing-model tries the next id. */
+function shouldSkipProvider(error: LlmProviderHttpError): boolean {
+  return isAuthFailure(error) || isContextOverflow(error) || !isMissingModel(error);
 }
 
 function isRetryable(error: LlmProviderHttpError): boolean {
@@ -143,6 +257,42 @@ export function formatLlmFailureMessage(attempts: LlmProviderAttempt[]): string 
   return `LLM call failed${detail}. ${UNCHANGED}`;
 }
 
+function failedLlmLayer(attempts: LlmProviderAttempt[]): string {
+  const hasOllama = attempts.some((attempt) => attempt.provider === "Ollama");
+  const hasCloud = attempts.some((attempt) => attempt.provider !== "Ollama");
+  if (hasCloud && hasOllama) return "cloud LLM skipped; on-device LLM unavailable";
+  if (hasOllama) return "on-device LLM unavailable";
+  if (hasCloud) return "cloud LLM skipped";
+  return "LLM unavailable";
+}
+
+/** Operator-safe Satya/status copy — never dump multi-provider HTTP bodies as the answer. */
+export function formatSatyaLlmOperatorMessage(attempts: LlmProviderAttempt[]): string {
+  return `Satya could not draft (${failedLlmLayer(attempts)}). Mail, Axis PDFs, podcasts, and verified earnings remain the source of truth.`;
+}
+
+function combinedAbortSignal(timeoutMs: number, external?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!external) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([timeout, external]);
+  return timeout;
+}
+
+function abortError(): Error {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+function rememberProviderFailure(error: LlmProviderHttpError, secrets: LocalLlmSecrets): void {
+  if (isAuthFailure(error)) rememberLlmAuthFailure(error.provider, secrets);
+  if (isMissingModel(error)) rememberLlmMissingModel(error.provider, error.model, secrets);
+}
+
 async function postJson(
   fetchImpl: typeof fetch,
   url: string,
@@ -150,6 +300,7 @@ async function postJson(
   body: unknown,
   timeoutMs: number,
   meta: { provider: CallableLlmProvider; model: string },
+  signal?: AbortSignal,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -157,9 +308,10 @@ async function postJson(
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: combinedAbortSignal(timeoutMs, signal),
     });
   } catch (cause) {
+    if (signal?.aborted) throw cause;
     const name = cause instanceof Error ? cause.name : "";
     throw new LlmProviderHttpError({
       provider: meta.provider,
@@ -188,13 +340,15 @@ async function postJsonWithRetries(
   timeoutMs: number,
   retryDelaysMs: number[],
   meta: { provider: CallableLlmProvider; model: string },
+  signal?: AbortSignal,
 ): Promise<unknown> {
   let lastError: LlmProviderHttpError | null = null;
   const tries = retryDelaysMs.length + 1;
   for (let attempt = 0; attempt < tries; attempt += 1) {
     try {
-      return await postJson(fetchImpl, url, headers, body, timeoutMs, meta);
+      return await postJson(fetchImpl, url, headers, body, timeoutMs, meta, signal);
     } catch (cause) {
+      if (signal?.aborted) throw cause;
       if (!(cause instanceof LlmProviderHttpError) || !isRetryable(cause)) throw cause;
       lastError = cause;
       const delayMs = retryDelaysMs[attempt];
@@ -219,7 +373,13 @@ type ProviderCall = {
   readText: (payload: unknown) => string;
 };
 
-function providerCall(provider: CallableLlmProvider, secrets: LocalLlmSecrets, prompt: string, system: string): ProviderCall {
+function providerCall(
+  provider: CallableLlmProvider,
+  secrets: LocalLlmSecrets,
+  prompt: string,
+  system: string,
+  maxTokens?: number,
+): ProviderCall {
   switch (provider) {
     case "Claude":
       return {
@@ -233,7 +393,7 @@ function providerCall(provider: CallableLlmProvider, secrets: LocalLlmSecrets, p
           },
           body: {
             model,
-            max_tokens: 1200,
+            max_tokens: maxTokens ?? 1200,
             system,
             messages: [{ role: "user", content: prompt }],
           },
@@ -252,6 +412,7 @@ function providerCall(provider: CallableLlmProvider, secrets: LocalLlmSecrets, p
           body: {
             model,
             temperature: 0.2,
+            ...(maxTokens ? { max_tokens: maxTokens } : {}),
             messages: [
               { role: "system", content: system },
               { role: "user", content: prompt },
@@ -269,16 +430,242 @@ function providerCall(provider: CallableLlmProvider, secrets: LocalLlmSecrets, p
           body: {
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.2 },
+            generationConfig: {
+              temperature: 0.2,
+              ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
+            },
           },
         }),
         readText: geminiText,
+      };
+    case "Ollama":
+      return {
+        models: secrets.ollamaModel ? [secrets.ollamaModel] : ["qwen2.5:7b-instruct"],
+        request: (model) => ({
+          url: `${ollamaOrigin(secrets)}/api/chat`,
+          headers: { "content-type": "application/json" },
+          body: {
+            model,
+            stream: false,
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: prompt },
+            ],
+            options: {
+              temperature: 0.2,
+              ...(maxTokens ? { num_predict: Math.min(maxTokens, 4096) } : { num_predict: 2048 }),
+            },
+          },
+        }),
+        readText: ollamaText,
       };
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
     }
   }
+}
+
+async function consumeOllamaNdjsonLine(
+  line: string,
+  onToken: (text: string) => void,
+): Promise<{ delta: string; parsed: unknown | null }> {
+  const trimmed = line.trim();
+  if (!trimmed) return { delta: "", parsed: null };
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    const delta = ollamaStreamDelta(parsed);
+    if (delta) onToken(delta);
+    return { delta, parsed };
+  } catch {
+    return { delta: "", parsed: null };
+  }
+}
+
+async function readOllamaNdjsonStream(
+  response: Response,
+  onToken: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  throwIfAborted(signal);
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const payload = await response.json().catch(() => null);
+    const text = ollamaText(payload);
+    if (text) onToken(text);
+    return text;
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const { delta } = await consumeOllamaNdjsonLine(line, onToken);
+        full += delta;
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const { delta, parsed } = await consumeOllamaNdjsonLine(buffer, onToken);
+      if (delta) {
+        full += delta;
+      } else if (!full && parsed) {
+        const text = ollamaText(parsed);
+        if (text) {
+          onToken(text);
+          full = text;
+        }
+      }
+    }
+  } catch (cause) {
+    await reader.cancel().catch(() => undefined);
+    throw cause;
+  }
+  return full;
+}
+
+async function streamOllamaRequest(options: {
+  fetchImpl: typeof fetch;
+  url: string;
+  body: unknown;
+  timeoutMs: number;
+  signal?: AbortSignal;
+  model: string;
+  onToken: (text: string) => void;
+}): Promise<string> {
+  let response: Response;
+  try {
+    response = await options.fetchImpl(options.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options.body),
+      signal: combinedAbortSignal(options.timeoutMs, options.signal),
+    });
+  } catch (cause) {
+    if (options.signal?.aborted) throw cause;
+    const name = cause instanceof Error ? cause.name : "";
+    throw new LlmProviderHttpError({
+      provider: "Ollama",
+      model: options.model,
+      status: null,
+      errorType: name === "TimeoutError" ? "timeout" : name === "AbortError" ? "aborted" : "network",
+    });
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new LlmProviderHttpError({
+      provider: "Ollama",
+      model: options.model,
+      status: response.status,
+      errorType: providerErrorType(payload, `http_${response.status}`),
+    });
+  }
+  return readOllamaNdjsonStream(response, options.onToken, options.signal);
+}
+
+function ollamaStreamBodies(
+  model: string,
+  prompt: string,
+  system: string,
+  maxTokens?: number,
+): { chat: unknown; generate: unknown } {
+  const options = {
+    temperature: 0.2,
+    ...(maxTokens ? { num_predict: Math.min(maxTokens, 4096) } : { num_predict: 2048 }),
+  };
+  return {
+    chat: {
+      model,
+      stream: true,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      options,
+    },
+    generate: {
+      model,
+      stream: true,
+      system,
+      prompt,
+      options,
+    },
+  };
+}
+
+async function streamOllamaWithProvider(options: {
+  prompt: string;
+  system: string;
+  secrets: LocalLlmSecrets;
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  attempts: LlmProviderAttempt[];
+  signal?: AbortSignal;
+  maxTokens?: number;
+  onToken: (text: string) => void;
+}): Promise<string> {
+  const { prompt, system, secrets, fetchImpl, timeoutMs, attempts, signal, maxTokens, onToken } = options;
+  const origin = ollamaOrigin(secrets);
+  const models = await resolveOllamaModels({ secrets, fetchImpl, timeoutMs, signal });
+  if (!models.length) {
+    attempts.push({ provider: "Ollama", model: secrets.ollamaModel ?? "ollama", status: null, errorType: "unavailable" });
+    throw new LlmProviderHttpError({
+      provider: "Ollama",
+      model: secrets.ollamaModel ?? "ollama",
+      status: null,
+      errorType: "unavailable",
+    });
+  }
+  let lastError: LlmProviderHttpError | null = null;
+  for (const model of models) {
+    const bodies = ollamaStreamBodies(model, prompt, system, maxTokens);
+    try {
+      try {
+        return await streamOllamaRequest({
+          fetchImpl,
+          url: `${origin}/api/chat`,
+          body: bodies.chat,
+          timeoutMs,
+          signal,
+          model,
+          onToken,
+        });
+      } catch (cause) {
+        if (signal?.aborted) throw cause;
+        if (!(cause instanceof LlmProviderHttpError)) throw cause;
+        if (cause.status !== 404 && cause.status !== 405) throw cause;
+        return await streamOllamaRequest({
+          fetchImpl,
+          url: `${origin}/api/generate`,
+          body: bodies.generate,
+          timeoutMs,
+          signal,
+          model,
+          onToken,
+        });
+      }
+    } catch (cause) {
+      if (!(cause instanceof LlmProviderHttpError)) throw cause;
+      lastError = cause;
+      attempts.push({ provider: "Ollama", model, status: cause.status, errorType: cause.errorType });
+      logLlmFailure({ provider: "Ollama", model, status: cause.status, errorType: cause.errorType });
+      rememberProviderFailure(cause, secrets);
+      if (shouldSkipProvider(cause)) throw cause;
+    }
+  }
+  throw lastError ?? new LlmProviderHttpError({
+    provider: "Ollama",
+    model: models[0] ?? secrets.ollamaModel ?? "ollama",
+    status: null,
+    errorType: "provider_error",
+  });
 }
 
 async function completeWithProvider(options: {
@@ -290,11 +677,35 @@ async function completeWithProvider(options: {
   timeoutMs: number;
   retryDelaysMs: number[];
   attempts: LlmProviderAttempt[];
+  signal?: AbortSignal;
+  maxTokens?: number;
 }): Promise<string> {
-  const { provider, prompt, system, secrets, fetchImpl, timeoutMs, retryDelaysMs, attempts } = options;
-  const call = providerCall(provider, secrets, prompt, system);
+  const { provider, prompt, system, secrets, fetchImpl, timeoutMs, retryDelaysMs, attempts, signal, maxTokens } = options;
+  const call = providerCall(provider, secrets, prompt, system, maxTokens);
+  let models = [...call.models].filter((model) => !isLlmModelCircuitBroken(provider, model, secrets));
+  if (provider === "Ollama") {
+    models = await resolveOllamaModels({ secrets, fetchImpl, timeoutMs, signal });
+    if (!models.length) {
+      attempts.push({ provider, model: secrets.ollamaModel ?? "ollama", status: null, errorType: "unavailable" });
+      throw new LlmProviderHttpError({
+        provider,
+        model: secrets.ollamaModel ?? "ollama",
+        status: null,
+        errorType: "unavailable",
+      });
+    }
+  }
+  if (!models.length) {
+    attempts.push({ provider, model: call.models[0] ?? "", status: null, errorType: "no_callable_model" });
+    throw new LlmProviderHttpError({
+      provider,
+      model: call.models[0] ?? "",
+      status: null,
+      errorType: "no_callable_model",
+    });
+  }
   let lastError: LlmProviderHttpError | null = null;
-  for (const model of call.models) {
+  for (const model of models) {
     const request = call.request(model);
     try {
       const payload = await postJsonWithRetries(
@@ -305,6 +716,7 @@ async function completeWithProvider(options: {
         timeoutMs,
         retryDelaysMs,
         { provider, model },
+        signal,
       );
       return call.readText(payload);
     } catch (cause) {
@@ -312,10 +724,11 @@ async function completeWithProvider(options: {
       lastError = cause;
       attempts.push({ provider, model, status: cause.status, errorType: cause.errorType });
       logLlmFailure({ provider, model, status: cause.status, errorType: cause.errorType });
-      if (isAuthFailure(cause) || !isMissingModel(cause)) throw cause;
+      rememberProviderFailure(cause, secrets);
+      if (shouldSkipProvider(cause)) throw cause;
     }
   }
-  throw lastError ?? new LlmProviderHttpError({ provider, model: call.models[0] ?? "", status: null, errorType: "provider_error" });
+  throw lastError ?? new LlmProviderHttpError({ provider, model: models[0] ?? call.models[0] ?? "", status: null, errorType: "provider_error" });
 }
 
 export async function completeLocalLlm(options: {
@@ -325,9 +738,28 @@ export async function completeLocalLlm(options: {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   retryDelaysMs?: number[];
+  signal?: AbortSignal;
+  maxTokens?: number;
 }): Promise<LocalLlmCompleteResult> {
+  return runLocalLlmCascade({ ...options, stream: false });
+}
+
+type LocalLlmCascadeOptions = {
+  prompt: string;
+  system?: string;
+  secrets: LocalLlmSecrets;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  retryDelaysMs?: number[];
+  signal?: AbortSignal;
+  maxTokens?: number;
+  stream: boolean;
+  onToken?: (text: string) => void;
+};
+
+async function runLocalLlmCascade(options: LocalLlmCascadeOptions): Promise<LocalLlmCompleteResult> {
   const availability = llmAssistAvailability(options.secrets);
-  const providers = callableProvidersInPreferenceOrder(options.secrets);
+  const providers = completionProvidersInPreferenceOrder(options.secrets);
   if (!providers.length || !availability.enabled) {
     return {
       ok: false,
@@ -345,18 +777,38 @@ export async function completeLocalLlm(options: {
   const retryDelaysMs = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
   const system = options.system?.trim() || "You are a careful on-device research assistant. Never invent missing source data.";
   const attempts: LlmProviderAttempt[] = [];
+  const emit = options.onToken;
   for (const provider of providers) {
     try {
-      const text = await completeWithProvider({
-        provider,
-        prompt,
-        system,
-        secrets: options.secrets,
-        fetchImpl,
-        timeoutMs,
-        retryDelaysMs,
-        attempts,
-      });
+      let streamed = false;
+      let text: string;
+      if (options.stream && provider === "Ollama" && emit) {
+        text = await streamOllamaWithProvider({
+          prompt,
+          system,
+          secrets: options.secrets,
+          fetchImpl,
+          timeoutMs,
+          attempts,
+          signal: options.signal,
+          maxTokens: options.maxTokens,
+          onToken: emit,
+        });
+        streamed = true;
+      } else {
+        text = await completeWithProvider({
+          provider,
+          prompt,
+          system,
+          secrets: options.secrets,
+          fetchImpl,
+          timeoutMs,
+          retryDelaysMs,
+          attempts,
+          signal: options.signal,
+          maxTokens: options.maxTokens,
+        });
+      }
       if (!text) {
         attempts.push({ provider, model: "", status: 200, errorType: "empty_draft" });
         continue;
@@ -364,9 +816,16 @@ export async function completeLocalLlm(options: {
       if (attempts.length) {
         logLlmFailure({ ok: true, provider, fallbackAfter: attempts });
       }
+      if (options.stream && emit && !streamed) {
+        for (const chunk of chunkTextForSse(text)) emit(chunk);
+      }
       return { ok: true, text, provider };
     } catch (cause) {
+      if (options.signal?.aborted) {
+        return { ok: false, disabled: false, provider: null, message: "Satya chat cancelled." };
+      }
       if (cause instanceof LlmProviderHttpError) {
+        rememberProviderFailure(cause, options.secrets);
         if (!attempts.some((attempt) => attempt.provider === cause.provider && attempt.model === cause.model && attempt.status === cause.status)) {
           attempts.push({ provider: cause.provider, model: cause.model, status: cause.status, errorType: cause.errorType });
         }
@@ -377,7 +836,7 @@ export async function completeLocalLlm(options: {
     }
   }
   const last = attempts.at(-1);
-  logLlmFailure({ ok: false, provider: last?.provider ?? providers[0] ?? null, status: last?.status ?? null, errorType: last?.errorType ?? "provider_error", attempts });
+  logLlmFailure({ ok: false, provider: last?.provider ?? providers[0] ?? null, status: last?.status ?? null, errorType: last?.errorType ?? "provider_error", attempts, detail: formatLlmFailureMessage(attempts) });
   return {
     ok: false,
     disabled: false,
@@ -385,6 +844,35 @@ export async function completeLocalLlm(options: {
     status: last?.status ?? null,
     errorType: last?.errorType ?? "provider_error",
     attempts,
-    message: formatLlmFailureMessage(attempts),
+    message: formatSatyaLlmOperatorMessage(attempts),
   };
+}
+
+/** Split completed text so SSE clients can paint incrementally after the provider returns. */
+export function chunkTextForSse(text: string, size = 48): string[] {
+  const value = text.trim() ? text : "";
+  if (!value) return [];
+  const chunks: string[] = [];
+  for (let index = 0; index < value.length; index += size) {
+    chunks.push(value.slice(index, index + size));
+  }
+  return chunks;
+}
+
+/**
+ * Streams tokens as they arrive. Ollama uses NDJSON `/api/chat` (or `/api/generate`).
+ * Cloud providers complete, then emit `chunkTextForSse` slices.
+ */
+export async function streamLocalLlm(options: {
+  prompt: string;
+  system?: string;
+  secrets: LocalLlmSecrets;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  retryDelaysMs?: number[];
+  signal?: AbortSignal;
+  maxTokens?: number;
+  onToken?: (text: string) => void;
+}): Promise<LocalLlmCompleteResult> {
+  return runLocalLlmCascade({ ...options, stream: true });
 }

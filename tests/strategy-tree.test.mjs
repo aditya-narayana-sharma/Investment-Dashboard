@@ -76,7 +76,7 @@ test("If/Else with empty ELSE round-trips on the tree and warns", () => {
   const result = validateTree(parsed);
   assert.equal(result.ok, true);
   assert.ok(result.issues.some((issue) => issue.code === "empty_else"));
-  assert.ok(result.issues.some((issue) => issue.code === "weight_method_unsupported"));
+  assert.equal(result.issues.some((issue) => issue.code === "weight_method_unsupported"), false);
 });
 
 test("unknown kpiId fails tree validate", () => {

@@ -186,30 +186,32 @@
   box-shadow: none !important;
 }
 @media (min-width: 621px) {
-  .analyst-matrix,
   .analyst-matrix .table-scroll {
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: visible;
   }
-  .analyst-matrix .analyst-table,
-  .analyst-matrix .analyst-table thead,
-  .analyst-matrix .analyst-table tbody {
-    display: block;
-    width: 100%;
-  }
-  .analyst-matrix .analyst-table thead tr,
-  .analyst-matrix .analyst-table tbody tr {
+  /* One grid for thead + every body row. Per-row grids sized CALL/SOURCE
+     independently, so TECHNICAL BUY and long houses shoved CMP right. */
+  .analyst-matrix .analyst-table {
     display: grid;
-    width: 100%;
+    width: max(100%, 74rem);
+    min-width: 74rem;
+    column-gap: 12px;
     grid-template-columns:
-      minmax(7.5rem, 0.9fr)
-      minmax(9rem, 1.3fr)
+      7.25rem
+      minmax(10rem, 1.35fr)
+      8.75rem
+      7.25rem
       6.5rem
-      minmax(6.25rem, 0.7fr)
-      minmax(6.25rem, 0.7fr)
-      minmax(6.5rem, 0.75fr)
-      5.5rem
-      minmax(10rem, 1.55fr);
+      8.75rem
+      6.5rem
+      minmax(12rem, 1.6fr);
     align-items: stretch;
+  }
+  .analyst-matrix .analyst-table thead,
+  .analyst-matrix .analyst-table tbody,
+  .analyst-matrix .analyst-table tr {
+    display: contents;
   }
   .analyst-matrix .analyst-table thead tr,
   .analyst-matrix .analyst-table thead tr:hover {
@@ -222,6 +224,30 @@
   .analyst-matrix .analyst-table th,
   .analyst-matrix .analyst-table td {
     min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .analyst-matrix .analyst-table th {
+    white-space: normal;
+  }
+  .analyst-matrix .analyst-table th:nth-child(3),
+  .analyst-matrix .analyst-table td:nth-child(3) {
+    display: flex;
+    align-items: center;
+  }
+  .analyst-matrix .analyst-table th:nth-child(4),
+  .analyst-matrix .analyst-table td:nth-child(4),
+  .analyst-matrix .analyst-table th:nth-child(5),
+  .analyst-matrix .analyst-table td:nth-child(5),
+  .analyst-matrix .analyst-table th:nth-child(6),
+  .analyst-matrix .analyst-table td:nth-child(6) {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .analyst-matrix .analyst-table .pill {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
   }
   .industry-breadth-table table,
   .industry-breadth-table thead,
@@ -278,13 +304,17 @@
   box-shadow: none;
 }
 .workspace-navigation.glass-bar .workspace-tabs button:hover,
-.workspace-navigation.glass-bar .workspace-tabs button:focus-visible {
+.workspace-navigation.glass-bar .workspace-tabs button:focus-visible,
+.workspace-navigation.glass-bar .workspace-section-nav.glass-sections button:hover,
+.workspace-navigation.glass-bar .workspace-section-nav.glass-sections button:focus-visible {
   box-shadow: none;
   animation: none;
   transform: scale(1.05);
   transform-origin: center bottom;
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.workspace-navigation.glass-bar .workspace-tabs button:active {
+.workspace-navigation.glass-bar .workspace-tabs button:active,
+.workspace-navigation.glass-bar .workspace-section-nav.glass-sections button:active {
   box-shadow: none;
   animation: none;
   transform: scale(0.99);
@@ -302,6 +332,13 @@
   transform: none !important;
   animation: none !important;
 }
+.satya-composer,
+.satya-ptt,
+.satya-send,
+.satya-chats,
+.satya-open-chats,
+.satya-launcher,
+.satya-suggestion-chip,
 .llm-assist textarea,
 .llm-assist-composer,
 .llm-assist-run {
@@ -312,6 +349,14 @@
     background-color var(--vo-motion) var(--vo-ease);
 }
 @media (hover: hover) and (pointer: fine) {
+  .satya-composer:hover:not(:disabled),
+  .satya-composer:focus-visible:not(:disabled),
+  .satya-ptt:hover:not(:disabled),
+  .satya-send:hover:not(:disabled),
+  .satya-chats:hover:not(:disabled),
+  .satya-open-chats:hover:not(:disabled),
+  .satya-launcher:hover:not(:disabled),
+  .satya-suggestion-chip:hover:not(:disabled),
   .llm-assist textarea:hover:not(:disabled),
   .llm-assist textarea:focus-visible:not(:disabled),
   .llm-assist-composer:hover:not(:disabled),

@@ -1,4 +1,5 @@
 /* Visual Overhaul — specialized instruments, motion, and interaction language */
+@import "./dashboard/satya.css";
 
 :root {
   --radius: 12px;
@@ -7,7 +8,7 @@
   --radius-pill: 999px;
   --control-gap: 10px;
   --chrome-stack-gap: 16px;
-  --section-nav-clearance: 28px;
+  --section-nav-clearance: 8px;
   --font-size-chip: 13px;
   --font-size-label: 13px;
   --font-size-ui: 14px;
@@ -183,7 +184,7 @@
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="health"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="builder"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button[data-mode="strategies"] {
-  color: rgba(248, 250, 252, 0.86);
+  color: color-mix(in srgb, var(--ink) 86%, transparent);
   font-weight: 600;
 }
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="investment"],
@@ -192,20 +193,32 @@
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="health"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="builder"],
 .workspace-navigation.mode-dial.glass-bar .workspace-tabs button.active[data-mode="strategies"] {
-  color: #fff;
+  color: var(--ink);
   font-weight: 700;
 }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="investment"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="investment"]) { --glass-tint: var(--vo-desk); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="sectors"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="sectors"]) { --glass-tint: var(--vo-map); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="intelligence"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="intelligence"]) { --glass-tint: var(--vo-news); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="health"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="health"]) { --glass-tint: var(--vo-body); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="builder"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="builder"]) { --glass-tint: var(--vo-canvas); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button.active[data-mode="strategies"]),
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-mode="strategies"]) { --glass-tint: var(--vo-strategies); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="investment"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="investment"]:hover) { --glass-tint: var(--vo-desk); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="sectors"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="sectors"]:hover) { --glass-tint: var(--vo-map); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="intelligence"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="intelligence"]:hover) { --glass-tint: var(--vo-news); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="health"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="health"]:hover) { --glass-tint: var(--vo-body); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="builder"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="builder"]:hover) { --glass-tint: var(--vo-canvas); }
+.workspace-navigation.glass-bar .workspace-glass-cluster:has(button[data-mode="strategies"]:hover),
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-mode="strategies"]:hover) { --glass-tint: var(--vo-strategies); }
 .workspace-navigation.glass-bar .workspace-tabs:has(button[data-locked="1"]:hover)::before,
 .workspace-navigation.glass-bar .workspace-tabs:has(button.active[data-locked="1"]):not(:has(button:hover))::before {
@@ -489,7 +502,7 @@
 .orbital-planet .nested-chart-panel {
   background:
     radial-gradient(circle at 50% 48%, rgba(37, 99, 235, 0.12), transparent 42%),
-    #0a0a0a;
+    var(--bg-panel);
 }
 .nested-chart-panel.orbital-planet .nested-center,
 .orbital-planet .nested-chart-panel .nested-center {
@@ -512,14 +525,14 @@
 /* ——— Gravity well map ——— */
 .portfolio-map-panel.gravity-well .portfolio-map {
   background:
-    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.55), transparent 55%),
-    #050505;
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ink) 8%, transparent), transparent 55%),
+    var(--bg-app);
 }
 .portfolio-map-panel.gravity-well .portfolio-map-tile {
   transition: filter var(--vo-motion) var(--vo-ease), opacity var(--vo-motion) var(--vo-ease), transform var(--vo-motion) var(--vo-ease);
 }
 .portfolio-map-panel.gravity-well .portfolio-map-tile.selected {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--on-dark);
   z-index: 2;
   transform: scale(1.02);
 }
@@ -555,8 +568,8 @@
   transition: border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease);
 }
 .macro-workbench.scenario-weather .macro-event-tabs button.active {
-  border-top-color: #60a5fa;
-  background: #0f172a;
+  border-top-color: var(--blue);
+  background: var(--bg-hover);
 }
 .macro-workbench.scenario-weather .scenario-body {
   position: relative;
@@ -679,9 +692,9 @@
   border: 1px solid #3f3f46;
 }
 .weather-altitude span.active {
-  border-color: #3b82f6;
-  color: #93c5fd;
-  background: #172554;
+  border-color: var(--blue);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--blue) 22%, var(--bg-hover));
 }
 
 /* ——— Tide clock (FII/DII) ——— */
@@ -721,7 +734,7 @@
 .risk-panel.threat-flower {
   background:
     radial-gradient(circle at 72% 48%, rgba(239, 68, 68, 0.08), transparent 48%),
-    #0a0a0a;
+    var(--bg-panel);
 }
 .risk-panel.threat-flower .risk-radar-layout {
   grid-template-columns: 1fr;
@@ -748,11 +761,15 @@
 }
 .risk-panel.threat-flower.holdings-stack .risk-radar-workbench,
 .risk-panel.threat-flower.holdings-stack .holdings-risk-stack {
-  flex: 1;
+  flex: none;
   display: grid;
   grid-template-columns: 1fr;
   gap: 14px;
   align-content: start;
+}
+.investment-risk-grid > .risk-panel.threat-flower {
+  align-self: start;
+  height: auto;
 }
 /* Axis recommended list: compact hex strip above full-width radar */
 .risk-panel.threat-flower:not(.holdings-stack) .risk-selector {
@@ -794,7 +811,8 @@
   padding-top: 0;
 }
 .risk-panel.threat-flower:not(.holdings-stack) .risk-chart {
-  min-height: 620px;
+  min-height: 420px;
+  flex: none;
   margin: 0;
   padding: 0;
 }
@@ -844,17 +862,12 @@
   white-space: normal;
 }
 .risk-panel.threat-flower .risk-chart {
-  min-height: 560px;
-  flex: 1 1 auto;
-}
-.risk-panel.threat-flower:not(.holdings-stack) .risk-radar-chart-col {
-  min-height: 620px;
-}
-.risk-panel.threat-flower:not(.holdings-stack) .risk-chart {
-  min-height: 620px;
+  min-height: 420px;
+  flex: none;
 }
 .risk-panel.threat-flower.holdings-stack .risk-chart {
   min-height: 480px;
+  flex: none;
 }
 .risk-panel.threat-flower.holdings-stack .risk-radar-chart-col {
   width: 100%;

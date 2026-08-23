@@ -34,7 +34,7 @@ final class StratjiSessionModel: ObservableObject {
 
     let document = StratjiDocumentBrowser()
     var baseURL: URL
-    var startDataPlane: (() async -> FlaskServiceStatus)?
+    var startDataPlane: ((Bool) async -> FlaskServiceStatus)?
     var logProvider: (() -> String)?
 
     private let client = StratjiAPIClient()
@@ -76,7 +76,7 @@ final class StratjiSessionModel: ObservableObject {
     /// Full dashboard live-feed strip (`PulseConstellation` / `GET /api/dashboard/refresh` `sources`).
     var liveFeedSources: [SourceFreshnessDTO] { sources }
 
-    func bootstrap() async {
+    func bootstrap(forceRestartService: Bool = false) async {
         stopPeriodicRefresh()
         startupRefreshCompleted = false
         isBootstrapping = true
@@ -96,10 +96,17 @@ final class StratjiSessionModel: ObservableObject {
         stage = .service
         stageEnteredAt = Date()
         restoreCompletedActions()
-        await runAudit(includeStartupScript: true)
+        await runAudit(includeStartupScript: true, forceRestartService: forceRestartService)
     }
 
     func reload() async {
+        await bootstrap(forceRestartService: true)
+    }
+
+    /// Offline splash: if Flask+vinext are already green, continue without another stop/start.
+    func recoverIfServiceAlreadyLive() async {
+        guard serviceFailed, !isBootstrapping else { return }
+        guard await FlaskServiceSupervisor.isHealthy() else { return }
         await bootstrap()
     }
 
@@ -193,7 +200,12 @@ final class StratjiSessionModel: ObservableObject {
         return StratjiActionLane(rawValue: item.lane) ?? .today
     }
 
-    private func runAudit(showLoading: Bool = true, includeStartupScript: Bool = false, incremental: Bool = false) async {
+    private func runAudit(
+        showLoading: Bool = true,
+        includeStartupScript: Bool = false,
+        incremental: Bool = false,
+        forceRestartService: Bool = false
+    ) async {
         guard !refreshInFlight else { return }
         refreshInFlight = true
         defer { refreshInFlight = false }
@@ -217,7 +229,7 @@ final class StratjiSessionModel: ObservableObject {
         refreshLogTail()
 
         if let startDataPlane {
-            let status = await startDataPlane()
+            let status = await startDataPlane(forceRestartService)
             refreshLogTail()
             switch status {
             case .live:
@@ -232,17 +244,14 @@ final class StratjiSessionModel: ObservableObject {
                 completeHydrate()
                 return
             case .checking, .starting:
-                offlineMessage = "The local Stratji service is still starting."
-                serviceFailed = true
-                completeHydrate()
-                return
+                break
             }
         }
 
         do {
-            let health = try await client.flaskHealth(baseURL: baseURL)
+            let health = try await waitUntilFlaskReady()
             refreshLogTail()
-            if !health.flaskReachable {
+            if !health.serviceReady {
                 throw StratjiClientError.gateway("The local Stratji service is not reachable.")
             }
         } catch {
@@ -523,6 +532,39 @@ final class StratjiSessionModel: ObservableObject {
 
         degradedNames = failed
         isDegraded = !failed.isEmpty
+    }
+
+    /// After supervisor `.live`, wait for Flask+vinext (`serviceReady`). Vinext can
+    /// take 90s; Flask bind and health add more. Stay on splash while dash-start runs.
+    private func waitUntilFlaskReady(attempts: Int = 180) async throws -> FlaskHealthDTO {
+        var lastError: Error = StratjiClientError.gateway("The local Stratji service is not reachable.")
+        var attempt = 0
+        var extraWhileStarting = 0
+        while true {
+            do {
+                let health = try await client.flaskHealth(baseURL: baseURL)
+                if health.serviceReady {
+                    return health
+                }
+                lastError = StratjiClientError.gateway("The local Stratji service is not reachable.")
+            } catch {
+                lastError = error
+            }
+            let startRunning = FlaskServiceSupervisor.isDashStartRunning()
+            if attempt + 1 >= attempts && !startRunning {
+                break
+            }
+            if attempt + 1 >= attempts && startRunning {
+                extraWhileStarting += 1
+                if extraWhileStarting > attempts {
+                    break
+                }
+            }
+            attempt += 1
+            refreshLogTail()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        throw lastError
     }
 
     private func waitForDocumentReady() async {

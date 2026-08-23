@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -13,7 +13,12 @@ import {
   preferApplePodcastsEpisodeUrl,
   selectAxisResearchReportLinks,
 } from "./axis-digest-links.mjs";
-import { isAxisResearchMail } from "./axis-mail-filter.mjs";
+import { classifyAxisCategory } from "../app/satya/axis-categories.mjs";
+import { isAxisLiveWebinarSubject, isAxisResearchMail } from "./axis-mail-filter.mjs";
+import { classifySatyaFamily } from "./satya-classify.mjs";
+import { ingestSatyaDigestRefresh } from "./satya-ingest.mjs";
+import { recordSatyaIngestError, setSatyaMeta } from "./satya-store.mjs";
+import { ingestSatyaAxisPdfArchive } from "./satya-axis-pdf-ingest.mjs";
 import {
   axisPdfAuditFromSnapshot,
   loadAxisPdfRecommendationSnapshot,
@@ -58,14 +63,21 @@ const CALENDAR_NOTES_CHARS = 1600;
 const DIGEST_BULLET_MAX = 8;
 const CONTENT_SNAPSHOT_PATH = process.env.CONTENT_SNAPSHOT_PATH ?? fileURLToPath(new URL("../artifacts/private/content-snapshot.json", import.meta.url));
 const CONTENT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const FORCE_REFRESH_BUDGET_MS = 150_000;
+const FORCE_REFRESH_BUDGET_MS = 90_000;
 const NEWSLETTER_DIGEST_LIMIT = 500;
-const MAIL_STAGE_TIMEOUT_MS = 50_000;
-const AXIS_STAGE_TIMEOUT_MS = 40_000;
-const NEWSLETTER_LIST_TIMEOUT_MS = 25_000;
+const MAIL_STAGE_TIMEOUT_MS = 40_000;
+const AXIS_STAGE_TIMEOUT_MS = 200_000;
+const AXIS_LIST_TIMEOUT_MS = 90_000;
+const AXIS_BODY_TIMEOUT_MS = 30_000;
+const AXIS_BODY_BUDGET_MS = 22_000;
+const AXIS_TARGET_TIMEOUT_MS = 25_000;
+const AXIS_TARGET_CAP = 40;
+const NEWSLETTER_LIST_TIMEOUT_MS = 20_000;
 const NEWSLETTER_BODY_TIMEOUT_MS = 20_000;
 /** Soft deadline inside osascript so bodies return before Node kills the process. */
 const NEWSLETTER_BODY_BUDGET_MS = 15_000;
+/** Newsletters JXA hang — skip Axis live read (same Mail.app) and keep last snapshots. */
+let mailJxaTimedOut = false;
 function istDateKey(daysAgo) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
 }
@@ -81,19 +93,35 @@ const AXIS_DIGEST_LIMIT = 500;
 const AXIS_PDF_ARCHIVE_PATH = process.env.AXIS_PDF_ARCHIVE_PATH
   ?? join(process.env.HOME ?? "", "Downloads", "Axis Research");
 
-/** Shared JXA helpers for Message-ID → message:// links and PDF attachment names. */
+/** Cheap Message-ID for Newsletters. Never call properties() or MIME source() here. */
+const mailMessageIdHelper = String.raw`
+function mailMessageId(message) {
+  try {
+    return String(message.messageId() || "").trim();
+  } catch (error) {
+    return "";
+  }
+}
+`;
+
+/**
+ * Axis Research only: Message-ID (properties() fallback), PDF attachment names, and
+ * mailReportLinks via message.source(). Do not interpolate into Newsletters scripts —
+ * MIME source() on HTML newsletters times out osascript.
+ */
 const mailLinkHelpers = String.raw`
 function mailMessageId(message) {
   try {
     const id = String(message.messageId() || "").trim();
-    return id;
+    if (id) return id;
   } catch (error) {
-    try {
-      const id = String(message.properties().messageId || "").trim();
-      return id;
-    } catch (inner) {
-      return "";
-    }
+    /* fall through to properties() */
+  }
+  try {
+    const id = String(message.properties().messageId || "").trim();
+    return id;
+  } catch (inner) {
+    return "";
   }
 }
 function mailAttachmentNames(message) {
@@ -174,7 +202,7 @@ function newsletterWindowMessages(limit) {
 /** Fast metadata pass — proves the mailbox is readable without loading bodies. */
 const newsletterListScript = String.raw`
 ${newsletterMailboxHelpers}
-${mailLinkHelpers}
+${mailMessageIdHelper}
 const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
 const messages = ordered.map(({ message, received }) => {
   try {
@@ -198,7 +226,7 @@ JSON.stringify({ totalCount, messages });
  */
 const newsletterBodyScript = String.raw`
 ${newsletterMailboxHelpers}
-${mailLinkHelpers}
+${mailMessageIdHelper}
 const { totalCount, ordered } = newsletterWindowMessages(${NEWSLETTER_DIGEST_LIMIT});
 const started = Date.now();
 const budgetMs = ${NEWSLETTER_BODY_BUDGET_MS};
@@ -223,7 +251,7 @@ const messages = ordered.map(({ message, received }) => {
 JSON.stringify({ totalCount, messages, bodiesLoaded: messages.filter((message) => message.content).length });
 `;
 
-const axisMailScript = String.raw`
+const axisMailboxHelpers = String.raw`
 const Mail = Application("Mail");
 function exactAccount(name) {
   const account = Mail.accounts().find((candidate) => String(candidate.name()) === name);
@@ -235,53 +263,147 @@ function exactMailbox(account, name) {
   if (!mailbox) throw new Error('Mailbox "' + name + '" was not found under iCloud');
   return mailbox;
 }
-${mailLinkHelpers}
+function isAxisResearchSender(sender) {
+  return /(?:\baxis\s*(?:direct|securities|research)\b|@(?:[\w.-]+\.)?(?:axisdirect|axissecurities)\.(?:in|com)\b)/i.test(String(sender || ""));
+}
+function skipAxisBodySubject(subject) {
+  const text = String(subject || "");
+  if (/\blive\s+webinars?\b|\bwebinar\b/i.test(text)) return false;
+  return /\b(?:learn account offer|account offer benefits|brokerage plan|contract note|margin statement|ledger statement|fund statement|kyc|otp|password|nominee|demat statement|access code|security alert|new device|log[\s-]?in|nps account|axis direct nps|portfolio leak|ultimate flexibility)\b/i.test(text);
+}
 const account = exactAccount("iCloud");
-const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
-const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
-end.setDate(end.getDate() + 1);
-const mailbox = exactMailbox(account, "Axis Research");
-const recent = mailbox.messages.whose({ _and: [
-  { dateReceived: { _greaterThan: cutoff } },
-  { dateReceived: { _lessThan: end } },
-] })();
-const totalCount = recent.length;
-const messages = recent.map((message) => {
-  const properties = message.properties();
-  return {
-    subject: String(properties.subject || "Untitled message"),
-    sender: String(properties.sender || "Unknown sender"),
-    received: properties.dateReceived.toISOString(),
-    messageId: mailMessageId(message),
-    attachmentNames: mailAttachmentNames(message),
-    reportLinks: mailReportLinks(message),
-    content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
-  };
-}).sort((left, right) => new Date(right.received) - new Date(left.received)).slice(0, ${AXIS_DIGEST_LIMIT});
-// Target-achievement notices are closure evidence, not active calls. Read them
-// from the complete exact mailbox so historical closures are not limited by
-// the rolling active-research window.
-const targetCandidates = mailbox.messages.whose({ subject: { _contains: "Target Achieved" } })();
-const targetMessages = targetCandidates.map((message) => {
+function axisWindowMessages(limit) {
+  const mailbox = exactMailbox(account, "Axis Research");
+  const cutoff = new Date("${ANALYSIS_WINDOW_START}T00:00:00+05:30");
+  const end = new Date("${ANALYSIS_DATE}T00:00:00+05:30");
+  end.setDate(end.getDate() + 1);
+  const recent = mailbox.messages.whose({ _and: [
+    { dateReceived: { _greaterThan: cutoff } },
+    { dateReceived: { _lessThan: end } },
+  ] })();
+  const totalCount = recent.length;
+  const ordered = recent
+    .map((message) => {
+      try { return { message, received: message.dateReceived() }; }
+      catch (error) { return null; }
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.received - left.received)
+    .slice(0, limit);
+  return { mailbox, totalCount, ordered };
+}
+`;
+
+/** Fast metadata pass — subject/sender/date/Message-ID only. */
+const axisListScript = String.raw`
+${axisMailboxHelpers}
+${mailLinkHelpers}
+const { totalCount, ordered } = axisWindowMessages(${AXIS_DIGEST_LIMIT});
+const messages = ordered.map(({ message, received }) => {
+  try {
+    return {
+      subject: String(message.subject() || "Untitled message"),
+      sender: String(message.sender() || "Unknown sender"),
+      received: received.toISOString(),
+      messageId: mailMessageId(message),
+      attachmentNames: [],
+      reportLinks: [],
+      content: "",
+    };
+  } catch (error) {
+    return null;
+  }
+}).filter(Boolean);
+JSON.stringify({ totalCount, messages });
+`;
+
+/**
+ * Body/source() only for Axis Direct/Securities research senders.
+ * Mixed junk is listed for counts but does not burn the content budget.
+ */
+const axisBodyScript = String.raw`
+${axisMailboxHelpers}
+${mailLinkHelpers}
+const { totalCount, ordered } = axisWindowMessages(${AXIS_DIGEST_LIMIT});
+const started = Date.now();
+const budgetMs = ${AXIS_BODY_BUDGET_MS};
+const messages = ordered.map(({ message, received }) => {
   try {
     const subject = String(message.subject() || "Untitled message");
-    if (!/target[ -]?achieved/i.test(subject)) return null;
-    const properties = message.properties();
+    const sender = String(message.sender() || "Unknown sender");
+    const messageId = mailMessageId(message);
+    let content = "";
+    let attachmentNames = [];
+    let reportLinks = [];
+    const research = isAxisResearchSender(sender) && !skipAxisBodySubject(subject);
+    if (research && Date.now() - started < budgetMs) {
+      try { content = String(message.content() || "").slice(0, ${MAIL_CONTENT_CHARS}); }
+      catch (error) { content = ""; }
+      if (Date.now() - started < budgetMs) {
+        attachmentNames = mailAttachmentNames(message);
+      }
+      if (Date.now() - started < budgetMs) {
+        reportLinks = mailReportLinks(message);
+      }
+    }
     return {
       subject,
-      sender: String(properties.sender || "Unknown sender"),
-      received: properties.dateReceived.toISOString(),
+      sender,
+      received: received.toISOString(),
+      messageId,
+      attachmentNames,
+      reportLinks,
+      content,
+    };
+  } catch (error) {
+    return null;
+  }
+}).filter(Boolean);
+JSON.stringify({
+  totalCount,
+  messages,
+  bodiesLoaded: messages.filter((message) => message.content).length,
+});
+`;
+
+const axisTargetScript = String.raw`
+${axisMailboxHelpers}
+${mailLinkHelpers}
+const mailbox = exactMailbox(account, "Axis Research");
+const started = Date.now();
+const budgetMs = ${Math.max(8_000, AXIS_TARGET_TIMEOUT_MS - 8_000)};
+const targetCandidates = mailbox.messages.whose({ subject: { _contains: "Target Achieved" } })();
+const targetMessages = targetCandidates.slice(0, ${AXIS_TARGET_CAP}).map((message) => {
+  try {
+    if (Date.now() - started > budgetMs) return null;
+    const subject = String(message.subject() || "Untitled message");
+    if (!/target[ -]?achieved/i.test(subject)) return null;
+    const sender = String(message.sender() || "Unknown sender");
+    const received = message.dateReceived();
+    let content = "";
+    let attachmentNames = [];
+    if (isAxisResearchSender(sender) && !skipAxisBodySubject(subject) && Date.now() - started < budgetMs) {
+      try { content = String(message.content() || "").slice(0, ${MAIL_CONTENT_CHARS}); }
+      catch (error) { content = ""; }
+      if (Date.now() - started < budgetMs) attachmentNames = mailAttachmentNames(message);
+    }
+    return {
+      subject,
+      sender,
+      received: received.toISOString(),
       messageId: mailMessageId(message),
-      attachmentNames: mailAttachmentNames(message),
-      reportLinks: mailReportLinks(message),
-      content: String(properties.content || "").slice(0, ${MAIL_CONTENT_CHARS}),
+      attachmentNames,
+      reportLinks: [],
+      content,
     };
   } catch (error) {
     return null;
   }
 }).filter(Boolean).sort((left, right) => new Date(right.received) - new Date(left.received));
-JSON.stringify({ totalCount, messages, targetMessages });
+JSON.stringify({ targetMessages });
 `;
+
+const axisMailScript = axisListScript;
 
 /** Read every active and completed reminder before dashboard exclusion/classification. */
 const remindersQuery = `
@@ -515,6 +637,9 @@ const PROMOTIONAL_MESSAGE =
 function isPromotionalMessage(message, item) {
   const title = cleanText(message?.subject ?? item?.title);
   const source = cleanText(message?.sender ?? item?.source);
+  if (isAxisLiveWebinarSubject(title) && isAxisResearchMail({ sender: source, subject: title })) {
+    return false;
+  }
   const body = cleanText([
     message?.content,
     item?.summary,
@@ -702,6 +827,12 @@ function mailItem(message, axis = false, includeDate = false, archiveIndex = nul
     title,
     summary,
     bullets,
+    sourceFamily: classifySatyaFamily({
+      mailbox: axis ? "Axis Research" : "Newsletters",
+      sender: message.sender,
+      subject: message.subject ?? title,
+      title,
+    }),
   };
   if (messageId) {
     item.messageId = messageId;
@@ -710,6 +841,11 @@ function mailItem(message, axis = false, includeDate = false, archiveIndex = nul
   if (axis) {
     item.tags = classifyAxisTags(`${title} ${summary} ${bullets.join(" ")}`);
     item.topicGroup = axisTopicGroup(title);
+    item.axisCategory = classifyAxisCategory(title);
+    if (item.axisCategory === "live_webinars") {
+      item.bullets = [];
+      item.summary = "";
+    }
     const pdf = matchAxisResearchPdf({
       subject: title,
       receivedAt: message.received,
@@ -754,7 +890,12 @@ function newsletterMessageKey(subject, received) {
 }
 
 async function readNewsletters() {
-  return withTimeout(readNewslettersUnbound(), MAIL_STAGE_TIMEOUT_MS, "iCloud Newsletters");
+  try {
+    return await withTimeout(readNewslettersUnbound(), MAIL_STAGE_TIMEOUT_MS, "iCloud Newsletters");
+  } catch (error) {
+    if (isOsascriptTimeoutError(error)) mailJxaTimedOut = true;
+    throw error;
+  }
 }
 
 async function readNewslettersUnbound() {
@@ -802,30 +943,97 @@ async function readNewslettersUnbound() {
   };
 }
 
+async function readAxisListing() {
+  const stdout = await runOsascript(axisListScript, AXIS_LIST_TIMEOUT_MS, 16 * 1024 * 1024);
+  return JSON.parse(stdout);
+}
+
+async function readAxisBodies() {
+  const stdout = await runOsascript(axisBodyScript, AXIS_BODY_TIMEOUT_MS, 32 * 1024 * 1024);
+  return JSON.parse(stdout);
+}
+
+async function readAxisTargetAchieved() {
+  const stdout = await runOsascript(axisTargetScript, AXIS_TARGET_TIMEOUT_MS, 12 * 1024 * 1024);
+  return JSON.parse(stdout);
+}
+
+function axisMessageKey(message) {
+  const id = String(message?.messageId || "").trim();
+  if (id) return `id:${id}`;
+  return `${String(message?.subject || "").trim()}\0${String(message?.received || "").trim()}`;
+}
+
+function mergeAxisBodies(listedMessages, enrichedMessages) {
+  const byKey = new Map((enrichedMessages ?? []).map((message) => [axisMessageKey(message), message]));
+  return (listedMessages ?? []).map((listedMessage) => {
+    const rich = byKey.get(axisMessageKey(listedMessage));
+    if (!rich) return listedMessage;
+    const content = String(rich.content || "").trim();
+    return {
+      ...listedMessage,
+      content: content.length >= 40 ? content : listedMessage.content,
+      attachmentNames: Array.isArray(rich.attachmentNames) && rich.attachmentNames.length
+        ? rich.attachmentNames
+        : listedMessage.attachmentNames,
+      reportLinks: Array.isArray(rich.reportLinks) && rich.reportLinks.length
+        ? rich.reportLinks
+        : listedMessage.reportLinks,
+    };
+  });
+}
+
+function keepAxisDigestItem(message, item) {
+  if (item?.axisCategory === "live_webinars" || isAxisLiveWebinarSubject(message?.subject ?? item?.title)) {
+    return true;
+  }
+  return !isPromotionalMessage(message, item);
+}
+
 async function readAxisResearch() {
+  if (mailJxaTimedOut) {
+    throw new Error("iCloud Axis Research skipped after Newsletters osascript timed out; retaining the last validated snapshot.");
+  }
   return withTimeout(readAxisResearchUnbound(), AXIS_STAGE_TIMEOUT_MS, "iCloud Axis Research");
 }
 
 async function readAxisResearchUnbound() {
-  const stdout = await runOsascript(axisMailScript, AXIS_STAGE_TIMEOUT_MS, 12 * 1024 * 1024);
-  const parsed = JSON.parse(stdout);
-  const uniqueMessages = parsed.messages
+  const listed = await readAxisListing();
+  let messages = listed.messages ?? [];
+  try {
+    const enriched = await readAxisBodies();
+    if (Array.isArray(enriched.messages) && enriched.messages.length) {
+      messages = mergeAxisBodies(messages, enriched.messages);
+    }
+  } catch {
+    // Metadata listing is enough for status=live; retain listed rows when bodies time out.
+  }
+
+  let targetMessages = [];
+  try {
+    const parsedTargets = await readAxisTargetAchieved();
+    targetMessages = Array.isArray(parsedTargets.targetMessages) ? parsedTargets.targetMessages : [];
+  } catch {
+    // Historical Target Achieved is optional; a live window listing still fulfills Axis.
+  }
+
+  const uniqueMessages = messages
     .filter(isAxisResearchMail)
-    .filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index)
+    .filter((message, index, rows) => rows.findIndex((candidate) => axisMessageKey(candidate) === axisMessageKey(message)) === index)
     .sort((left, right) => new Date(right.received) - new Date(left.received));
-  const targetMessages = (parsed.targetMessages ?? [])
+  const uniqueTargets = targetMessages
     .filter(isAxisResearchMail)
-    .filter((message, index, messages) => messages.findIndex((candidate) => candidate.subject === message.subject && candidate.received === message.received) === index)
+    .filter((message, index, rows) => rows.findIndex((candidate) => axisMessageKey(candidate) === axisMessageKey(message)) === index)
     .sort((left, right) => new Date(right.received) - new Date(left.received));
   const archiveIndex = indexAxisPdfArchive(AXIS_PDF_ARCHIVE_PATH);
   return {
-    total: parsed.totalCount,
+    total: listed.totalCount,
     items: uniqueMessages
       .map((message) => mailItem(message, true, true, archiveIndex))
-      .filter((item, index) => !isPromotionalMessage(uniqueMessages[index], item)),
-    targetItems: targetMessages
+      .filter((item, index) => keepAxisDigestItem(uniqueMessages[index], item)),
+    targetItems: uniqueTargets
       .map((message) => mailItem(message, true, true, archiveIndex))
-      .filter((item, index) => !isPromotionalMessage(targetMessages[index], item)),
+      .filter((item, index) => keepAxisDigestItem(uniqueTargets[index], item)),
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -931,9 +1139,11 @@ async function readPodcasts() {
       items.push({
         source,
         time,
+        receivedAt: new Date(`${episode.published.replace(" ", "T")}+05:30`).toISOString(),
         title,
         summary: contentBullets.join(" ") || "Transcript and substantive episode description unavailable.",
         bullets: contentBullets,
+        sourceFamily: "podcasts",
         keyTakeaways: generatedInsights.map((insight) => insight.text),
         podcastInsights: generatedInsights.length
           ? generatedInsights
@@ -983,6 +1193,7 @@ async function readPodcasts() {
     items.push({
       source,
       time,
+      receivedAt: new Date(`${episode.published.replace(" ", "T")}+05:30`).toISOString(),
       title,
       summary: contentBullets.join(" ") || (
         generated.reason === "summarizer_not_configured"
@@ -992,6 +1203,7 @@ async function readPodcasts() {
           : "Transcript available — summary generation failed."
       ),
       bullets: contentBullets,
+      sourceFamily: "podcasts",
       keyTakeaways: contentBullets,
       podcastInsights: contentInsights,
       contentSource: "transcript",
@@ -1232,6 +1444,17 @@ async function refreshSource(stage, label, task) {
   return result;
 }
 
+function isOsascriptTimeoutError(error) {
+  return /timed out/i.test(String(error?.message ?? error ?? ""));
+}
+
+function killOsascriptTree(child) {
+  if (child?.pid) {
+    try { process.kill(-child.pid, "SIGKILL"); } catch { /* process group already gone */ }
+  }
+  try { child.kill("SIGKILL"); } catch { /* already gone */ }
+}
+
 function withTimeout(promise, ms, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -1241,12 +1464,54 @@ function withTimeout(promise, ms, label) {
 }
 
 async function runOsascript(script, timeoutMs, maxBuffer = 16 * 1024 * 1024) {
-  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e", script], {
-    timeout: timeoutMs,
-    killSignal: "SIGKILL",
-    maxBuffer,
+  return new Promise((resolve, reject) => {
+    const child = spawn("osascript", ["-l", "JavaScript", "-e", script], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    let stdoutBytes = 0;
+    let settled = false;
+    const finish = (error, stdout) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(stdout);
+    };
+    const timer = setTimeout(() => {
+      killOsascriptTree(child);
+      finish(new Error(`osascript timed out after ${Math.round(timeoutMs / 1000)}s`));
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > maxBuffer) {
+        killOsascriptTree(child);
+        finish(new Error("osascript exceeded maxBuffer"));
+        return;
+      }
+      stdoutChunks.push(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      if (stderrChunks.length < 8) stderrChunks.push(chunk);
+    });
+    child.on("error", (error) => finish(error));
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim().slice(0, 200);
+      if (code === 0) {
+        finish(null, stdout);
+        return;
+      }
+      if (signal === "SIGKILL") {
+        finish(new Error(`osascript timed out after ${Math.round(timeoutMs / 1000)}s${stderr ? `: ${stderr}` : ""}`));
+        return;
+      }
+      finish(new Error(`osascript failed${code != null ? ` (${code})` : ""}${stderr ? `: ${stderr}` : ""}`));
+    });
   });
-  return stdout;
 }
 
 function appleStageFailureLabel(label, reason) {
@@ -1254,10 +1519,14 @@ function appleStageFailureLabel(label, reason) {
   if (/-1743|-1744|not authorised|not authorized|not permitted|not allowed to send apple events|osascript is not allowed/i.test(text)) {
     return `Permission required — allow Stratji to control ${label}.`;
   }
+  if (/timed out/i.test(text)) {
+    return `${label} timed out; retaining the last validated snapshot.`;
+  }
   return `${label} stale or unavailable.`;
 }
 
 async function refresh() {
+  mailJxaTimedOut = false;
   const calendar = await refreshSource("calendar", "Apple Calendar", readCalendar);
   const marketCalendar = await settle(() => loadMarketCalendar({
     windowStart: ANALYSIS_WINDOW_START,
@@ -1302,6 +1571,31 @@ async function refresh() {
   const podcastSourceState = sourceState(podcasts, podcastValue.length, true);
   if (podcasts.status === "fulfilled") {
     podcastSourceState.message = `${generatedPodcastSummaries} transcript summaries · ${transcriptWithoutSummary} transcripts without summaries · ${podcastDescriptions} descriptions · ${unavailablePodcastEvidence} episodes without substantive evidence.`;
+  }
+  try {
+    ingestSatyaDigestRefresh({
+      newsletters: newsletters.status === "fulfilled" ? newsletterValue.items : null,
+      axisResearch: axisResearch.status === "fulfilled" ? axisValue.items : null,
+      podcasts: podcasts.status === "fulfilled" ? podcastValue : null,
+      asOf: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[content-digest] Satya corpus ingest failed:", error);
+    recordSatyaIngestError(error);
+  }
+  try {
+    setSatyaMeta("pdfIngest", "pending");
+    await ingestSatyaAxisPdfArchive({
+      archiveRoot: AXIS_PDF_ARCHIVE_PATH,
+      mailItems: axisResearch.status === "fulfilled"
+        ? axisValue.items
+        : lastSnapshot?.axisResearch ?? [],
+    });
+    setSatyaMeta("pdfIngest", "ok");
+  } catch (error) {
+    console.error("[content-digest] Satya Axis PDF ingest failed:", error);
+    setSatyaMeta("pdfIngest", "error");
+    recordSatyaIngestError(error);
   }
   return {
     status: liveRequiredSources === requiredSources.length ? "live" : liveRequiredSources ? "partial" : "unavailable",

@@ -330,7 +330,7 @@ export function defaultIntegrationsConfig(): IntegrationsConfig {
       broker: emptyPipeline("auth_required", "Kite MCP BYOK. Groww is a placeholder — no live API in this slice."),
       research: emptyPipeline("not_configured", "Axis Research mailbox is the seed profile. HDFC/SBI/ET-Prime/Moneycontrol are profiles, not hardcoded houses."),
       newsletters: emptyPipeline("not_configured", "iCloud → Newsletters. Promo-strip INVARIANT."),
-      calendars: emptyPipeline("not_configured", "Apple Calendar. M-3 vs M-4 split is INVARIANT."),
+      calendars: emptyPipeline("not_configured", "Apple Calendar. M-3 earnings vs My Feed H-4 non-earnings split is INVARIANT."),
       reminders: emptyPipeline("not_configured", "Apple Reminders. Google Tasks is a placeholder."),
       notes: emptyPipeline("not_configured", "Research notes only. Apple Notes Health Daily is deprecated — Health is HealthKit export / Health Shortcut."),
       yfinance: emptyPipeline("live", "Free for all tiers. Paid Kite MD is never required for Sectoral Analytics."),

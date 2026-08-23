@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -8,16 +9,21 @@ export type LocalLlmSecrets = {
   anthropicApiKey?: string;
   geminiApiKey?: string;
   cursorApiKey?: string;
+  ollamaModel?: string;
+  ollamaUrl?: string;
 };
 
-export type LocalLlmProviderName = "OpenAI" | "Claude" | "Gemini" | "Cursor";
+export type LocalLlmProviderName = "OpenAI" | "Claude" | "Gemini" | "Cursor" | "Ollama";
 
-const ENV_ALIASES: Record<keyof LocalLlmSecrets, readonly string[]> = {
+const ENV_ALIASES: Record<keyof Pick<LocalLlmSecrets, "openaiApiKey" | "anthropicApiKey" | "geminiApiKey" | "cursorApiKey">, readonly string[]> = {
   openaiApiKey: ["OPENAI_API_KEY", "OPENAI_KEY"],
   anthropicApiKey: ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY"],
   geminiApiKey: ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_GEMINI_API_KEY"],
   cursorApiKey: ["CURSOR_API_KEY", "CURSOR_API_TOKEN"],
 };
+
+const OLLAMA_MODEL_KEYS = ["OLLAMA_MODEL", "LOCAL_LLM_MODEL", "PODCAST_SUMMARIZER_MODEL", "ollamaModel"] as const;
+const OLLAMA_URL_KEYS = ["OLLAMA_HOST", "OLLAMA_URL", "PODCAST_SUMMARIZER_URL", "ollamaUrl"] as const;
 
 function usableSecret(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -47,8 +53,37 @@ function parseEnvText(text: string): Record<string, string> {
   return out;
 }
 
+function usableOllamaValue(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < 2) return undefined;
+  if (/^(your[-_]?|changeme|placeholder|xxx+|todo|replace)/i.test(trimmed)) return undefined;
+  return trimmed;
+}
+
+function takeOllama(record: Record<string, unknown>, into: LocalLlmSecrets): void {
+  if (!into.ollamaModel) {
+    for (const key of OLLAMA_MODEL_KEYS) {
+      const model = usableOllamaValue(record[key]);
+      if (model) {
+        into.ollamaModel = model;
+        break;
+      }
+    }
+  }
+  if (!into.ollamaUrl) {
+    for (const key of OLLAMA_URL_KEYS) {
+      const url = usableOllamaValue(record[key]);
+      if (url) {
+        into.ollamaUrl = url;
+        break;
+      }
+    }
+  }
+}
+
 function takeFromRecord(record: Record<string, unknown>, into: LocalLlmSecrets): void {
-  for (const field of Object.keys(ENV_ALIASES) as Array<keyof LocalLlmSecrets>) {
+  for (const field of Object.keys(ENV_ALIASES) as Array<keyof typeof ENV_ALIASES>) {
     if (into[field]) continue;
     const direct = usableSecret(record[field]);
     if (direct) {
@@ -63,6 +98,7 @@ function takeFromRecord(record: Record<string, unknown>, into: LocalLlmSecrets):
       }
     }
   }
+  takeOllama(record, into);
 }
 
 async function readText(filePath: string): Promise<string | null> {
@@ -107,7 +143,87 @@ export async function readLocalLlmSecrets(root = process.cwd(), home = homedir()
 
 export const LLM_SETTINGS_HREF = "/?view=integrations";
 
-export type CallableLlmProvider = "Claude" | "OpenAI" | "Gemini";
+export type CallableLlmProvider = "Claude" | "OpenAI" | "Gemini" | "Ollama";
+
+/** Process-level skip: provider → hash of key last-4. Never log the key or last-4. */
+const skippedAuthProviders = new Map<CallableLlmProvider, string>();
+/** Process-level skip: `provider\tmodel` → hash of that provider's key last-4. */
+const skippedModels = new Map<string, string>();
+
+function providerSecretValue(secrets: LocalLlmSecrets, provider: CallableLlmProvider): string | undefined {
+  switch (provider) {
+    case "Claude":
+      return secrets.anthropicApiKey;
+    case "OpenAI":
+      return secrets.openaiApiKey;
+    case "Gemini":
+      return secrets.geminiApiKey;
+    case "Ollama":
+      return [secrets.ollamaUrl, secrets.ollamaModel].filter(Boolean).join("|") || undefined;
+    default: {
+      const _exhaustive: never = provider;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Hash of the last 4 characters of a secret. Never log `value` or the last-4 slice. */
+function secretFingerprint(value: string | undefined): string {
+  const last4 = (value ?? "").trim().slice(-4);
+  return createHash("sha256").update(last4).digest("hex").slice(0, 16);
+}
+
+function modelSkipKey(provider: CallableLlmProvider, model: string): string {
+  return `${provider}\t${model.trim()}`;
+}
+
+export function rememberLlmAuthFailure(provider: CallableLlmProvider, secrets: LocalLlmSecrets): void {
+  skippedAuthProviders.set(provider, secretFingerprint(providerSecretValue(secrets, provider)));
+}
+
+export function rememberLlmMissingModel(
+  provider: CallableLlmProvider,
+  model: string,
+  secrets: LocalLlmSecrets,
+): void {
+  const id = model.trim();
+  if (!id) return;
+  skippedModels.set(modelSkipKey(provider, id), secretFingerprint(providerSecretValue(secrets, provider)));
+}
+
+export function isLlmProviderCircuitBroken(provider: CallableLlmProvider, secrets: LocalLlmSecrets): boolean {
+  const stored = skippedAuthProviders.get(provider);
+  if (!stored) return false;
+  const current = secretFingerprint(providerSecretValue(secrets, provider));
+  if (stored !== current) {
+    skippedAuthProviders.delete(provider);
+    return false;
+  }
+  return true;
+}
+
+export function isLlmModelCircuitBroken(
+  provider: CallableLlmProvider,
+  model: string,
+  secrets: LocalLlmSecrets,
+): boolean {
+  const id = model.trim();
+  if (!id) return false;
+  const key = modelSkipKey(provider, id);
+  const stored = skippedModels.get(key);
+  if (!stored) return false;
+  const current = secretFingerprint(providerSecretValue(secrets, provider));
+  if (stored !== current) {
+    skippedModels.delete(key);
+    return false;
+  }
+  return true;
+}
+
+export function resetLlmCircuitBreaks(): void {
+  skippedAuthProviders.clear();
+  skippedModels.clear();
+}
 
 export type LlmAssistAvailability = {
   enabled: boolean;
@@ -164,12 +280,13 @@ export function filledLocalLlmProviders(secrets: LocalLlmSecrets): LocalLlmProvi
   if (secrets.anthropicApiKey) names.push("Claude");
   if (secrets.geminiApiKey) names.push("Gemini");
   if (secrets.cursorApiKey) names.push("Cursor");
+  if (secrets.ollamaModel) names.push("Ollama");
   return names;
 }
 
-/** Completions prefer Claude, then OpenAI, then Gemini. Cursor is stored only. */
+/** Completions prefer Claude, then OpenAI, then Gemini, then on-device Ollama. Cursor is stored only. */
 export function selectPreferredLocalLlmProvider(secrets: LocalLlmSecrets): CallableLlmProvider | null {
-  return callableProvidersInPreferenceOrder(secrets)[0] ?? null;
+  return liveCallableProvidersInPreferenceOrder(secrets)[0] ?? null;
 }
 
 export function callableProvidersInPreferenceOrder(secrets: LocalLlmSecrets): CallableLlmProvider[] {
@@ -177,6 +294,23 @@ export function callableProvidersInPreferenceOrder(secrets: LocalLlmSecrets): Ca
   if (secrets.anthropicApiKey) names.push("Claude");
   if (secrets.openaiApiKey) names.push("OpenAI");
   if (secrets.geminiApiKey) names.push("Gemini");
+  if (secrets.ollamaModel) names.push("Ollama");
+  return names;
+}
+
+/** Configured callable providers that are not auth-circuit-broken for the current key fingerprint. */
+export function liveCallableProvidersInPreferenceOrder(secrets: LocalLlmSecrets): CallableLlmProvider[] {
+  return callableProvidersInPreferenceOrder(secrets).filter(
+    (provider) => !isLlmProviderCircuitBroken(provider, secrets),
+  );
+}
+
+/** Cloud providers first; on-device Ollama is always last so unauthorized/stale cloud keys cannot block Satya. */
+export function completionProvidersInPreferenceOrder(secrets: LocalLlmSecrets): CallableLlmProvider[] {
+  const names = callableProvidersInPreferenceOrder(secrets)
+    .filter((provider) => provider !== "Ollama")
+    .filter((provider) => !isLlmProviderCircuitBroken(provider, secrets));
+  if (!isLlmProviderCircuitBroken("Ollama", secrets)) names.push("Ollama");
   return names;
 }
 
@@ -192,13 +326,24 @@ export function llmAssistAvailability(secrets: LocalLlmSecrets): LlmAssistAvaila
       message: `Machine-drafted via ${provider}. Numbers stay source-backed.`,
     };
   }
-  if (configured.includes("Cursor")) {
+  const cloudConfigured = configured.some((name) => name === "OpenAI" || name === "Claude" || name === "Gemini");
+  const cursorOnly = configured.includes("Cursor") && !cloudConfigured && !configured.includes("Ollama");
+  if (cursorOnly) {
     return {
       enabled: false,
       provider: null,
       configured,
       settingsHref: LLM_SETTINGS_HREF,
-      message: "A Cursor key is stored, but completions use Claude, OpenAI, or Gemini. Paste one of those in Settings.",
+      message: "A Cursor key is stored, but completions use Claude, OpenAI, Gemini, or on-device Ollama. Paste a cloud key or set OLLAMA_MODEL.",
+    };
+  }
+  if (cloudConfigured) {
+    return {
+      enabled: true,
+      provider: null,
+      configured,
+      settingsHref: LLM_SETTINGS_HREF,
+      message: "Cloud keys are stored but not callable. Satya will try on-device Ollama if it is running. Numbers stay source-backed.",
     };
   }
   return {
@@ -206,7 +351,7 @@ export function llmAssistAvailability(secrets: LocalLlmSecrets): LlmAssistAvaila
     provider: null,
     configured,
     settingsHref: LLM_SETTINGS_HREF,
-    message: "LLM assist is disabled. Paste a Claude, OpenAI, or Gemini key in Settings — empty keys never invent analysis.",
+    message: "LLM assist is disabled. Paste a Claude, OpenAI, or Gemini key in Settings, or set OLLAMA_MODEL — empty keys never invent analysis.",
   };
 }
 

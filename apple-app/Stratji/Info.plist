@@ -64,6 +64,10 @@
 	<string>Stratji needs Reminders access for the Job 🔍 and Earnings lists (and any lists you map in Integrations). Incomplete items stay actionable; completed items are evidence only and are never silently restored.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Stratji reads operational-day Apple Health aggregates (Activity, Sleep, Heart, Respiratory, Mobility, and Nutrition) to keep your private Health &amp; Wellness workspace current. Body Measurements and Hearing are not requested. Health data stays on this Mac and your paired iPhone.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Stratji uses the microphone only for Satya push-to-talk on this Mac. There is no wake word. Audio stays on-device for recognition and is not uploaded to a Stratji cloud.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Stratji uses speech recognition only for Satya push-to-talk dictation on this Mac. Recognition is on-device when available. Stratji does not send your speech to a Stratji cloud.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Stratji starts the local dashboard from your Git checkout. The Mac remains the data plane.</string>
 	<key>NSDownloadsFolderUsageDescription</key>

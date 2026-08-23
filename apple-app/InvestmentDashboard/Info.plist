@@ -28,5 +28,9 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Portfolio Intelligence finds Stratji on your Mac over the local network. Tailscale is not required.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Stratji uses the microphone only for Satya push-to-talk. There is no wake word. Audio is not uploaded to a Stratji cloud.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Stratji uses speech recognition only for Satya push-to-talk dictation. Recognition is on-device when available.</string>
 </dict>
 </plist>

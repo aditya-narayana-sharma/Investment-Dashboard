@@ -116,8 +116,11 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.addUserScript(makeBootstrapScript())
+        let satyaSpeech = StratjiSatyaSpeechBridge()
+        configuration.userContentController.add(satyaSpeech, name: StratjiSatyaSpeechBridge.messageName)
         configuration.applicationNameForUserAgent = "Stratji/1"
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 1100, height: 800), configuration: configuration)
+        satyaSpeech.webView = view
         view.navigationDelegate = self
         view.uiDelegate = self
         view.allowsBackForwardNavigationGestures = true
@@ -134,6 +137,7 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
             source: """
             document.documentElement.classList.add('native-chrome-embed');
             document.documentElement.dataset.nativeChrome = '1';
+            document.documentElement.dataset.nativeOwnsSections = '1';
             \(StratjiLicenseStore.webBootstrapScript())
             \(StratjiAppearanceStore.webBootstrapScript())
             """,

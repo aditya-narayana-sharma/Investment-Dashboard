@@ -2,8 +2,10 @@ import SwiftUI
 
 struct NativeWorkspacePage: View {
     let workspace: DashboardWorkspace
+    var section: String? = nil
     @ObservedObject var session: NativeRefreshCoordinator
     @ObservedObject var actions: NativeActionBoardModel
+    var serverURL: URL? = nil
 
     var body: some View {
         ScrollView {
@@ -111,11 +113,48 @@ struct NativeWorkspacePage: View {
     }
 
     private var intelligenceBody: some View {
+        let focus = section ?? "m1"
         VStack(alignment: .leading, spacing: 16) {
-            sectionHeader("Live intelligence", status: session.refresh?.content?.status ?? "unavailable")
-            digestGroup("Newsletters", items: session.refresh?.content?.newsletters ?? [])
-            digestGroup("Axis Research", items: session.refresh?.content?.axisResearch ?? [])
-            digestGroup("Podcasts", items: session.refresh?.content?.podcasts ?? [])
+            if focus == "m2" {
+                satyaBody
+            } else if focus == "m3" {
+                earningsBody
+            } else {
+                intelBoardNote
+            }
+        }
+    }
+
+    private var intelBoardNote: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Action Board", status: session.refresh?.content?.status ?? "unavailable")
+            Text("M-1 cards come from today's Mail, Axis, podcasts, Satya corpus as-of, and verified earnings. Chat stays on the Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var satyaBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Satya", status: session.refresh?.content?.status ?? "unavailable")
+            Text("Source chips match the Mac briefing. Chat and push-to-talk run only on the author Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            FlowChips(labels: [
+                "Axis Research", "Axis Mutual Fund", "Groww", "Flipboard",
+                "Other newsletters", "Podcasts", "Earnings KPIs",
+            ])
+            if let url = macSatyaURL {
+                Link("Open Satya briefing on Mac", destination: url)
+                    .font(.subheadline.bold())
+            } else {
+                emptyCopy("Open ?view=intelligence&section=m2 on the paired Mac for chat.")
+            }
+        }
+    }
+
+    private var earningsBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Earnings", status: session.refresh?.earnings?.status ?? "unavailable")
             ForEach(session.refresh?.earnings?.events ?? []) { event in
                 VStack(alignment: .leading, spacing: 4) {
@@ -146,9 +185,20 @@ struct NativeWorkspacePage: View {
         }
     }
 
+    private var macSatyaURL: URL? {
+        guard var components = serverURL.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }) else {
+            return nil
+        }
+        components.queryItems = [
+            URLQueryItem(name: "view", value: "intelligence"),
+            URLQueryItem(name: "section", value: "m2"),
+        ]
+        return components.url
+    }
+
     private var healthBody: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Health & Wellness", status: session.refresh?.health?.status ?? session.healthFreshness?.status ?? "unavailable")
+            sectionHeader("My Feed", status: session.refresh?.health?.status ?? session.healthFreshness?.status ?? "unavailable")
             if let target = session.refresh?.health?.targetDate {
                 Text("Operational target \(target) \(session.refresh?.health?.targetLabel ?? "")")
                     .font(.caption)
@@ -211,36 +261,6 @@ struct NativeWorkspacePage: View {
         }
     }
 
-    private func digestGroup(_ title: String, items: [DigestItemPayload]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            if items.isEmpty {
-                emptyCopy("No \(title.lowercased()) in the latest Mac digest.")
-            } else {
-                ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(.subheadline.bold())
-                        Text(item.summary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Text(item.source)
-                            Spacer()
-                            Text(item.time)
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    }
-                    .padding(10)
-                    .background(Color.primary.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }
-        }
-    }
-
     private func sectionHeader(_ title: String, status: String) -> some View {
         HStack {
             Text(title)
@@ -269,6 +289,23 @@ struct NativeWorkspacePage: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(.vertical, 8)
+    }
+}
+
+private struct FlowChips: View {
+    let labels: [String]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(labels, id: \.self) { label in
+                Text(label)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 import { getKiteSnapshot, searchKiteCashInstruments } from "../kite-live-server";
-import { buildBacktestRequest } from "./backtest-request";
+import { BACKTEST_DEFAULTS, buildBacktestRequest } from "./backtest-request";
 import { getKiteWatchlist, unavailableWatchlist } from "./kite-watchlist";
 import { importStrategyGraphJson } from "./persist";
 import {
@@ -23,6 +23,14 @@ import { validateStrategyGraph } from "./graph-types";
 import { runTreeBacktest } from "./tree-backtest";
 import { loadYfinanceStrategyKpis } from "./yfinance-kpis";
 import { loadOrComputeLibraryNseStats } from "./library-nse-stats-server";
+import { resolveLibraryTrees } from "./library-resolve";
+import { combineStrategyBook, normalizeBookWeight, STRATEGY_BOOK_PLACES_ORDERS } from "./strategy-book";
+import {
+  collectCampaignSymbols,
+  missingCampaignRow,
+  runCampaignTrees,
+  STRATEGY_CAMPAIGN_PLACES_ORDERS,
+} from "./strategy-campaign";
 
 const JSON_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
@@ -201,6 +209,127 @@ export async function handleBacktestRun(request: Request) {
   } catch (error) {
     const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;
     return jsonError(status, errorMessage(error, "Backtest run failed."), { ran: false, status: "unavailable" });
+  }
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function optionalDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+async function loadBarsForSymbols(symbols: readonly string[]) {
+  let yfinanceError: string | undefined;
+  let rows: Awaited<ReturnType<typeof loadYfinanceStrategyKpis>> = [];
+  try {
+    rows = await loadYfinanceStrategyKpis([...symbols], { ohlcvOnly: true, timeoutMs: 180_000 });
+  } catch (error) {
+    yfinanceError = error instanceof Error ? error.message : "yfinance history fetch failed.";
+  }
+  return {
+    bars: Object.fromEntries(rows.map((row) => [row.symbol, row.ohlcv])),
+    yfinanceError,
+  };
+}
+
+export async function handleBacktestCampaign(request: Request) {
+  try {
+    if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+      return jsonError(415, "Campaign requests must use JSON.");
+    }
+    const body = await request.json() as Record<string, unknown>;
+    const ids = stringList(body.ids);
+    if (ids.length < 1) return jsonError(400, "Provide at least one library id.");
+    const { resolved, missing } = await resolveLibraryTrees(ids);
+    const { bars, yfinanceError } = await loadBarsForSymbols(collectCampaignSymbols(resolved));
+    const rows = [
+      ...runCampaignTrees(resolved, bars, {
+        from: optionalDate(body.from),
+        to: optionalDate(body.to),
+        walkForward: body.walkForward === true,
+      }),
+      ...missing.map(missingCampaignRow),
+    ];
+    return Response.json({
+      status: "ok",
+      placesOrders: STRATEGY_CAMPAIGN_PLACES_ORDERS,
+      message: yfinanceError ?? "Campaign ran each selected tree on the shared OHLCV window.",
+      warnings: yfinanceError ? [yfinanceError] : [],
+      rows,
+    }, { headers: JSON_HEADERS });
+  } catch (error) {
+    const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;
+    return jsonError(status, errorMessage(error, "Campaign backtest failed."), {
+      ran: false,
+      placesOrders: STRATEGY_CAMPAIGN_PLACES_ORDERS,
+    });
+  }
+}
+
+export async function handleBacktestBook(request: Request) {
+  try {
+    if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+      return jsonError(415, "Book requests must use JSON.");
+    }
+    const body = await request.json() as Record<string, unknown>;
+    const rawLegs = Array.isArray(body.legs) ? body.legs : [];
+    const parsed = rawLegs.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      const id = String(row.id ?? "").trim();
+      const weight = normalizeBookWeight(Number(row.weight));
+      return id ? [{ id, weight }] : [];
+    });
+    if (parsed.length < 2) return jsonError(400, "A book needs at least two weighted trees.");
+    const { resolved, missing } = await resolveLibraryTrees(parsed.map((leg) => leg.id));
+    const { bars, yfinanceError } = await loadBarsForSymbols(collectCampaignSymbols(resolved));
+    const byId = new Map(resolved.map((row) => [row.id, row]));
+    const book = combineStrategyBook(parsed.map((leg) => {
+      const resolvedTree = byId.get(leg.id);
+      if (!resolvedTree) {
+        return {
+          id: leg.id,
+          name: leg.id,
+          weight: leg.weight,
+          result: {
+            status: "unavailable" as const,
+            ran: false,
+            message: `Unavailable: library id ${leg.id} was not found.`,
+            warnings: [],
+            missingSymbols: [],
+            curve: [],
+            totalReturnPct: null,
+            annualizedReturnPct: null,
+            sharpe: null,
+            maxDrawdownPct: null,
+            initialCash: BACKTEST_DEFAULTS.initialCash,
+            endingEquity: null,
+          },
+        };
+      }
+      return {
+        id: resolvedTree.id,
+        name: resolvedTree.name,
+        weight: leg.weight,
+        result: runTreeBacktest(resolvedTree.tree, bars),
+      };
+    }));
+    return Response.json({
+      ...book,
+      warnings: yfinanceError ? [...book.warnings, yfinanceError] : book.warnings,
+      missingIds: [...new Set([...book.missingIds, ...missing])],
+    }, { headers: JSON_HEADERS });
+  } catch (error) {
+    const status = typeof (error as { status?: number }).status === "number" ? (error as { status: number }).status : 400;
+    return jsonError(status, errorMessage(error, "Book backtest failed."), {
+      ran: false,
+      placesOrders: STRATEGY_BOOK_PLACES_ORDERS,
+    });
   }
 }
 

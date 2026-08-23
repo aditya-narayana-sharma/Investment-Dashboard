@@ -34,11 +34,12 @@ set -euo pipefail
 LOG_DIR="\$HOME/Library/Logs/PortfolioIntelligence"
 START_SCRIPT="$SUPPORT_DIR/start-dashboard.command"
 mkdir -p "\$LOG_DIR"
-healthy() {
-  curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1
+flask_bound() {
+  body=\$(curl -sS --max-time 8 http://127.0.0.1:5050/_flask/health 2>/dev/null || true)
+  printf '%s' "\$body" | grep -q '"gateway": "flask"'
 }
 while true; do
-  if healthy; then
+  if flask_bound; then
     sleep 12
     continue
   fi

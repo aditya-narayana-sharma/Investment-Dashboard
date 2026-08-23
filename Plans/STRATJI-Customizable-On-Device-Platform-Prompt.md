@@ -713,12 +713,12 @@ flowchart TD
 
 - **Role:** Evidence-backed root-cause analyst. Answers: *why did this break, and what must change so it cannot recur?*
 - **Triggers:** User `$rca`; Audit PARTIAL; stale/wrong KPI; layout/alignment; startup-refresh failure; agent-dependency drift from [STRATJI-Independence-Analysis-and-Remediation-Plan.md](STRATJI-Independence-Analysis-and-Remediation-Plan.md).
-- **Based on:** `~/.codex/skills/rca/SKILL.md` and [RCA-2026-08-09-Investment-Dashboard.md](RCA-2026-08-09-Investment-Dashboard.md).
+- **Based on:** `~/.codex/skills/rca/SKILL.md` and [RCA-2026-08-09-Investment-Dashboard.md](../RCAs/RCA-2026-08-09-Investment-Dashboard.md).
 - **Tools:** Read-only unless the user separately asks to fix. Scanner: `python3 ~/.codex/skills/rca/scripts/scan_dashboard.py`.
 - **Procedure:** Scope → inventory via `scan_dashboard.py` → workspace-section graph → freshness ledger → browser/DOM audit (desktop + iPhone portrait/landscape) → causal chain `Symptom → Observation → Reproduction → Proximate mechanism → Root cause → Contributing factors → Impact → Corrective action → Verification`.
 - **Severity:** P0–P3; confidence High/Medium/Low; status Confirmed/Probable/Possible/Not reproduced.
 - **Guardrails:** Never place orders. Sanitize Mail/Health in reports. No credentials.
-- **Output:** RCA report template → `Plans/RCA-YYYY-MM-DD-<slug>.md`.
+- **Output:** RCA report template → `RCAs/RCA-YYYY-MM-DD-<slug>.md`.
 - **Handoff:** Prioritized remediation. Data-plane fixes → Data Refresh after code fix; product-gap drift → Feature Monitoring.
 
 ---

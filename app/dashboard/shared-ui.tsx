@@ -7,8 +7,19 @@ import { useLicenseSnapshot } from "../license-snapshot";
 import type { HealthAveragePeriod, HealthMetric } from "../health-data";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { LiveHolding } from "../live-types";
-import type { DonutLabelProps, KanbanWorkspace, WorkspaceKey } from "./types";
-import { builderSectionNumber, isBuilderSection, isStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
+import type { DonutLabelProps, KanbanItem, KanbanWorkspace, WorkspaceKey } from "./types";
+import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
+import {
+  applyWorkspaceSectionParams,
+  builderSectionNumber,
+  isBuilderSection,
+  isStrategiesSection,
+  parseWorkspaceSection,
+  parseWorkspaceView,
+  strategiesSectionNumber,
+  WORKSPACE_SECTIONS,
+  workspaceSectionLabel,
+} from "./workspace-routing";
 import {
   HEALTH_DIRECTION_COLUMNS,
   groupHealthMetricsByDirection,
@@ -24,7 +35,7 @@ import { SparkFilament } from "./visual-components";
 export type WorkspaceSectionNavItem = {
   id: string;
   label: string;
-  /** Visible cyan prefix; defaults to uppercased id (e.g. m1 → M1). */
+  /** Section number for collapsible mapping; glass chips show `label` only. */
   prefix?: string;
 };
 
@@ -33,11 +44,13 @@ export function WorkspaceSectionNav({
   sections,
   activeId,
   onSelect,
+  compact = false,
 }: {
   label: string;
   sections: readonly WorkspaceSectionNavItem[];
   activeId: string;
   onSelect: (id: string) => void;
+  compact?: boolean;
 }) {
   const tabsRef = useRef<Array<HTMLButtonElement | null>>([]);
   const selectByIndex = (index: number) => {
@@ -53,14 +66,19 @@ export function WorkspaceSectionNav({
     if (event.key === "Home") { event.preventDefault(); selectByIndex(0); }
     if (event.key === "End") { event.preventDefault(); selectByIndex(sections.length - 1); }
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(sections[index]!.id); }
+    if (event.key === "ArrowUp" && compact) {
+      event.preventDefault();
+      const workspaceTab = event.currentTarget.closest(".workspace-tab-cell")?.querySelector<HTMLButtonElement>(":scope > button[role='tab']");
+      workspaceTab?.focus();
+    }
   };
 
   return <nav
-    className="workspace-section-nav"
-    role="tablist"
+    className={`workspace-section-nav${compact ? " glass-sections" : ""}`}
+    role={compact ? "group" : "tablist"}
     aria-orientation="horizontal"
     aria-label={label}
-    style={{ gridTemplateColumns: `repeat(${Math.max(sections.length, 1)},minmax(0,1fr))` }}
+    style={compact ? { "--glass-count": sections.length } as CSSProperties : { gridTemplateColumns: `repeat(${Math.max(sections.length, 1)},minmax(0,1fr))` }}
   >
     {sections.map((section, index) => {
       const selected = activeId === section.id;
@@ -70,13 +88,17 @@ export function WorkspaceSectionNav({
         id={`workspace-section-tab-${section.id}`}
         key={section.id}
         type="button"
-        role="tab"
+        role={compact ? "button" : "tab"}
+        data-section-chip={section.id}
         aria-selected={selected}
-        tabIndex={selected ? 0 : -1}
+        aria-pressed={selected}
+        aria-label={section.label}
+        title={section.label}
+        tabIndex={selected || (compact && index === 0 && !sections.some((item) => item.id === activeId)) ? 0 : -1}
         className={selected ? "active" : ""}
         onClick={() => onSelect(section.id)}
         onKeyDown={(event) => onTabKeyDown(event, index)}
-      ><span>{prefix}</span>{section.label}</button>;
+      >{compact ? section.label : <><span>{prefix}</span>{section.label}</>}</button>;
     })}
   </nav>;
 }
@@ -347,8 +369,13 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     [hideHealth],
   );
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState(() => (
+    active ? parseWorkspaceSection(active, typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("section")) : "i1"
+  ));
   const activeIndex = Math.max(0, visibleWorkspaces.findIndex((workspace) => workspace.key === active));
-  const pillIndex = hoverIndex ?? activeIndex;
+  const pillIndex = hoverIndex ?? focusIndex ?? activeIndex;
+  const dropletWorkspace = visibleWorkspaces[pillIndex] ?? visibleWorkspaces[activeIndex];
   const selectByIndex = (index: number) => {
     const normalized = (index + visibleWorkspaces.length) % visibleWorkspaces.length;
     const workspace = visibleWorkspaces[normalized];
@@ -357,52 +384,107 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     onChange(workspace.key);
   };
   useEffect(() => {
+    if (!active) return;
+    const sync = () => {
+      const params = new URLSearchParams(window.location.search);
+      const view = parseWorkspaceView(params.get("view"));
+      setActiveSection(parseWorkspaceSection(view, params.get("section")));
+    };
+    sync();
+    return listenToStratjiLocation(sync);
+  }, [active]);
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       const tab = tabsRef.current[activeIndex];
-      const tabList = tab?.parentElement;
+      const tabList = tab?.closest(".workspace-tabs");
       if (tab && tabList) tabList.scrollLeft = Math.max(0, tab.offsetLeft - (tabList.clientWidth - tab.clientWidth) / 2);
     }, 180);
     return () => window.clearTimeout(timer);
   }, [activeIndex]);
+  const selectSectionFor = (workspace: WorkspaceKey, sectionId: string) => {
+    const url = new URL(window.location.href);
+    const section = applyWorkspaceSectionParams(url, workspace, sectionId);
+    stratjiPushState(url, { view: workspace, section });
+    setActiveSection(section);
+    expandDashboardSection(dashboardSectionNumberFromNavId(section));
+  };
 
-  return <nav className="workspace-navigation mode-dial glass-bar liquid-glass" aria-label="Dashboard workspaces">
+  return <nav className="workspace-navigation mode-dial glass-bar liquid-glass" aria-label="Dashboard workspaces" data-web-section-chips="1">
+    <div className="workspace-glass-cluster" data-workspace-section-chips={active ?? undefined} data-droplet={dropletWorkspace?.key}>
     <div
       className="workspace-tabs"
       role="tablist"
       aria-orientation="horizontal"
       data-count={visibleWorkspaces.length}
+      data-droplet-index={pillIndex}
       style={{ "--glass-count": visibleWorkspaces.length, "--glass-index": pillIndex } as CSSProperties}
       onMouseLeave={() => setHoverIndex(null)}
     >
       {visibleWorkspaces.map((workspace, index) => {
         const badge = workspaceOrbitalBadge(workspace.key, kiteLive, contentLive, healthIncognito, healthStatus);
         const locked = !tierAllows(resolvedTier, featureForWorkspace(workspace.key));
-        return <button
+        const expanded = dropletWorkspace?.key === workspace.key;
+        const sectionChips = WORKSPACE_SECTIONS[workspace.key];
+        const WorkspaceIcon = workspace.icon;
+        return <div
+          key={workspace.key}
+          className="workspace-tab-cell"
+          data-mode={workspace.key}
+          data-expanded={expanded ? "1" : undefined}
+          onMouseEnter={() => setHoverIndex(index)}
+          onFocusCapture={() => setFocusIndex(index)}
+          onBlurCapture={(event) => {
+            const next = event.relatedTarget;
+            if (next instanceof Node && event.currentTarget.contains(next)) return;
+            setFocusIndex((current) => (current === index ? null : current));
+          }}
+        >
+          <button
           ref={(node) => { tabsRef.current[index] = node; }}
           id={`workspace-tab-${workspace.key}`}
-          key={workspace.key}
           type="button"
           role="tab"
           data-mode={workspace.key}
           data-locked={locked ? "1" : undefined}
           aria-selected={active === workspace.key}
-          aria-controls="dashboard-workspace-panel"
-          aria-label={locked ? `${workspace.label} (locked)` : `${workspace.label} · ${badge}`}
+          aria-expanded={expanded}
+          aria-controls={expanded ? `workspace-section-tabs-${workspace.key}` : undefined}
           tabIndex={active === workspace.key || (active === null && index === 0) ? 0 : -1}
           className={active === workspace.key ? "active" : ""}
-          onMouseEnter={() => setHoverIndex(index)}
+          data-glyph-only={expanded ? "0" : "1"}
+          aria-label={locked ? `${workspace.label} (locked)` : `${workspace.label} · ${badge}`}
           onClick={() => onChange(workspace.key)}
           onKeyDown={(event) => {
-            if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); selectByIndex(index + 1); }
-            if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); selectByIndex(index - 1); }
+            if (event.key === "ArrowRight") { event.preventDefault(); selectByIndex(index + 1); }
+            if (event.key === "ArrowLeft") { event.preventDefault(); selectByIndex(index - 1); }
+            if (event.key === "ArrowDown" && expanded && sectionChips.length > 0) {
+              event.preventDefault();
+              document.getElementById(`workspace-section-tab-${sectionChips[0]!.id}`)?.focus();
+              return;
+            }
+            if (event.key === "ArrowUp") { event.preventDefault(); selectByIndex(index - 1); }
             if (event.key === "Home") { event.preventDefault(); selectByIndex(0); }
             if (event.key === "End") { event.preventDefault(); selectByIndex(visibleWorkspaces.length - 1); }
           }}
         >
-          <b>{workspace.barLabel}</b>
+          <WorkspaceIcon size={15} strokeWidth={2.25} aria-hidden="true" />
+          {expanded ? <b>{workspace.barLabel}</b> : null}
           {locked ? <em className="orbital-badge" aria-hidden="true"><Lock size={11}/></em> : null}
-        </button>;
+        </button>
+        {expanded ? (
+          <div className="workspace-droplet" id={`workspace-section-tabs-${workspace.key}`}>
+            <WorkspaceSectionNav
+              compact
+              label={workspaceSectionLabel(workspace.key)}
+              sections={sectionChips}
+              activeId={workspace.key === active ? activeSection : ""}
+              onSelect={(sectionId) => selectSectionFor(workspace.key, sectionId)}
+            />
+          </div>
+        ) : null}
+        </div>;
       })}
+    </div>
     </div>
   </nav>;
 }
@@ -445,7 +527,8 @@ export function CollapsibleSection({ number, title, note, children, headerAction
   useEffect(() => {
     if (!defaultOpen) return;
     expandRequestedRef.current = true;
-    setOpen(true);
+    const timer = window.setTimeout(() => setOpen(true), 0);
+    return () => window.clearTimeout(timer);
   }, [defaultOpen]);
 
   useEffect(() => {
@@ -523,7 +606,7 @@ export function HealthIncognitoToggle({ active, onChange }: { active: boolean; o
   </label>;
 }
 
-export function DailyKanbanBoard({ workspace }: { workspace: KanbanWorkspace }) {
+export function DailyKanbanBoard({ workspace, items: itemsProp }: { workspace: KanbanWorkspace; items?: KanbanItem[] }) {
   const storageKey = `dashboard-kanban-${workspace}-v2`;
   const [state, setState] = useState<{ date: string; completed: string[] }>({ date: "", completed: [] });
   const [kanbanHydrated, setKanbanHydrated] = useState(false);
@@ -555,7 +638,7 @@ export function DailyKanbanBoard({ workspace }: { workspace: KanbanWorkspace }) 
     return () => window.clearTimeout(timer);
   }, [kanbanHydrated, state.date]);
 
-  const items = kanbanItems[workspace];
+  const items = itemsProp ?? kanbanItems[workspace];
   const toggle = (id: string) => {
     setCompletingId(id);
     window.setTimeout(() => setCompletingId(null), 320);

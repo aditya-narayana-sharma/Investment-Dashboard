@@ -68,6 +68,8 @@ test("Vital Metrics UI uses three collapsible direction rows with category colou
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile/);
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-kpi-tile > b/);
   assert.match(globalCss, /html\[data-appearance="sepia"\] \.health-direction-header/);
+  assert.match(globalCss, /data-focus-section="h3"/);
+  assert.match(globalCss, /\.health-workspace-shell\[data-focus-section="h3"\][\s\S]*overflow-y:auto/);
 });
 
 test("SparkFilament renders from per-metric history and has no hardcoded shared path", () => {
@@ -91,17 +93,18 @@ test("SparkFilament renders from per-metric history and has no hardcoded shared 
   assert.match(readFileSync(join(root, "scripts/import_apple_health.py"), "utf8"), /"history": history/);
 });
 
-test("Health console is H-1 / Daily Optimism H-2 / Vital Metrics H-3 without H-4 or Health Status", () => {
+test("Health console is H-1 / Daily Optimism H-2 / Vital Metrics H-3 / Calendar H-4 without Health Status", () => {
   assert.match(workspaceSource, /HealthWorkspaceSection = "h2" \| "h3"/);
   assert.match(workspaceSource, /\{ id: "h2", label: "Daily Optimism" \}/);
   assert.match(workspaceSource, /\{ id: "h3", label: "Vital Metrics" \}/);
+  assert.match(workspaceSource, /\{ id: "h4", label: "Calendar \+ Reminders" \}/);
   assert.match(workspaceSource, /number="H-2" title="Daily Optimism"/);
   assert.match(workspaceSource, /number="H-3" title="Vital Metrics"/);
+  assert.match(workspaceSource, /number="H-4" title="Calendar \+ Reminders"/);
   assert.match(workspaceSource, /id="health-h3"/);
+  assert.match(workspaceSource, /id="health-h4"/);
   assert.doesNotMatch(workspaceSource, /Health Status/);
   assert.doesNotMatch(workspaceSource, /Daily Guidance/);
-  assert.doesNotMatch(workspaceSource, /number="H-4"/);
-  assert.doesNotMatch(workspaceSource, /id="health-h4"/);
   assert.match(workspaceSource, /HealthIncognitoGate/);
   assert.match(workspaceSource, /<HealthMasonryGrid categories=\{healthSnapshot\.categories\} dataDate=\{healthSnapshot\.dataDate\}\/>/);
 });

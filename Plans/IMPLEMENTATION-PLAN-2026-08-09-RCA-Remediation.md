@@ -1,6 +1,6 @@
 # Implementation Plan — RCA Remediation (2026-08-09)
 
-Master plan to implement every proposed solution from `Plans/RCA-2026-08-09-Investment-Dashboard.md`.  
+Master plan to implement every proposed solution from `RCAs/RCA-2026-08-09-Investment-Dashboard.md`.  
 Do **not** treat the dashboard as fully current until Phase A acceptance passes.
 
 ---

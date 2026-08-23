@@ -10,7 +10,8 @@ FAILURES=0
 FAILED_NAMES=()
 HEALTH_REQUIRED_DATE="$(/usr/bin/python3 "$ROOT_DIR/scripts/health_date_policy.py" --date-only)"
 COOKIE_JAR="$(mktemp)"
-trap 'rm -f "$COOKIE_JAR"' EXIT
+JOB_DIR="$(mktemp -d)"
+trap 'rm -rf "$JOB_DIR"; rm -f "$COOKIE_JAR"' EXIT
 
 emit_progress() {
   local stage="$1"
@@ -40,13 +41,14 @@ check_source_any() {
   local expected_pattern="$3"
   local require_d1="${4:-false}"
   local max_time="${5:-90}"
+  local jar="${CHECK_COOKIE_JAR:-$COOKIE_JAR}"
   local code
   local body
   local status
   local data_date
   local source_detail=""
   body="$(mktemp)"
-  code="$(curl -sS --max-time "$max_time" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$body" -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
+  code="$(curl -sS --max-time "$max_time" -b "$jar" -c "$jar" -o "$body" -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
   if [[ -z "$code" || "$code" == "000" ]]; then
     status="unreachable"
     data_date=""
@@ -85,6 +87,13 @@ except Exception: print("")' "$body")"
     FAILED_NAMES+=("${name} (${status:-missing})")
     CHECK_OK=0
   fi
+  if [[ -n "${CHECK_RESULT_FILE:-}" ]]; then
+    if [[ "$CHECK_OK" == "1" ]]; then
+      printf '1\n' > "$CHECK_RESULT_FILE"
+    else
+      printf '0\t%s\n' "${name} (${status:-missing})" > "$CHECK_RESULT_FILE"
+    fi
+  fi
   rm -f "$body"
 }
 
@@ -99,27 +108,122 @@ finish_stage() {
   fi
 }
 
+collect_job() {
+  local job_id="$1"
+  local file="$JOB_DIR/$job_id.result"
+  local ok fail_name
+  if [[ ! -f "$file" ]]; then
+    FAILURES=$((FAILURES + 1))
+    FAILED_NAMES+=("${job_id} (missing)")
+    CHECK_OK=0
+    return
+  fi
+  IFS=$'\t' read -r ok fail_name < "$file" || true
+  if [[ "$ok" == "1" ]]; then
+    CHECK_OK=1
+  else
+    FAILURES=$((FAILURES + 1))
+    [[ -n "${fail_name:-}" ]] && FAILED_NAMES+=("$fail_name")
+    CHECK_OK=0
+  fi
+}
+
+run_check_bg() {
+  local job_id="$1"
+  shift
+  (
+    CHECK_COOKIE_JAR="$JOB_DIR/$job_id.cookies"
+    : > "$CHECK_COOKIE_JAR"
+    CHECK_RESULT_FILE="$JOB_DIR/$job_id.result"
+    check_source "$@"
+  ) &
+}
+
+run_check_any_bg() {
+  local job_id="$1"
+  shift
+  (
+    CHECK_COOKIE_JAR="$JOB_DIR/$job_id.cookies"
+    : > "$CHECK_COOKIE_JAR"
+    CHECK_RESULT_FILE="$JOB_DIR/$job_id.result"
+    check_source_any "$@"
+  ) &
+}
+
 REFRESH_MODE="${PORTFOLIO_REFRESH_MODE:-complete}"
+if [[ "$REFRESH_MODE" != "incremental" ]]; then
+  REFRESH_MODE="complete"
+fi
 HEALTH_SCRIPT="$(cd "$(dirname "$0")" && pwd)/refresh-apple-health.sh"
+
+# Complete/load and Refresh-all must ingest Health ZIP + live Mail even if a parent
+# exported PORTFOLIO_SKIP_* leftovers (IDE, launchd, prior incremental ticks).
+if [[ "$REFRESH_MODE" == "complete" ]]; then
+  while IFS= read -r skip_var; do
+    unset "$skip_var"
+  done < <(compgen -v | grep '^PORTFOLIO_SKIP_' || true)
+fi
 
 printf '%s dashboard refresh audit\n' "$([[ "$REFRESH_MODE" == "incremental" ]] && printf 'Incremental' || printf 'Complete')"
 printf 'Started\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
+printf 'Mode\t%s\tload-all-at-once then incremental ticks\n' "$REFRESH_MODE"
 emit_progress service ok "Local Stratji service is up."
 
-emit_progress kite start "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…"
-check_source "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
-finish_stage kite "Kite snapshot received." "Kite snapshot stale or unavailable."
-
 # content-digest-server emits distinct mail/axis/calendar/reminders/podcasts events while this curl runs.
-# Mail osascript is bounded (~50s); do not let splash sit on a lumped Mail caption for the whole Apple pass.
+# Mail osascript is bounded (~40s) and process-group killed; splash must not sit on Newsletters JXA.
 # Incremental ticks keep the digest cache; complete / Refresh all force a live Apple pass.
-CONTENT_FORCE="force=1&"
+CONTENT_QUERY="force=1&startup=$(date +%s)"
 CONTENT_TIMEOUT="160"
 if [[ "$REFRESH_MODE" == "incremental" ]]; then
-  CONTENT_FORCE=""
+  # Do not pass force=1 or startup — both make /api/content/refresh re-read Mail.app.
+  CONTENT_QUERY="refresh=$(date +%s)"
   CONTENT_TIMEOUT="90"
 fi
-check_source "Mail and Podcasts" "/api/content/refresh?${CONTENT_FORCE}startup=$(date +%s)" "live" "false" "$CONTENT_TIMEOUT"
+
+# Fire independent families concurrently. Flask waitress threads cover the HTTP fan-out.
+# Mail+Axis stay sequential inside content-digest-server (Mail.app JXA cannot overlap).
+emit_progress kite start "Refreshing Kite holdings, positions, orders, GTT, margins, and quotes…"
+emit_progress calendar start "Refreshing Apple Calendar…"
+emit_progress mail start "Refreshing iCloud Newsletters…"
+emit_progress axis start "Refreshing Axis Research mailbox…"
+emit_progress reminders start "Refreshing Apple Reminders…"
+emit_progress podcasts start "Refreshing Apple Podcasts…"
+emit_progress sectors start "Refreshing sector snapshots…" 0
+emit_progress earnings start "Refreshing earnings calendar…"
+emit_progress health start "Validating Apple Health export and importing…"
+
+run_check_bg kite "Kite portfolio" "/api/kite/snapshot?startup=$(date +%s)" "live"
+run_check_bg content "Mail and Podcasts" "/api/content/refresh?${CONTENT_QUERY}" "live" "false" "$CONTENT_TIMEOUT"
+
+for sector in "${SECTORS[@]}"; do
+  run_check_bg "sector-${sector}" "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
+done
+run_check_any_bg sector-news "Sector news" "/api/sectors/news?startup=$(date +%s)" "live|partial" "false" "60"
+# S-3 Decision Lab depends on NSE benchmark histories; accept live or partial (definition-only residual gaps).
+# Live sector quotes + catalog scores are the S-2 composite-scoring inputs.
+run_check_any_bg sector-benchmarks "NSE benchmarks" "/api/sectors/benchmarks?startup=$(date +%s)" "live|partial" "false" "120"
+run_check_bg earnings "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
+
+(
+  CHECK_COOKIE_JAR="$JOB_DIR/health.cookies"
+  : > "$CHECK_COOKIE_JAR"
+  CHECK_RESULT_FILE="$JOB_DIR/health.result"
+  if [[ "$REFRESH_MODE" == "incremental" ]]; then
+    printf 'Health ZIP\tincremental\tre-extract only if the export mtime changed\n'
+    "$HEALTH_SCRIPT" --if-changed || true
+  else
+    printf 'Health ZIP\tcomplete\tvalidate newest iCloud ZIP, extract export.xml, import snapshot\n'
+    "$HEALTH_SCRIPT" || true
+  fi
+  check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
+) &
+
+wait || true
+
+collect_job kite
+finish_stage kite "Kite snapshot received." "Kite snapshot stale or unavailable."
+
+collect_job content
 MAIL_STATE="ensure"
 if [[ "${CHECK_OK:-0}" != "1" ]]; then
   MAIL_STATE="ensure-failed"
@@ -138,40 +242,26 @@ else
   emit_progress podcasts ensure-failed "Apple Podcasts stale or unavailable."
 fi
 
-sector_count="${#SECTORS[@]}"
-emit_progress sectors start "Refreshing sector snapshots…" 0
-index=0
+SECTOR_OK=1
 for sector in "${SECTORS[@]}"; do
-  check_source "Sector: ${sector}" "/api/sectors/snapshot?sector=${sector}&startup=$(date +%s)" "live" "false" "120"
-  index=$((index + 1))
-  emit_progress sectors start "Sector ${sector} (${index}/${sector_count})" "$(/usr/bin/python3 -c "print(round($index / ($sector_count + 2), 4))")"
+  collect_job "sector-${sector}"
+  [[ "${CHECK_OK:-0}" == "1" ]] || SECTOR_OK=0
 done
-check_source_any "Sector news" "/api/sectors/news?startup=$(date +%s)" "live|partial" "false" "60"
-index=$((index + 1))
-emit_progress sectors start "Sector news (${index}/$((sector_count + 2)))" "$(/usr/bin/python3 -c "print(round($index / ($sector_count + 2), 4))")"
-# S-3 Decision Lab depends on NSE benchmark histories; accept live or partial (definition-only residual gaps).
-check_source_any "NSE benchmarks" "/api/sectors/benchmarks?startup=$(date +%s)" "live|partial" "false" "120"
-if [[ "${CHECK_OK:-0}" == "1" ]]; then
+collect_job sector-news
+[[ "${CHECK_OK:-0}" == "1" ]] || SECTOR_OK=0
+collect_job sector-benchmarks
+[[ "${CHECK_OK:-0}" == "1" ]] || SECTOR_OK=0
+CHECK_OK="$SECTOR_OK"
+if [[ "$SECTOR_OK" == "1" ]]; then
   emit_progress sectors ok "Sector snapshots received."
 else
   emit_progress sectors failed "Sector snapshots stale or unavailable."
 fi
 
-emit_progress earnings start "Refreshing earnings calendar…"
-check_source "Earnings calendar" "/api/earnings/snapshot?startup=$(date +%s)" "verified"
+collect_job earnings
 finish_stage earnings "Earnings snapshot received." "Earnings snapshot stale or unverified."
 
-emit_progress health start "Validating Apple Health export and importing…"
-if [[ "${PORTFOLIO_SKIP_HEALTH_ZIP:-0}" == "1" ]]; then
-  printf 'Health ZIP\tskipped\tPORTFOLIO_SKIP_HEALTH_ZIP=1 (hot-path override; splash complete must not set this)\n'
-elif [[ "$REFRESH_MODE" == "incremental" ]]; then
-  printf 'Health ZIP\tincremental\tre-extract only if the export mtime changed\n'
-  "$HEALTH_SCRIPT" --if-changed || true
-else
-  printf 'Health ZIP\tcomplete\tvalidate newest iCloud ZIP, extract export.xml, import snapshot\n'
-  "$HEALTH_SCRIPT" || true
-fi
-check_source "HealthKit operational snapshot" "/_health/snapshot?startup=$(date +%s)" "live" "true"
+collect_job health
 finish_stage health "Health snapshot received." "Health snapshot stale or unavailable."
 
 printf 'Finished\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"

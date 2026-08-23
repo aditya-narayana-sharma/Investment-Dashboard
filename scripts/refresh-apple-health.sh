@@ -75,13 +75,19 @@ run_apple_health_import() {
 }
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  printf 'Apple Health refresh already running; waiting for the validated snapshot.\n'
+  printf 'Apple Health refresh already running; waiting to acquire the lock.\n'
+  acquired=0
   for _ in {1..1500}; do
-    [[ ! -d "$LOCK_DIR" ]] && exit 0
     sleep 1
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      acquired=1
+      break
+    fi
   done
-  printf 'Timed out waiting for the in-flight Apple Health refresh.\n' >&2
-  exit 1
+  if [[ "$acquired" != "1" ]]; then
+    printf 'Timed out waiting for the in-flight Apple Health refresh.\n' >&2
+    exit 1
+  fi
 fi
 trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 

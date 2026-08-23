@@ -16,7 +16,7 @@ enum StratjiWorkspace: String, CaseIterable, Identifiable, Codable {
         case .investment: "Portfolio Overview"
         case .sectors: "Sectoral Analytics"
         case .intelligence: "Market Intelligence"
-        case .health: "Health & Wellness"
+        case .health: "My Feed"
         case .builder: "Algorithm Builder"
         case .strategies: "Strategies"
         }
@@ -28,7 +28,7 @@ enum StratjiWorkspace: String, CaseIterable, Identifiable, Codable {
         case .investment: "Portfolio"
         case .sectors: "Sectors"
         case .intelligence: "Intel"
-        case .health: "Health"
+        case .health: "My Feed"
         case .builder: "Canvas"
         case .strategies: "Strategies"
         }
@@ -61,8 +61,8 @@ enum StratjiWorkspace: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .investment: "Holdings, action board, and Kite snapshot"
         case .sectors: "Sector snapshots and rankings"
-        case .intelligence: "Mail, podcasts, calendar, earnings"
-        case .health: "Operational-day Health from the Mac data plane"
+        case .intelligence: "Satya, action board, and earnings"
+        case .health: "Operational-day Health plus calendar and reminders"
         case .builder: "Strategy tree canvas"
         case .strategies: "NSE strategy library"
         }
@@ -250,6 +250,8 @@ extension StratjiWorkspace {
             return .builder
         case "strategy-library":
             return .strategies
+        case "feed", "my-feed":
+            return .health
         case "portfolio", "portfolio-overview":
             return .investment
         case "integrations", "settings":

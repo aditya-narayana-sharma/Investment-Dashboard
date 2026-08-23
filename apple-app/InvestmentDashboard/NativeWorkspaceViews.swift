@@ -86,7 +86,13 @@ struct NativeRootShell: View {
     private var documentNavigation: some View {
         NavigationStack {
             ZStack {
-                NativeWorkspacePage(workspace: workspace, session: session, actions: actions)
+                NativeWorkspacePage(
+                    workspace: workspace,
+                    section: DashboardOutline.destination(id: destinationID)?.section,
+                    session: session,
+                    actions: actions,
+                    serverURL: serverURL
+                )
                 if session.viewingCachedSnapshot {
                     VStack {
                         NativeCachedBanner(session: session)

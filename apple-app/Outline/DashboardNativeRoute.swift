@@ -17,6 +17,7 @@ enum DashboardNativeRoute {
             history.replaceState(Object.assign({}, history.state || {}, { nativeRoute: true }), "", next.pathname + next.search + next.hash);
           } catch (e) {}
           window.dispatchEvent(new PopStateEvent("popstate"));
+          window.dispatchEvent(new Event("stratji:navigate"));
           if (number) {
             window.dispatchEvent(new CustomEvent("dashboard-expand-section", { detail: { number: number } }));
           }

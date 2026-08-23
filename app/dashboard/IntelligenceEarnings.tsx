@@ -6,10 +6,11 @@ import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
 import { findEarningsHolidayConflicts } from "../market-calendar";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
-import { LlmAssistPanel, type LlmAssistSuggestion } from "./LlmAssistPanel";
 import { earningsReconciliationStats, mergeEarningsCalendarEvents } from "./utils";
+import { useSatyaTaskContext } from "./satya-workspace";
+import type { SatyaSuggestion } from "./satya-suggestions";
 
-const EARNINGS_LLM_SUGGESTIONS: LlmAssistSuggestion[] = [
+const EARNINGS_LLM_SUGGESTIONS: SatyaSuggestion[] = [
   {
     id: "verified-week",
     label: "Verified prints this week",
@@ -69,6 +70,19 @@ export function MarketEarningsCalendar({
     [conflictByEvent, events],
   );
 
+  useSatyaTaskContext("intelligence-m3", {
+    task: "summarize",
+    hint: "Uses verified reported KPIs only. Unpublished fields stay blank. Calendar rows stay scheduling evidence.",
+    suggestions: EARNINGS_LLM_SUGGESTIONS,
+    context: events.slice(0, 12).map((event) => {
+      const kpis = event.reported
+        ? event.kpis.map((kpi) => `${kpi.label} ${kpi.value || "—"}`).join(", ")
+        : "unpublished KPIs blank";
+      return `${event.date} ${event.symbol} ${event.state} reported=${event.reported} ${kpis}`;
+    }).join("\n"),
+    placeholder: "e.g. What did independently verified prints say this week?",
+  });
+
   return <article className="panel earnings-workbench market-earnings-workbench" data-earnings-owner="m3">
     <div className="panel-title">
       <div>
@@ -77,18 +91,6 @@ export function MarketEarningsCalendar({
       </div>
       <span className={`pill ${snapshot.status === "verified" ? "green" : "amber"}`}>{snapshot.status} · {snapshot.asOf}</span>
     </div>
-    <LlmAssistPanel
-      task="summarize"
-      hint="Uses verified reported KPIs only. Unpublished fields stay blank. Calendar rows stay scheduling evidence."
-      suggestions={EARNINGS_LLM_SUGGESTIONS}
-      context={events.slice(0, 12).map((event) => {
-        const kpis = event.reported
-          ? event.kpis.map((kpi) => `${kpi.label} ${kpi.value || "—"}`).join(", ")
-          : "unpublished KPIs blank";
-        return `${event.date} ${event.symbol} ${event.state} reported=${event.reported} ${kpis}`;
-      }).join("\n")}
-      placeholder="e.g. What did independently verified prints say this week?"
-    />
     <div className="earnings-reconciliation-strip" aria-label="Sanitized earnings reconciliation counts">
       <span><b>{reconciliation.discovered}</b> discovered</span>
       <span><b>{reconciliation.newlyAdded}</b> new</span>

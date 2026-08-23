@@ -1,6 +1,6 @@
 # Implementation Plan — Algorithm Builder as a Composer-style tree editor
 
-Implements the proposed solutions in `Plans/RCA-2026-08-16-Algorithm-Builder-Canvas-KPI.md`.  
+Implements the proposed solutions in `RCAs/RCA-2026-08-16-Algorithm-Builder-Canvas-KPI.md`.  
 **Do not start a visual rewrite until Slice 1 (tree contract) is reviewed.**  
 This plan does **not** implement the editor; it is the execution sequence.
 

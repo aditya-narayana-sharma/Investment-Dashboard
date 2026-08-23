@@ -66,13 +66,15 @@ test("parseHealthDailyNoteStats extracts only present note pairs", () => {
   assert.equal(pairs.every((item) => Boolean(item.value)), true);
 });
 
-test("Health section aliases resolve to H-1 / H-2 / H-3", () => {
+test("Health section aliases resolve to H-1 / H-2 / H-3 / H-4", () => {
   assert.equal(parseHealthTopSection("h1"), "h1");
   assert.equal(parseHealthTopSection("board"), "h1");
   assert.equal(parseHealthTopSection("h2"), "h2");
   assert.equal(parseHealthTopSection("optimism"), "h2");
   assert.equal(parseHealthTopSection("h3"), "h3");
   assert.equal(parseHealthTopSection("metrics"), "h3");
-  assert.equal(parseHealthTopSection("h4"), "h3");
+  assert.equal(parseHealthTopSection("h4"), "h4");
+  assert.equal(parseHealthTopSection("calendar"), "h4");
+  assert.equal(parseHealthTopSection("calendar-reminders"), "h4");
   assert.equal(parseHealthTopSection(null), null);
 });

@@ -59,10 +59,50 @@ struct InvestmentDashboardTests {
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=algorithm-canvas")) == .builder)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=strategies")) == .strategies)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=strategy-library")) == .strategies)
+        #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=feed")) == .health)
+        #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=health")) == .health)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=integrations")) == nil)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=settings")) == nil)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=portfolio")) == .investment)
         #expect(DashboardWorkspace.from(url: URL(string: "https://dashboard.example/?view=unknown")) == nil)
+    }
+
+    @Test func intelligenceOutlineIsSatyaNotDigestWalls() {
+        let intel = DashboardOutline.destination(id: "intelligence")
+        let titles = intel?.children.map(\.title) ?? []
+        #expect(titles == ["Action Board", "Satya", "Earnings Calendar"])
+        #expect(intel?.children.contains(where: { $0.section == "m2" }) == true)
+    }
+
+    @Test func glassBarSectionChipsCoverEveryWorkspace() {
+        let expected: [(String, [String])] = [
+            ("investment", ["Action Board", "Portfolio", "Risk", "Axis picks"]),
+            ("sectors", ["Action Board", "Industry Analytics", "Decision Framework"]),
+            ("intelligence", ["Action Board", "Satya", "Earnings Calendar"]),
+            ("health", ["Action Board", "Daily Optimism", "Vital Metrics", "Calendar + Reminders"]),
+            ("builder", ["Action Board", "Canvas", "JSON"]),
+            ("strategies", ["Action Board", "Library"]),
+        ]
+        for (view, chips) in expected {
+            #expect(DashboardOutline.sectionDestinations(forView: view).map(\.title) == chips)
+        }
+        #expect(!DashboardOutline.sectionDestinations(forView: "intelligence").contains(where: { $0.section == "m4" }))
+        #expect(DashboardOutline.sectionDestinations(forView: "builder").map(\.section) == ["board", "canvas", "json"])
+
+        let investmentOnly = Set(["Portfolio", "Risk", "Axis picks"])
+        for (view, _) in expected where view != "investment" {
+            let titles = Set(DashboardOutline.sectionDestinations(forView: view).map(\.title))
+            #expect(titles.isDisjoint(with: investmentOnly), "\(view) leaked Investment section titles")
+        }
+        #expect(DashboardOutline.sectionDestinations(forView: "sectors").map(\.title)
+            == ["Action Board", "Industry Analytics", "Decision Framework"])
+        #expect(DashboardOutline.sectionDestinations(forView: "intelligence").map(\.title)
+            == ["Action Board", "Satya", "Earnings Calendar"])
+        #expect(DashboardOutline.defaultDestination(forView: "sectors").section == "s1")
+        #expect(DashboardOutline.defaultDestination(forView: "intelligence").section == "m1")
+        #expect(DashboardOutline.defaultDestination(forView: "health").section == "h1")
+        #expect(DashboardOutline.defaultDestination(forView: "builder").section == "canvas")
+        #expect(DashboardOutline.defaultDestination(forView: "strategies").section == "y2")
     }
 
     @Test func periodicRefreshIntervalMatchesWebSpa() {
@@ -175,7 +215,7 @@ struct InvestmentDashboardTests {
             "Portfolio Overview",
             "Sectoral Analytics",
             "Market Intelligence",
-            "Health & Wellness",
+            "My Feed",
             "Algorithm Builder",
             "Strategies",
         ])
@@ -191,7 +231,7 @@ struct InvestmentDashboardTests {
             "Portfolio",
             "Sectors",
             "Intel",
-            "Health",
+            "My Feed",
             "Builder",
             "Strategies",
         ])
@@ -206,7 +246,7 @@ struct InvestmentDashboardTests {
             "Portfolio Overview",
             "Sectoral Analytics",
             "Market Intelligence",
-            "Health & Wellness",
+            "My Feed",
             "Algorithm Builder",
             "Strategies",
         ])
@@ -224,6 +264,11 @@ struct InvestmentDashboardTests {
         #expect(DashboardOutline.destination(id: "health/h3")?.title == "Vital Metrics")
         #expect(DashboardOutline.destination(id: "health/h3/metrics-overview")?.id == "health/h3")
         #expect(DashboardOutline.destination(id: "intelligence/m3")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=intelligence&section=m3")
+        #expect(DashboardOutline.destination(id: "intelligence/m4")?.id == "health/h4")
+        #expect(DashboardOutline.destination(id: "intelligence/m4")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=health&section=h4")
+        #expect(DashboardOutline.destination(id: "intelligence/m4")?.title == "Calendar + Reminders")
+        #expect(DashboardOutline.destination(id: "health/h4")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=health&section=h4")
+        #expect(DashboardOutline.destination(id: "health/h4")?.title == "Calendar + Reminders")
         #expect(DashboardOutline.destination(id: "health/h2/guardrails")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=health&section=h2&page=guardrails")
         #expect(DashboardOutline.destination(id: "health/h3/nutrition")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=health&section=h3&page=nutrition")
         #expect(DashboardOutline.destination(id: "health/h3/nutrition-2")?.ownURL(baseURL: base, nativeChrome: false).absoluteString == "http://127.0.0.1:5050/?view=health&section=h3&page=nutrition")
@@ -235,6 +280,9 @@ struct InvestmentDashboardTests {
         #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=strategy-library&section=board"))?.id == "strategies/y1")
         #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=health&section=h3&page=sleep"))?.id == "health/h3/sleep")
         #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=health&section=h3&page=nutrition-1"))?.id == "health/h3/nutrition")
+        #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=feed"))?.id == "health")
+        #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=health&section=h4"))?.id == "health/h4")
+        #expect(DashboardOutline.match(url: URL(string: "http://127.0.0.1:5050/?view=intelligence&section=m4"))?.id == "health/h4")
     }
 
     @Test func selectingRiskLoadsURLContainingSectionI3() {

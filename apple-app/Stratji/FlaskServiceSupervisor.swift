@@ -12,14 +12,16 @@ enum FlaskServiceStatus: Equatable {
 }
 
 enum FlaskServiceSupervisor {
-    private static let healthTimeout: TimeInterval = 3
-    private static let pollLimit = 90
+    /// Flask `/_flask/health` may wait 3s on a down upstream before returning 503.
+    private static let healthTimeout: TimeInterval = 8
+    private static let pollLimit = 180
     /// Incremental ticks: source HTTP checks without a full Health XML re-extract.
     private static let incrementalRefreshTimeout: TimeInterval = 200
     /// Splash / Refresh all: Health ZIP validate+extract+import can take many minutes.
     private static let completeRefreshTimeout: TimeInterval = 35 * 60
     private static let launchLock = NSLock()
     nonisolated(unsafe) private static var headlessStartProcess: Process?
+    nonisolated(unsafe) private static var dashStartStarted = false
 
     static func isHealthy() async -> Bool {
         await isReachable()
@@ -30,41 +32,98 @@ enum FlaskServiceSupervisor {
         request.timeoutInterval = healthTimeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return false }
-            if (200 ..< 300).contains(http.statusCode) {
-                return true
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let health = try? JSONDecoder().decode(FlaskHealthDTO.self, from: data) else {
+                return false
             }
-            if let health = try? JSONDecoder().decode(FlaskHealthDTO.self, from: data) {
-                return health.serviceReady
-            }
-            return false
+            return health.serviceReady
         } catch {
             return false
         }
+    }
+
+    /// True while `start-flask-app.sh` (or the headless fallback) is still the launch process.
+    nonisolated static func isDashStartRunning() -> Bool {
+        isStartProcessRunning()
     }
 
     static func logExcerpt(lines: Int = 24) -> String {
         lastLogExcerpt(lines: lines)
     }
 
-    static func ensureRunning(onTick: (() -> Void)? = nil) async -> FlaskServiceStatus {
+    /// Quit / close: unload launchd and kill Flask, Vinext, and helper listeners.
+    nonisolated static func stopDataPlane() {
+        launchLock.lock()
+        if let process = headlessStartProcess, process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        headlessStartProcess = nil
+        dashStartStarted = false
+        launchLock.unlock()
+
+        appendDesktopLog("Stop: tearing down dashboard processes\n")
+        runStopScript()
+        appendDesktopLog("Stop: dashboard processes are down\n")
+    }
+
+    /// Every app launch starts a new data plane. Leftover :3000/:5050 listeners are not reused.
+    static func kickoffAtLaunch() async {
+        StratjiConfiguration.persistRepoRoot()
+        appendDesktopLog("Launch: stopping leftover dashboard processes for a fresh start\n")
+        stopDataPlane()
+        await waitUntilDashboardPortsFree()
+        appendDesktopLog("Launch: running dash-start in background\n")
+        runDashStartInBackground()
+    }
+
+    static func ensureRunning(recycle: Bool = false, onTick: (() -> Void)? = nil) async -> FlaskServiceStatus {
         StratjiConfiguration.persistRepoRoot()
         onTick?()
-        let alreadyLive = await isReachable()
-        appendDesktopLog(
-            alreadyLive
-                ? "Gateway reachable; replacing LaunchAgent watchdog without Terminal.app\n"
-                : "Starting Stratji service via LaunchAgent \(StratjiConfiguration.launchAgentTarget)\n"
-        )
-        onTick?()
-        await Task.detached {
-            startViaLaunchd(startNow: !alreadyLive)
-        }.value
-        if alreadyLive {
+        if recycle {
+            appendDesktopLog("Retry: recycling dashboard processes for a fresh start\n")
+            stopDataPlane()
+            onTick?()
+            await waitUntilDashboardPortsFree()
+            runDashStartInBackground()
+        } else if await isReachable(), !isStartProcessRunning() {
+            adoptLiveGatewayWithoutRecycle()
+            onTick?()
             return .live
+        } else if isStartProcessRunning() {
+            appendDesktopLog("dash-start still running; waiting for serviceReady\n")
+            onTick?()
+        } else {
+            appendDesktopLog("Gateway down; running dash-start in background\n")
+            onTick?()
+            runDashStartInBackground()
         }
 
+        for _ in 0 ..< pollLimit {
+            onTick?()
+            if await isReachable() {
+                adoptLiveGatewayWithoutRecycle()
+                return .live
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        if isStartProcessRunning() {
+            appendDesktopLog("dash-start still running; keep waiting before launchd fallback\n")
+            for _ in 0 ..< pollLimit {
+                onTick?()
+                if await isReachable() {
+                    adoptLiveGatewayWithoutRecycle()
+                    return .live
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+
+        appendDesktopLog("dash-start did not become healthy; falling back to headless start\n")
+        await Task.detached {
+            startViaLaunchd(startNow: true)
+        }.value
         for _ in 0 ..< pollLimit {
             onTick?()
             if await isReachable() {
@@ -115,6 +174,10 @@ enum FlaskServiceSupervisor {
         environment["DASHBOARD_PUBLIC_URL"] = dashboard
         environment["PORTFOLIO_REFRESH_MODE"] = mode
         environment.removeValue(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP")
+        let skipKeys = environment.keys.filter { $0.hasPrefix("PORTFOLIO_SKIP_") }
+        for key in skipKeys {
+            environment.removeValue(forKey: key)
+        }
         environment["PORTFOLIO_STARTUP_PROGRESS_PATH"] = repoRoot
             .appendingPathComponent("artifacts/private/startup-progress.json").path
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -239,8 +302,189 @@ enum FlaskServiceSupervisor {
         return ("The local Stratji service did not start. Retry, or grant Full Disk Access if macOS is blocking it.", true)
     }
 
-    /// Writes the LaunchAgent, optionally starts the data plane, and replaces any
-    /// older watchdog that used `open` on a `.command` file (that opens Terminal.app).
+    /// Keep the LaunchAgent plist current. Do not bootstrap/kickstart here —
+    /// that would start a second copy beside dash-start.
+    nonisolated private static func adoptLiveGatewayWithoutRecycle() {
+        appendDesktopLog("Gateway reachable; skip a second dash-start\n")
+        StratjiConfiguration.writeLaunchAgent()
+    }
+
+    /// Start the data plane in the background. Launch and Retry call
+    /// `stopDataPlane()` first so leftover listeners are not reused.
+    nonisolated private static func runDashStartInBackground() {
+        launchLock.lock()
+        if dashStartStarted {
+            if headlessStartProcess?.isRunning == true {
+                launchLock.unlock()
+                appendDesktopLog("dash-start already running in background\n")
+                return
+            }
+            dashStartStarted = false
+            appendDesktopLog("dash-start flag reset; previous start is not running\n")
+        }
+        dashStartStarted = true
+        launchLock.unlock()
+
+        guard let repoRoot = StratjiConfiguration.repoRoot else {
+            appendDesktopLog("dash-start skipped: repo root missing\n")
+            launchLock.lock()
+            dashStartStarted = false
+            launchLock.unlock()
+            return
+        }
+
+        let start = repoRoot.appendingPathComponent(StratjiConfiguration.startScriptRelativePath)
+        guard FileManager.default.fileExists(atPath: start.path) else {
+            appendDesktopLog("dash-start skipped: start-flask-app.sh missing\n")
+            launchLock.lock()
+            dashStartStarted = false
+            launchLock.unlock()
+            return
+        }
+
+        let logDirectory = StratjiConfiguration.logDirectory
+        try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
+        let logFile = logDirectory.appendingPathComponent("desktop-app.log")
+        if !FileManager.default.fileExists(atPath: logFile.path) {
+            FileManager.default.createFile(atPath: logFile.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: logFile) else {
+            appendDesktopLog("could not open desktop-app.log for dash-start\n")
+            launchLock.lock()
+            dashStartStarted = false
+            launchLock.unlock()
+            return
+        }
+        handle.seekToEndOfFile()
+
+        if let existing = headlessStartProcess, existing.isRunning {
+            appendDesktopLog("dash-start already running (pid \(existing.processIdentifier))\n")
+            try? handle.close()
+            return
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            "-c",
+            "exec \"$1\"",
+            "dash-start",
+            start.path,
+        ]
+        process.currentDirectoryURL = repoRoot
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = handle
+        process.standardError = handle
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        environment.removeValue(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP")
+        let skipKeys = environment.keys.filter { $0.hasPrefix("PORTFOLIO_SKIP_") }
+        for key in skipKeys {
+            environment.removeValue(forKey: key)
+        }
+        process.environment = environment
+        attachStartProcess(process, logHandle: handle)
+
+        do {
+            try process.run()
+            headlessStartProcess = process
+            appendDesktopLog("started dash-start in background (pid \(process.processIdentifier))\n")
+        } catch {
+            appendDesktopLog("dash-start failed: \(error.localizedDescription)\n")
+            process.terminationHandler = nil
+            try? handle.close()
+            launchLock.lock()
+            dashStartStarted = false
+            launchLock.unlock()
+        }
+    }
+
+    /// After Stratji stop, do not start until Vinext and Flask listeners are gone.
+    /// A dying `flask_bound` leftover would otherwise take the Vinext-only path.
+    static func waitUntilDashboardPortsFree() async {
+        let ports = [3000, 5050]
+        for tick in 0 ..< 80 {
+            if ports.allSatisfy({ !isPortListening($0) }) {
+                if tick > 0 {
+                    appendDesktopLog("Launch: ports :3000 and :5050 are free\n")
+                }
+                return
+            }
+            if tick == 0 {
+                appendDesktopLog("Launch: waiting for leftover :3000/:5050 listeners to exit\n")
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        appendDesktopLog("Launch: leftover listeners still bound after 20s; dash-start will wait\n")
+    }
+
+    nonisolated private static func isPortListening(_ port: Int) -> Bool {
+        let result = runTool(
+            URL(fileURLWithPath: "/usr/sbin/lsof"),
+            ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN"]
+        )
+        return result.status == 0 && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    nonisolated private static func isStartProcessRunning() -> Bool {
+        launchLock.lock()
+        defer { launchLock.unlock() }
+        return headlessStartProcess?.isRunning == true
+    }
+
+    nonisolated private static func runStopScript() {
+        guard let repoRoot = StratjiConfiguration.repoRoot else {
+            appendDesktopLog("stop skipped: repo root missing\n")
+            return
+        }
+        let stop = repoRoot.appendingPathComponent(StratjiConfiguration.stopScriptRelativePath)
+        guard FileManager.default.fileExists(atPath: stop.path) else {
+            appendDesktopLog("stop skipped: stop-flask-app.sh missing\n")
+            return
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [stop.path]
+        process.currentDirectoryURL = repoRoot
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        process.environment = environment
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            appendDesktopLog("stop-flask-app.sh failed: \(error.localizedDescription)\n")
+            return
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let output = String(data: data, encoding: .utf8) {
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                appendDesktopLog(trimmed + "\n")
+            }
+        }
+        if process.terminationStatus != 0 {
+            appendDesktopLog("stop-flask-app.sh exited \(process.terminationStatus)\n")
+        }
+    }
+
+    nonisolated private static func attachStartProcess(_ process: Process, logHandle: FileHandle) {
+        process.terminationHandler = { finished in
+            launchLock.lock()
+            if headlessStartProcess === finished {
+                headlessStartProcess = nil
+            }
+            dashStartStarted = false
+            launchLock.unlock()
+            try? logHandle.close()
+        }
+    }
+
+    /// Writes the LaunchAgent watchdog. `startNow` is a headless fallback only.
     nonisolated private static func startViaLaunchd(startNow: Bool) {
         launchLock.lock()
         defer { launchLock.unlock() }
@@ -287,7 +531,13 @@ enum FlaskServiceSupervisor {
         process.standardError = handle
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        environment.removeValue(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP")
+        let skipKeys = environment.keys.filter { $0.hasPrefix("PORTFOLIO_SKIP_") }
+        for key in skipKeys {
+            environment.removeValue(forKey: key)
+        }
         process.environment = environment
+        attachStartProcess(process, logHandle: handle)
 
         do {
             try process.run()
@@ -295,6 +545,7 @@ enum FlaskServiceSupervisor {
             appendDesktopLog("started start-dashboard via bash (pid \(process.processIdentifier))\n")
         } catch {
             appendDesktopLog("headless start failed: \(error.localizedDescription)\n")
+            process.terminationHandler = nil
             try? handle.close()
         }
     }

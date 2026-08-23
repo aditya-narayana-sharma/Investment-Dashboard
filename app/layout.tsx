@@ -54,7 +54,7 @@ export const viewport: Viewport = {
 };
 
 const appearanceFoucScript = `(function(){try{var a=localStorage.getItem("dashboard-appearance");if(a==="dark"||a==="sepia"||a==="black")document.documentElement.dataset.appearance=a;else document.documentElement.dataset.appearance="black";}catch(e){document.documentElement.dataset.appearance="black";}})();`;
-const nativeChromeFoucScript = `(function(){try{var q=location.search||"";var native=/(?:^|[?&])(?:nativeChrome|native)=(1|true)(?:&|$)/.test(q)||/\\bStratji\\//i.test(navigator.userAgent||"");if(native){document.documentElement.classList.add("native-chrome-embed");document.documentElement.dataset.nativeChrome="1";}}catch(e){}})();`;
+const nativeChromeFoucScript = `(function(){try{var q=location.search||"";var ua=navigator.userAgent||"";var stratji=/\\bStratji\\//i.test(ua);var native=/(?:^|[?&])(?:nativeChrome|native)=(1|true)(?:&|$)/.test(q)||stratji;if(native){document.documentElement.classList.add("native-chrome-embed");document.documentElement.dataset.nativeChrome="1";var macOverlay=stratji&&/Macintosh/i.test(ua)&&!/iPhone|iPad|iPod/i.test(ua);if(macOverlay){document.documentElement.dataset.nativeOwnsSections="1";}else{document.documentElement.dataset.nativeWebNav="1";}}}catch(e){}})();`;
 
 export default async function RootLayout({
   children,

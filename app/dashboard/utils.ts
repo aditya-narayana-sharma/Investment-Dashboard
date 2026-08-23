@@ -558,12 +558,8 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "sec-framework", title: "Run the selected sector through frameworks", detail: "Use PESTEL, Porter, life-cycle and market-structure evidence together before forming a sector stance.", numericAdvantage: "4 independent lenses", strategicAdvantage: "Reduces one-factor conclusions", lane: "monitor", tone: "amber" },
     { id: "sec-earnings", title: "Fill pending earnings KPIs", detail: "Keep unpublished values blank and populate only from official releases.", numericAdvantage: "0 fabricated values", strategicAdvantage: "Preserves research integrity", lane: "monitor", tone: "red" },
   ],
-  intelligence: [
-    { id: "intel-mail", title: "Refresh exact Mail intelligence sources", detail: "Reconcile every item from iCloud Newsletters and Axis Research before using the digest.", numericAdvantage: "2 exact mailbox scopes", strategicAdvantage: "Prevents misfiled evidence", lane: "today", tone: "blue" },
-    { id: "intel-calendar", title: "Reconcile Calendar and Reminders", detail: "Merge current events and incomplete actions without treating schedules as published results.", numericAdvantage: "2 action sources", strategicAdvantage: "Separates plans from evidence", lane: "today", tone: "green" },
-    { id: "intel-earnings", title: "Monitor reported earnings evidence", detail: "Promote KPI rows only after company, exchange, or validated research evidence is available.", numericAdvantage: "0 inferred result fields", strategicAdvantage: "Protects decision quality", lane: "monitor", tone: "amber" },
-    { id: "intel-podcasts", title: "Review Podcast freshness and coverage", detail: "Use local transcripts when available and label description-only summaries explicitly.", numericAdvantage: "30-minute refresh", strategicAdvantage: "Keeps evidence provenance clear", lane: "monitor", tone: "red" },
-  ],
+  /** Built per last NSE session from digest + verified earnings (`intelligence-daily-actions.ts`). */
+  intelligence: [],
   health: [
     { id: "health-sync", title: "Verify the operational Health target", detail: "After the 8 PM cutoff, confirm the newest archive advances the target date and the dashboard badge changes to SYNCED.", numericAdvantage: "8 PM date roll", strategicAdvantage: "Keeps the wellness record auditable", lane: "today", tone: "blue" },
     { id: "health-averages", title: "Reconcile weekly and monthly averages", detail: "Show trends only where a complete comparison window is available.", numericAdvantage: "7-day + 30-day baselines", strategicAdvantage: "Avoids overreading one day", lane: "today", tone: "green" },
@@ -587,8 +583,8 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
 export const workspaces: Array<{ key: WorkspaceKey; label: string; barLabel: string; note: string; icon: typeof CircleDollarSign }> = [
   { key: "investment", label: "Portfolio Overview", barLabel: "Portfolio", note: "Portfolio, macro and research", icon: CircleDollarSign },
   { key: "sectors", label: "Sectoral Analytics", barLabel: "Sectors", note: "Sectors, frameworks and earnings", icon: Layers3 },
-  { key: "intelligence", label: "Market Intelligence", barLabel: "Intel", note: "Mail, calendar and podcasts", icon: Newspaper },
-  { key: "health", label: "Health & Wellness", barLabel: "Health", note: "Private local wellness", icon: HeartPulse },
+  { key: "intelligence", label: "Market Intelligence", barLabel: "Intel", note: "Satya, action board and earnings", icon: Newspaper },
+  { key: "health", label: "My Feed", barLabel: "My Feed", note: "Health, calendar and reminders", icon: HeartPulse },
   { key: "builder", label: "Algorithm Canvas", barLabel: "Canvas", note: "Nested tree and JSON", icon: GitBranch },
   { key: "strategies", label: "Strategies", barLabel: "Strategies", note: "NSE strategy library", icon: Library },
 ];

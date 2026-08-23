@@ -74,6 +74,8 @@ That is `scripts/install-desktop-app.sh` → `scripts/install-stratji-macos.sh`.
 5. Copies `Stratji.app` to `~/Applications/Stratji.app` (and `/Applications/Stratji.app` when that folder is writable).
 6. Pins it to the Dock and launches it.
 
+If `/Applications/Stratji.app` cannot be replaced (SIP / permissions), open `apple-app/build/Stratji.app` or `~/Applications/Stratji.app`. Do not treat the Dock copy as current when `apple-app/build/Stratji.app` is newer.
+
 If Xcode is missing or the native build fails, **the command fails** and prints the next step (install Xcode, open the Stratji scheme, select your team). It does **not** silently install Chrome.
 
 From Xcode:
@@ -117,7 +119,7 @@ The Xcode **InvestmentDashboard** target is a native SwiftUI iPhone client. The 
 
 Native shell:
 
-- Compact workspace bar on iPhone and `NavigationSplitView` on iPad for the six workspaces: Portfolio Overview, Sectoral Analytics, Market Intelligence, Health & Wellness, Algorithm Builder, and Strategies.
+- Compact workspace bar on iPhone and `NavigationSplitView` on iPad for the six workspaces: Portfolio Overview, Sectoral Analytics, Market Intelligence, My Feed, Algorithm Builder, and Strategies.
 - Determinate loading bar until `GET /api/dashboard/freshness` and `GET /api/dashboard/refresh` complete.
 - Native three-lane action board (To Do Today / Monitor / Completed Today).
 - Holdings, digests, earnings, Health tiles, and strategy names from Mac JSON APIs.

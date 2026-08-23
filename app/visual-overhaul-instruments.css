@@ -39,7 +39,7 @@
   background:
     radial-gradient(circle at 12% 20%, rgba(168, 85, 247, 0.12), transparent 30%),
     radial-gradient(circle at 80% 60%, rgba(37, 99, 235, 0.1), transparent 28%),
-    #0a0a0a;
+    var(--bg-panel);
 }
 .axis-workbench.target-hud .axis-pick-list button.active {
   border-color: #22c55e;
@@ -117,7 +117,7 @@
   align-items: center;
   justify-content: center;
   border: 2px solid #3b82f6;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.35), #0a0a0a 70%);
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.35), var(--bg-panel) 70%);
   animation: vo-breathe 3.2s var(--vo-ease) infinite;
   font-family: var(--font-mono);
   font-size: clamp(13px,1.15vw,15px);
@@ -184,14 +184,14 @@
   transition: background var(--vo-motion) var(--vo-ease), transform var(--vo-motion) var(--vo-ease);
 }
 .ladder-duel .ladder li:hover {
-  background: #111827;
+  background: var(--bg-hover);
   transform: translateX(2px);
 }
 .ladder-duel .ladder li b {
   font-family: var(--font-mono);
   color: #71717a;
 }
-.ladder-duel .ladder li strong { color: #fff; font-size: 15px; }
+.ladder-duel .ladder li strong { color: var(--ink); font-size: 15px; }
 .ladder-duel .ladder li em {
   font-style: normal;
   font-family: var(--font-mono);
@@ -206,7 +206,7 @@
 .structure-panel.profit-pool-terrain .chart-wrap {
   background:
     linear-gradient(180deg, rgba(13, 148, 136, 0.08), transparent 40%),
-    #0a0a0a;
+    var(--bg-panel);
 }
 .lifecycle-panel.evolution-river .panel-title h3::after {
   content: " · evolution river";
@@ -260,8 +260,8 @@
 .mece-loom .loom-bead:hover,
 .mece-loom .loom-bead:focus-visible,
 .mece-loom .loom-bead.expanded {
-  background: #111827;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--ink);
   outline: none;
 }
 
@@ -273,7 +273,7 @@
 .decision-lab-panel.decision-hex-shield {
   background:
     radial-gradient(circle at 50% 45%, rgba(168, 85, 247, 0.1), transparent 50%),
-    #0a0a0a;
+    var(--bg-panel);
 }
 .trigger-dials {
   display: grid;
@@ -410,7 +410,7 @@
   background:
     radial-gradient(circle at 20% 10%, rgba(99, 102, 241, 0.16), transparent 35%),
     radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.1), transparent 30%),
-    #050505;
+    var(--bg-app);
 }
 .earnings-month-calendar.earnings-observatory .earnings-month-cell {
   transition: transform var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease);
@@ -419,7 +419,7 @@
 .earnings-month-calendar.earnings-observatory .earnings-month-cell.selected {
   transform: scale(1.03);
   border-color: #a855f7;
-  background: #111827;
+  background: var(--bg-hover);
   z-index: 1;
 }
 .earnings-month-calendar.earnings-observatory .earnings-holding-star {
@@ -439,7 +439,7 @@
   font-size: 13px;
   font-family: var(--font-mono);
   text-transform: uppercase;
-  background: repeating-linear-gradient(-45deg, #0a0a0a, #0a0a0a 4px, #18181b 4px, #18181b 8px);
+  background: repeating-linear-gradient(-45deg, var(--bg-panel), var(--bg-panel) 4px, var(--bg-elevated) 4px, var(--bg-elevated) 8px);
 }
 .earnings-result-telemetry td.pending-lock {
   animation: vo-pulse 1.8s var(--vo-ease) infinite;
@@ -473,13 +473,13 @@
 
 /* ——— Health: morning light, crystals, coach, quadrant stage ——— */
 .health-optimism-panel.morning-light {
-  background: linear-gradient(120deg, #422006, #0a0a0a 40%, #172554 90%);
+  background: linear-gradient(120deg, var(--amber-bg), var(--bg-panel) 40%, color-mix(in srgb, var(--blue) 22%, var(--bg-hover)) 90%);
   background-size: 200% 200%;
   animation: vo-dawn 12s ease infinite alternate;
 }
 .health-insight-crystal {
   border: 2px solid #27272a;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 50%), #0a0a0a;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 50%), var(--bg-panel);
   box-shadow: var(--brutalist-shadow-sm);
   clip-path: polygon(4% 0, 100% 0, 100% 92%, 96% 100%, 0 100%, 0 8%);
 }
@@ -593,13 +593,13 @@
   pointer-events: none;
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-mark.active {
-  fill: #0a0a0a;
+  fill: var(--bg-panel);
   stroke: currentColor;
   stroke-width: 1.4;
   filter: drop-shadow(0 0 3px currentColor);
 }
 .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot {
-  fill: #0a0a0a;
+  fill: var(--bg-panel);
   stroke: currentColor;
   stroke-width: 1.4;
   pointer-events: none;
@@ -615,8 +615,8 @@
   max-width: 140px;
   padding: 4px 6px;
   border: 1px solid color-mix(in srgb, currentColor 55%, #27272a);
-  background: rgba(9, 9, 11, 0.96);
-  color: #f4f4f5;
+  background: var(--bg-elevated);
+  color: var(--ink);
   font-style: normal;
   font-family: var(--font-mono);
   line-height: 1.2;

@@ -18,11 +18,11 @@
 .portfolio-management-card>span,
 .portfolio-management-card small,
 .portfolio-management-sources { color:var(--muted); }
-.workspace-tabs button { color:rgba(248,250,252,0.86); background:transparent; border-color:transparent; }
-.workspace-tabs button:hover { border-color:transparent; background:transparent; color:#fff; }
-.workspace-tabs button.active { color:#fff; background:transparent; }
+.workspace-tabs button { color:color-mix(in srgb, var(--ink) 86%, transparent); background:transparent; border-color:transparent; }
+.workspace-tabs button:hover { border-color:transparent; background:transparent; color:var(--ink); }
+.workspace-tabs button.active { color:var(--ink); background:transparent; }
 .segmented button { color:var(--muted); }
-.segmented button.active { color:#fff; }
+.segmented button.active { color:var(--on-dark); }
 th { background:var(--bg-table-head); color:var(--ink); border-bottom-color:var(--line); }
 tbody tr:nth-child(even) td { background:color-mix(in srgb,var(--bg-panel) 88%, var(--bg-elevated)); }
 tbody tr:hover td { background:var(--bg-hover); }
@@ -47,10 +47,123 @@ td { color:var(--ink); border-color:var(--line); }
   color:var(--muted);
   background:repeating-linear-gradient(-45deg, var(--bg-panel), var(--bg-panel) 4px, var(--bg-elevated) 4px, var(--bg-elevated) 8px);
 }
+
+/* ——— All-appearance token chrome: leftover dark islands inherit theme tokens ——— */
+.analyst-matrix-controls,
+.analyst-group-header,
+.scenario-shell,
+.scenario-tabs button,
+.macro-event-tabs button,
+.macro-regime-card,
+.macro-selected-evidence,
+.risk-explanation,
+.risk-selector button,
+.sector-selector button,
+.sector-kpi-grid article,
+.sector-rank-grid>section,
+.axis-category-strip>div,
+.axis-category-strip>button,
+.axis-pick-list button,
+.decision-question,
+.decision-card-grid>div,
+.earnings-month-cell,
+.earnings-day-kpi,
+.position-tags i {
+  background: var(--bg-panel);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.analyst-matrix-controls select,
+.sector-ranking-controls select,
+.macro-event-tabs button,
+.risk-selector button,
+.decision-sector-tabs button,
+.decision-tabs button,
+.earnings-month-nav button,
+.axis-pick-list button,
+.activity-create-bar button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-border);
+}
+.analyst-group-header span,
+.macro-event-tabs small,
+.macro-regime-card p,
+.sector-kpi-grid small,
+.sector-rank-row small,
+.decision-question span,
+.earnings-month-head p,
+.topic-feed p small,
+.digest-empty {
+  color: var(--muted);
+}
+.analyst-group-header:hover,
+.analyst-group-header:focus-visible,
+.macro-event-tabs button:hover,
+.macro-event-tabs button.active,
+.risk-selector button.active,
+.decision-tabs button.active,
+.decision-sector-tabs button.active,
+.axis-pick-list button:hover,
+.axis-pick-list button.active {
+  background: var(--bg-hover);
+  color: var(--ink);
+  border-color: var(--chip-border);
+}
+.scenario-tabs button.active,
+.earnings-month-cell.selected,
+.earnings-month-cell.has-events {
+  background: var(--bg-elevated);
+  color: var(--ink);
+}
+.topic-feed section,
+.analytics-band,
+.linked-insight-scroll>div,
+.macro-dial-chips>div,
+.squeeze-gauge,
+.impact-head {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.topic-feed h4,
+.linked-insight h4,
+.linked-insight b,
+.macro-panel-caption b,
+.macro-dial-list>div header,
+.bubble-tooltip b {
+  color: var(--ink);
+}
+.topic-feed p,
+.topic-feed-item,
+.linked-insight span,
+.linked-insight p,
+.macro-panel-caption span,
+.bubble-axis-legend small {
+  color: var(--ink);
+}
+.integrations-status {
+  background: var(--chip-bg);
+  border-color: var(--chip-border);
+  color: var(--chip-fg);
+}
+.integrations-safety {
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--line));
+  color: var(--ink);
+}
+.integrations-safety small { color: var(--muted); }
+.integrations-exit a { color: var(--blue); }
+.integrations-card-actions a { color: var(--on-dark); }
+
 /* ——— Sepia: paperize all dark #0…/#1… chrome islands ——— */
 html[data-appearance="sepia"] .live-feed-banner {
   background:color-mix(in srgb, var(--green) 12%, var(--bg-panel));
   border-color:color-mix(in srgb, var(--green) 45%, var(--line));
+}
+html[data-appearance="sepia"] .live-feed-banner.chrome-actions {
+  background:transparent;
+  border-color:transparent;
 }
 html[data-appearance="sepia"] .live-feed-banner b { color:var(--ink); }
 html[data-appearance="sepia"] .live-feed-banner small { color:color-mix(in srgb, var(--green) 55%, var(--ink)); }
@@ -586,6 +699,7 @@ html[data-appearance="sepia"] .sector-model-note {
 }
 html[data-appearance="sepia"] .sector-company-table td { color:var(--ink) !important; }
 html[data-appearance="sepia"] .sector-company-table td small { color:var(--muted) !important; }
+html[data-appearance="sepia"] .sector-company-table caption, html[data-appearance="sepia"] .sector-table-scroll-caption { color:var(--muted) !important; }
 html[data-appearance="sepia"] .portfolio-company>b { color:var(--blue); }
 html[data-appearance="sepia"] .portfolio-company small { color:var(--ink) !important; }
 html[data-appearance="sepia"] .sector-company-toggle {
@@ -796,3 +910,6 @@ html[data-appearance="sepia"] .earnings-month-nav button:not(:disabled):hover {
 html[data-appearance="sepia"] .earnings-month-weekdays,
 html[data-appearance="sepia"] .earnings-month-grid { background:var(--line); }
 html[data-appearance="sepia"] .earnings-month-weekdays span {
+  background:var(--bg-elevated);
+  color:var(--muted);
+}

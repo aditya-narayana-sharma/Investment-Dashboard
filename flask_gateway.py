@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 from urllib.request import Request as UpstreamRequest
 from urllib.request import urlopen
 
-from flask import Flask, Response, request
+from flask import Flask, Response, request, stream_with_context
 from scripts.health_date_policy import health_target_context
 
 
@@ -352,11 +352,44 @@ def _operator_only_proxy(path: str) -> bool:
     method = (request.method or "").upper()
     if path == "api/llm/complete" and method == "POST":
         return True
+    if path == "api/satya/chat" and method == "POST":
+        return True
+    if path == "api/satya/sessions" and method in {"GET", "PATCH", "DELETE"}:
+        return True
     if path == "api/license" and method in {"PUT", "PATCH"}:
         return True
     if path == "api/integrations" and method in {"PUT", "PATCH"}:
         return True
+    if path == "api/streak/export" and method == "POST":
+        return True
+    if path == "api/license/activate" and method == "POST":
+        return True
+    if path == "api/license/razorpay" and method == "POST":
+        return True
     return False
+
+
+def _should_stream_proxy(path: str) -> bool:
+    method = (request.method or "").upper()
+    return path == "api/satya/chat" and method == "POST"
+
+
+def _iter_upstream_chunks(upstream_response, chunk_size: int = 8192):
+    while True:
+        chunk = upstream_response.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
+
+
+def _close_upstream(upstream_response) -> None:
+    close = getattr(upstream_response, "close", None)
+    if callable(close):
+        close()
+        return
+    exit_cm = getattr(upstream_response, "__exit__", None)
+    if callable(exit_cm):
+        exit_cm(None, None, None)
 
 
 def _upstream_url(path: str) -> str:
@@ -775,6 +808,23 @@ def proxy(path: str) -> Response:
         else UPSTREAM_TIMEOUT_SECONDS
     )
     try:
+        if _should_stream_proxy(path):
+            upstream_response = urlopen(upstream_request, timeout=timeout_seconds)
+            enter = getattr(upstream_response, "__enter__", None)
+            if callable(enter):
+                upstream_response = enter()
+
+            def generate():
+                try:
+                    yield from _iter_upstream_chunks(upstream_response)
+                finally:
+                    _close_upstream(upstream_response)
+
+            return Response(
+                stream_with_context(generate()),
+                status=getattr(upstream_response, "status", 200),
+                headers=_response_headers(getattr(upstream_response, "headers", {})),
+            )
         with urlopen(upstream_request, timeout=timeout_seconds) as upstream_response:
             payload = b"" if request.method == "HEAD" else upstream_response.read()
             return Response(payload, status=upstream_response.status, headers=_response_headers(upstream_response.headers))

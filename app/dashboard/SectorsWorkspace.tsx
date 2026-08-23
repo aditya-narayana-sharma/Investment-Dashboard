@@ -21,7 +21,9 @@ import { SectorDecisionLab, type SectorDecisionPage } from "./SectorDecisionLab"
 import { LicenseGate } from "./LicenseGate";
 import { tierAllows, type PublicLicense } from "../license";
 import { useLicenseSnapshot } from "../license-snapshot";
-import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
+import { CollapsibleSection, DailyKanbanBoard, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
+import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
+import { isLocationView } from "./workspace-routing";
 
 const SectoralAnalytics = lazy(() => import("./SectoralAnalytics"));
 type SectorAnalyticsPage = import("./SectoralAnalytics").SectorAnalyticsPage;
@@ -35,7 +37,7 @@ export type SectorSectionPage =
 const SECTOR_TOP_SECTIONS = [
   { id: "s1", label: "Action Board" },
   { id: "s2", label: "Industry Analytics" },
-  { id: "s3", label: "Benchmarks & Decision Lab" },
+  { id: "s3", label: "Decision Framework" },
 ] as const;
 
 const SECTION_PAGES: Record<SectorWorkspaceSection, Array<{ id: SectorSectionPage; label: string }>> = {
@@ -182,6 +184,7 @@ function SectorWorkspaceShell({
 
   useEffect(() => {
     const sync = () => {
+      if (!isLocationView("sectors")) return;
       const route = sectionFromUrl();
       setActiveSection(route.topSection);
       setExclusive(route.exclusive);
@@ -192,10 +195,10 @@ function SectorWorkspaceShell({
     };
     sync();
     const retry = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
+    const stopListening = listenToStratjiLocation(sync);
     return () => {
       window.clearTimeout(retry);
-      window.removeEventListener("popstate", sync);
+      stopListening();
     };
   }, []);
 
@@ -203,34 +206,13 @@ function SectorWorkspaceShell({
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
     url.searchParams.set("page", page);
-    window.history.pushState({}, "", url);
+    stratjiPushState(url);
     setActiveSection(section);
     setExclusive(true);
     setActivePages((current) => ({ ...current, [section]: page }));
   }, []);
 
-  const selectTopSection = useCallback((sectionId: string) => {
-    const section = sectionId as SectorTopSection;
-    const url = new URL(window.location.href);
-    url.searchParams.set("section", section);
-    if (section === "s1") {
-      url.searchParams.delete("page");
-    } else {
-      url.searchParams.set("page", activePages[section]);
-    }
-    window.history.pushState({}, "", url);
-    setActiveSection(section);
-    setExclusive(true);
-    expandDashboardSection(dashboardSectionNumberFromNavId(section));
-  }, [activePages]);
-
   return <div className="sector-workspace-shell sector-full-workspace" data-focus-section={focusedSection ?? undefined}>
-    <WorkspaceSectionNav
-      label="Sectoral Analytics sections"
-      sections={SECTOR_TOP_SECTIONS}
-      activeId={activeSection}
-      onSelect={selectTopSection}
-    />
     <div id="sector-s1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(focusedSection, "s1")}>
       <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions" defaultOpen={focusedSection === "s1"}>
         <DailyKanbanBoard workspace="sectors"/>

@@ -8,6 +8,11 @@ struct StratjiPermissionsOnboardingView: View {
     @State private var rows: [StratjiApplePermissionState] = StratjiApplePermissions.snapshot()
     @State private var busySource: StratjiAppleSource?
     @State private var message = ""
+    @AppStorage(StratjiAppearanceStore.defaultsKey) private var appearanceRaw = StratjiAppearanceStore.defaultValue
+
+    private var appearance: StratjiAppearance {
+        StratjiAppearance(rawValue: appearanceRaw) ?? .black
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -16,6 +21,9 @@ struct StratjiPermissionsOnboardingView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(rows.filter(\.source.isFirstRunRequired)) { row in
+                        permissionRow(row)
+                    }
+                    ForEach(rows.filter { !$0.source.isFirstRunRequired }) { row in
                         permissionRow(row)
                     }
                 }
@@ -45,7 +53,10 @@ struct StratjiPermissionsOnboardingView: View {
             .padding(16)
         }
         .frame(minWidth: 560, minHeight: 520)
-        .background(Color.black)
+        .background(appearance.canvasFill)
+        .foregroundStyle(appearance.canvasInk)
+        .preferredColorScheme(appearance.colorScheme)
+        .environment(\.colorScheme, appearance.colorScheme)
         .onAppear {
             rows = StratjiApplePermissions.snapshot()
         }
@@ -58,7 +69,7 @@ struct StratjiPermissionsOnboardingView: View {
             Text("Stratji reads Mail, Calendar, Reminders, and Podcasts on this Mac to keep Market Intelligence current. Connect asks macOS for access. You can use the dashboard without granting everything now.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Text("Mail uses only iCloud → Newsletters and iCloud → Axis Research. Reminders uses Job 🔍 and Earnings. Calendar is scheduling evidence, not published-results proof. Notes is optional and is never a Health source.")
+            Text("Mail uses only iCloud → Newsletters and iCloud → Axis Research. Reminders uses Job 🔍 and Earnings. Calendar is scheduling evidence, not published-results proof. Notes is optional and is never a Health source. Speech / Mic is optional Satya push-to-talk on this Mac only.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

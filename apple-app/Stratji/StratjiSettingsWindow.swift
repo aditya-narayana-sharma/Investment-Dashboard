@@ -129,7 +129,7 @@ private struct StratjiNativeSettingsForm: View {
         } header: {
             Text("Source freshness")
         } footer: {
-            Text("Same live-feed strip as the dashboard (`GET /api/dashboard/refresh` sources). Chips wrap inside this window.")
+          Text("Source freshness for the complete dashboard. The main canvas does not duplicate this strip. Failures also stay in ~/Library/Logs/PortfolioIntelligence/startup-refresh.log.")
         }
     }
 

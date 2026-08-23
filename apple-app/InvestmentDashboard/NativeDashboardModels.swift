@@ -460,10 +460,10 @@ enum NativeActionCatalog {
             ]
         case .intelligence:
             return [
-                .init(id: "intel-mail", title: "Refresh exact Mail intelligence sources", detail: "Reconcile every item from iCloud Newsletters and Axis Research before using the digest.", numericAdvantage: "2 exact mailbox scopes", strategicAdvantage: "Prevents misfiled evidence", lane: .today, tone: .blue),
-                .init(id: "intel-calendar", title: "Reconcile Calendar and Reminders", detail: "Merge current events and incomplete actions without treating schedules as published results.", numericAdvantage: "2 action sources", strategicAdvantage: "Separates plans from evidence", lane: .today, tone: .green),
+                .init(id: "intel-mail", title: "Refresh Satya corpus sources", detail: "Index iCloud Newsletters and Axis Research into the Satya corpus. Chat stays on the Mac.", numericAdvantage: "2 exact mailbox scopes", strategicAdvantage: "Prevents misfiled evidence", lane: .today, tone: .blue),
+                .init(id: "intel-satya", title: "Ask Satya on the Mac briefing", detail: "Open M-2 on the author Mac. This phone shows chips and earnings only.", numericAdvantage: "operator-Mac chat", strategicAdvantage: "LAN clients cannot POST chat", lane: .today, tone: .green),
                 .init(id: "intel-earnings", title: "Monitor reported earnings evidence", detail: "Promote KPI rows only after company, exchange, or validated research evidence is available.", numericAdvantage: "0 inferred result fields", strategicAdvantage: "Protects decision quality", lane: .monitor, tone: .amber),
-                .init(id: "intel-podcasts", title: "Review Podcast freshness and coverage", detail: "Use local transcripts when available and label description-only summaries explicitly.", numericAdvantage: "30-minute refresh", strategicAdvantage: "Keeps evidence provenance clear", lane: .monitor, tone: .red),
+                .init(id: "intel-podcasts", title: "Index podcast summaries into Satya", detail: "Use local transcripts when available and label description-only summaries explicitly.", numericAdvantage: "corpus as-of", strategicAdvantage: "Keeps evidence provenance clear", lane: .monitor, tone: .red),
             ]
         case .health:
             return [

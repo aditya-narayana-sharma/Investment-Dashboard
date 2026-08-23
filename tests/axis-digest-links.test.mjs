@@ -14,14 +14,14 @@ import {
   selectAxisResearchReportLinks,
 } from "../scripts/axis-digest-links.mjs";
 
-test("axisTopicGroup collapses Axis subjects into stable digest topics", () => {
-  assert.equal(axisTopicGroup("Target Achieved: Cholamandalam Investment and Fin Co Ltd - Axis Punch"), "Target Achieved");
-  assert.equal(axisTopicGroup("Axis Punch - Oberoi Realty Limited"), "Punch");
-  assert.equal(axisTopicGroup("Result Updates - Q1FY27: Our Latest Stock Recommendations & Target Prices"), "Result Updates");
+test("axisTopicGroup collapses Axis subjects into canonical category labels", () => {
+  assert.equal(axisTopicGroup("Target Achieved: Cholamandalam Investment and Fin Co Ltd"), "Target Achieved");
+  assert.equal(axisTopicGroup("Axis Punch - Oberoi Realty Limited"), "Axis Punch");
+  assert.equal(axisTopicGroup("Result Updates - Q1FY27: Our Latest Stock Recommendations & Target Prices"), "Quarterly Result Updates");
   assert.equal(axisTopicGroup("Daily Technical Outlook"), "Daily Technical Outlook");
   assert.equal(axisTopicGroup("Daily Morning Note & Trade Setup for the Day - August 06, 2026"), "Daily Morning Note");
   assert.equal(axisTopicGroup("Axis Alpha: TBO Tek Ltd - BUY"), "Axis Alpha");
-  assert.equal(axisTopicGroup("Monthly Quant Report August 2026"), "Monthly Quant");
+  assert.equal(axisTopicGroup("Monthly Quant Report August 2026"), "Monthly Quant Report");
 });
 
 test("mailMessageUrl builds message:// links from Message-ID values only", () => {

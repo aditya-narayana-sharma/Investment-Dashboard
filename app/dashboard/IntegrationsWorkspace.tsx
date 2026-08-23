@@ -36,6 +36,8 @@ import {
 } from "../integrations-types";
 import { LicenseGate } from "./LicenseGate";
 import { AppearanceToggle, HealthIncognitoToggle, type DashboardAppearance } from "./shared-ui";
+import { PulseConstellation } from "./visual-components";
+import type { DashboardRefreshResult, SourceFreshness } from "../dashboard-types";
 import { LICENSE_TIERS, TIER_LABELS, coercePublicLicense, tierAllows, type LicenseTier, type PublicLicense } from "../license";
 import { useLicenseSnapshot } from "../license-snapshot";
 
@@ -225,7 +227,7 @@ function pipelinePlaybook(id: IntegrationPipelineId): { api: string; mcp: string
   }
 }
 
-export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashboardExit?: boolean } = {}) {
+export function IntegrationsWorkspace({ showDashboardExit = false, sources = [] }: { showDashboardExit?: boolean; sources?: SourceFreshness[] } = {}) {
   const [config, setConfig] = useState<IntegrationsConfig>(() => defaultIntegrationsConfig());
   const [wizard, setWizard] = useState<IntegrationsWizard>(() => defaultIntegrationsConfig().wizard);
   const [loading, setLoading] = useState(true);
@@ -243,6 +245,22 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
   const [licenseKey, setLicenseKey] = useState("");
   const [licenseTierDraft, setLicenseTierDraft] = useState<LicenseTier>(() => license.tier);
   const [savingLicense, setSavingLicense] = useState(false);
+  const [fetchedFreshness, setFetchedFreshness] = useState<SourceFreshness[]>([]);
+  const freshness = sources.length > 0 ? sources : fetchedFreshness;
+
+  useEffect(() => {
+    if (sources.length > 0) return;
+    let cancelled = false;
+    void fetch(`/api/dashboard/refresh?refresh=${Date.now()}`, { cache: "no-store" })
+      .then((response) => response.json() as Promise<DashboardRefreshResult>)
+      .then((result) => {
+        if (!cancelled && Array.isArray(result.sources)) setFetchedFreshness(result.sources);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [sources.length]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -307,12 +325,16 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
     setSavingLicense(true);
     setError("");
     try {
-      const response = await fetch("/api/license", {
-        method: "PUT",
+      const token = licenseKey.trim();
+      const jwtLike = token.split(".").length === 3;
+      const response = await fetch(jwtLike ? "/api/license/activate" : "/api/license", {
+        method: jwtLike ? "POST" : "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(licenseKey.trim()
-          ? { key: licenseKey.trim() }
-          : { tier: licenseTierDraft, operatorOverride: true }),
+        body: JSON.stringify(jwtLike
+          ? { token }
+          : token
+            ? { key: token }
+            : { tier: licenseTierDraft, operatorOverride: true }),
       });
       const raw = await response.json() as PublicLicense & { error?: string };
       if (!response.ok) throw new Error(raw.error || `HTTP ${response.status}`);
@@ -466,6 +488,12 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
         )}
       </header>
 
+      <section className="integrations-freshness" aria-labelledby="integrations-freshness-heading">
+        <h3 id="integrations-freshness-heading">Source freshness</h3>
+        <p className="integrations-muted">Startup audit lives here and in ~/Library/Logs/PortfolioIntelligence/startup-refresh.log — not as a strip above every workspace.</p>
+        <PulseConstellation sources={freshness} />
+      </section>
+
       <aside className="integrations-safety" role="note">
         <ShieldAlert size={18} aria-hidden="true" />
         <div>
@@ -500,7 +528,8 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
         <p className="integrations-muted">
           This Mac is on <b>{TIER_LABELS[license.tier]}</b> ({license.source}{license.author ? " · author" : ""}). v1 is an honor + key file at
           <code> ~/Library/Application Support/Stratji/license.json</code> — not Auth0 and not a billing server.
-          Downstream clones stay Basic until they paste <code>stratji-pro-yourtoken</code> or <code>stratji-ultra-yourtoken</code>.
+          Downstream clones stay Basic until they paste <code>stratji-pro-yourtoken</code>, <code>stratji-ultra-yourtoken</code>,
+          or a signed stratji.co.in license JWT. Razorpay checkout lives at GET <code>/api/license/razorpay</code> when keys are configured.
           {license.author ? " The master license file stays on this Mac and is never sent to the browser." : ""}
         </p>
         <form className="integrations-wizard-grid" onSubmit={(event) => void saveLicense(event)}>
@@ -509,7 +538,7 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
             <input
               value={licenseKey}
               onChange={(event) => setLicenseKey(event.target.value)}
-              placeholder="stratji-pro-xxxx"
+              placeholder="stratji-pro-xxxx or JWT"
               autoComplete="off"
               spellCheck={false}
             />
@@ -713,7 +742,8 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
         {tierAllows(license.tier, "streak") ? (
           <>
         <p className="integrations-muted">
-          Copy-only. This does not scrape Streak and does not enable live auto-trade. User deploys in Zerodha Streak.
+          Copy-only scanner export. POST <code>/api/streak/export</code> with a StrategyTreeV1 compiles symbols and conditions.
+          This does not scrape Streak and <b>placesOrders is always false</b> — deploy in Zerodha Streak yourself.
         </p>
         <pre className="integrations-checklist">{STREAK_EXPORT_CHECKLIST}</pre>
         <button type="button" onClick={() => void copyChecklist()}>
@@ -724,6 +754,14 @@ export function IntegrationsWorkspace({ showDashboardExit = false }: { showDashb
         ) : (
           <LicenseGate feature="streak" license={license} title="Streak export checklist" />
         )}
+      </section>
+
+      <section className="integrations-groww" aria-labelledby="integrations-groww-heading">
+        <h3 id="integrations-groww-heading">Groww live holdings</h3>
+        <p className="integrations-muted">
+          Optional <code>GROWW_ACCESS_TOKEN</code> in <code>.env.local</code> enables GET <code>/api/groww/snapshot</code>.
+          Without the token the route stays <b>unavailable</b> and does not invent quantities. Groww Digest mail remains a Satya newsletter family.
+        </p>
       </section>
 
       <section className="integrations-llm" aria-labelledby="integrations-llm-heading">

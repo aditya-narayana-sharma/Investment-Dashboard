@@ -5,19 +5,10 @@
 
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
-
-const TOPIC_RULES = [
-  ["Target Achieved", /\btarget achieved\b/i],
-  ["Punch", /\baxis punch\b|\bpunch\b/i],
-  ["Result Updates", /\bresult updates?\b|\bresult update\b/i],
-  ["Daily Technical Outlook", /\bdaily technical outlook\b|\btechnical outlook\b/i],
-  ["Daily Morning Note", /\bdaily morning note\b|\bmorning note\b|\btrade setup for the day\b/i],
-  ["Axis Alpha", /\baxis alpha\b/i],
-  ["Event Updates", /\bevent update\b|\bmonetary policy\b/i],
-  ["Monthly Quant", /\bmonthly quant\b|\bquant report\b/i],
-  ["Pick of the Week", /\bpick of the week\b/i],
-  ["Company Update", /\bcompany update\b|\bannual analysis\b/i],
-];
+import {
+  axisCategoryLabel,
+  classifyAxisCategory,
+} from "../app/satya/axis-categories.mjs";
 
 function cleanText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -40,20 +31,14 @@ export function normalizeMailSourceForLinks(source) {
     .replace(/&#x3D;/gi, "=");
 }
 
-/** Collapse Axis mail subjects into stable digest collapsible topics. */
+/** Collapse Axis mail subjects into the canonical 28-category labels. */
 export function axisTopicGroup(subject) {
-  const title = cleanText(subject);
-  if (!title) return "Other research";
-  for (const [label, matcher] of TOPIC_RULES) {
-    if (matcher.test(title)) return label;
-  }
-  // Fall back to a short subject stem (before company / date noise) rather than inventing topics.
-  const stem = title
-    .replace(/\s*[-|:].*$/, "")
-    .replace(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b.*$/i, "")
-    .replace(/\bq[1-4]fy\d{2,4}\b.*$/i, "")
-    .trim();
-  return stem || "Other research";
+  return axisCategoryLabel(classifyAxisCategory(subject));
+}
+
+/** Canonical Axis category id for PDF matching and digest `axisCategory`. */
+export function axisTopicCategoryId(subject) {
+  return classifyAxisCategory(subject);
 }
 
 export function istDateKeyFromIso(value) {
@@ -162,64 +147,70 @@ export function matchAxisResearchPdf({
 
   const title = cleanText(subject);
   const dateKey = istDateKeyFromIso(receivedAt);
-  const topic = axisTopicGroup(title);
+  const category = classifyAxisCategory(title);
 
   // Daily publications are date-specific. Never fall back to the newest file
   // from another day: that can make a current mail open stale evidence.
   const dated = (kind) => (dateKey ? findBySubstring(index, `${kind}-${dateKey}`) : null);
 
-  switch (topic) {
-    case "Daily Morning Note": {
+  switch (category) {
+    case "daily_morning_note": {
       const hit = dated("MorningNote");
       return hit ? { file: hit.name, path: hit.path } : null;
     }
-    case "Daily Technical Outlook": {
+    case "daily_technical_outlook": {
       const hit = dated("TechnicalOutlook");
       return hit ? { file: hit.name, path: hit.path } : null;
     }
-    case "Monthly Quant": {
+    case "monthly_quant_report": {
       const hit = dated("MonthlyQuant") ?? findBySubstring(index, "MonthlyQuantReport");
       return hit ? { file: hit.name, path: hit.path } : null;
     }
-    case "Event Updates": {
+    case "other_research": {
+      if (!/\bevent update|\bmonetary policy|\brbi\b/i.test(title)) return null;
       const hit = findBySubstring(index, "RBIMonetary")
         ?? findBySubstring(index, "MonetaryPolicy")
         ?? findBySubstring(index, "EventUpdate");
       return hit ? { file: hit.name, path: hit.path } : null;
     }
-    case "Punch":
-    case "Target Achieved":
-    case "Axis Alpha":
-    case "Pick of the Week":
-    case "Company Update":
-    case "Result Updates": {
+    case "axis_punch":
+    case "target_achieved":
+    case "axis_alpha":
+    case "pick_of_the_week":
+    case "company_update":
+    case "axis_annual_analysis":
+    case "result_update":
+    case "quarterly_result_updates": {
       const companyMatch = title.match(
-        /(?:axis punch|target achieved|axis alpha|pick of the week|company update)\s*[:\-–]\s*([^|]+?)(?:\s*-\s*axis|\s*$)/i,
+        /(?:axis punch|target achieved|axis alpha|pick of the week|company update|annual analysis)\s*[:\-–]\s*([^|]+?)(?:\s*-\s*axis|\s*$)/i,
       ) ?? title.match(/:\s*([^|:]+?)(?:\s*-\s*(?:axis|our)|\s*$)/i);
       const company = companyToken(companyMatch?.[1] ?? "");
+      const resultPack = category === "result_update" || category === "quarterly_result_updates";
       if (company) {
         const kindHints = {
-          Punch: ["AxisPunch", "Punch"],
-          "Target Achieved": ["AxisPunch", "Punch", "Target"],
-          "Axis Alpha": ["AxisAlpha", "Alpha"],
-          "Pick of the Week": ["PickOfWeek"],
-          "Company Update": ["CompanyUpdate", "AnnualAnalysis"],
-          "Result Updates": ["ResultUpdate"],
-        }[topic] ?? [];
+          axis_punch: ["AxisPunch", "Punch"],
+          target_achieved: ["AxisPunch", "Punch", "Target"],
+          axis_alpha: ["AxisAlpha", "Alpha"],
+          pick_of_the_week: ["PickOfWeek"],
+          company_update: ["CompanyUpdate"],
+          axis_annual_analysis: ["AnnualAnalysis", "CompanyUpdate"],
+          result_update: ["ResultUpdate"],
+          quarterly_result_updates: ["ResultUpdate"],
+        }[category] ?? [];
         const candidates = [];
         for (const entry of index.byName.values()) {
           const lower = entry.name.toLowerCase();
           const companyHit = lower.includes(company) || company.includes(companyToken(entry.name.replace(/\.pdf$/i, "")));
           if (!companyHit) continue;
-          const kindHit = kindHints.some((hint) => lower.includes(hint.toLowerCase())) || topic === "Result Updates";
-          if (!kindHit && topic !== "Result Updates") continue;
+          const kindHit = kindHints.some((hint) => lower.includes(hint.toLowerCase())) || resultPack;
+          if (!kindHit && !resultPack) continue;
           const dateBoost = dateKey && lower.includes(dateKey) ? 10 : 0;
           candidates.push({ entry, score: dateBoost + entry.mtime / 1e13 });
         }
         candidates.sort((left, right) => right.score - left.score);
         if (candidates[0]) return { file: candidates[0].entry.name, path: candidates[0].entry.path };
       }
-      if (topic === "Result Updates" && dateKey) {
+      if (resultPack && dateKey) {
         const hit = findBySubstring(index, `ResultUpdate-${dateKey}`);
         if (hit) return { file: hit.name, path: hit.path };
       }

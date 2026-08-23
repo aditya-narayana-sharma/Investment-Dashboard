@@ -37,7 +37,7 @@ test("Axis Research digest excludes misfiled and administrative mail", () => {
   assert.equal(isAxisResearchMail({ sender: "Zerodha <updates@zerodha.com>", subject: "Account update" }), false);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "Learn Account Offer Benefits" }), false);
   assert.equal(isAxisResearchMail({ sender: "Axis Direct <service@axisdirect.in>", subject: "966526 is your access code to log in" }), false);
-  assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "LIVE Webinar: Options Trading | Register Now" }), false);
+  assert.equal(isAxisResearchMail({ sender: "Axis Direct <research@axisdirect.in>", subject: "LIVE Webinar: Options Trading | Register Now" }), true);
 });
 
 test("portfolio concentration return colors keep neutral boundary values", () => {
@@ -205,18 +205,16 @@ test("nested portfolio allocation markup remains protected", async () => {
   assert.equal(createHash("sha256").update(donutMarkup).digest("hex"), "07f87df90a723340382884496f8c0a0378e48b1d73f84c1a72712725b19b4097");
 });
 
-test("Podcast sender groups expose collapsible masonry and a Playwright geometry contract", async () => {
+test("Podcast masonry CSS remains for H-4 leftover styles; Intelligence uses Satya chips", async () => {
   const [intelligenceWorkspace, globalCss, geometryTest] = await Promise.all([
     readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("./podcast-masonry.playwright.mjs", import.meta.url), "utf8"),
   ]);
-  assert.match(intelligenceWorkspace, /layout\?: DigestGroupLayout/);
-  assert.match(intelligenceWorkspace, /sender-group sender-group-collapsible/);
-  assert.doesNotMatch(intelligenceWorkspace, /<details className="sender-group sender-group-collapsible"[^>]*\sopen[\s>]/);
-  assert.match(intelligenceWorkspace, /<summary className="sender-group-header"[^>]*>/);
-  assert.match(intelligenceWorkspace, /event\.key !== "Enter" && event\.key !== " "/);
-  assert.match(intelligenceWorkspace, /layout="podcasts"/);
+  assert.match(intelligenceWorkspace, /export type DigestGroupLayout/);
+  assert.match(intelligenceWorkspace, /"podcasts"/);
+  assert.match(intelligenceWorkspace, /SATYA_SOURCE_CHIPS/);
+  assert.doesNotMatch(intelligenceWorkspace, /sender-group sender-group-collapsible/);
   assert.match(globalCss, /\.sender-groups-podcasts\s*\{[^}]*display:block;[^}]*column-count:2;[^}]*column-gap:8px;/s);
   assert.match(globalCss, /\.sender-groups-podcasts \.sender-group\s*\{[^}]*margin:0 0 8px;[^}]*break-inside:avoid;/s);
   assert.doesNotMatch(globalCss, /\.sender-groups-podcasts\s*\{[^}]*grid-template-columns/s);
@@ -234,57 +232,156 @@ test("Podcast sender groups expose collapsible masonry and a Playwright geometry
   assert.match(geometryTest, /current\.index > previous\.index/);
 });
 
-test("M-2 Interrogate LLM is full-width with source-of-truth copy and suggestion chips", async () => {
-  const [intelligenceWorkspace, llmPanel, symphonyEditor, globalCss, visualOverhaul, hoverPop] = await Promise.all([
+test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion chips", async () => {
+  const [intelligenceWorkspace, satyaSuggestions, satyaWorkspace, symphonyEditor, globalCss, visualOverhaul, hoverPop, satyaCss, satyaRoom, satyaPresence, satyaClient, pageSource, satyaSpeech] = await Promise.all([
     readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
-    readFile(new URL("../app/dashboard/LlmAssistPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya-suggestions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya-workspace.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/builder/SymphonyEditor.tsx", import.meta.url), "utf8"),
     readJoined(GLOBAL_CSS_CANDIDATES),
     readJoined(VISUAL_CSS_CANDIDATES),
     readFile(new URL("../app/dashboard/hover-pop.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/SatyaBriefingRoom.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya-client.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/satya/speech.ts", import.meta.url), "utf8"),
   ]);
+  const satyaUi = `${satyaPresence}\n${satyaClient}`;
+  const satyaSources = `${intelligenceWorkspace}\n${satyaSuggestions}\n${satyaWorkspace}\n${symphonyEditor}\n${satyaRoom}\n${satyaPresence}\n${satyaClient}\n${pageSource}`;
 
-  assert.match(intelligenceWorkspace, /title="Interrogate LLM"/);
-  assert.match(intelligenceWorkspace, /titleTone="section"/);
+  assert.match(intelligenceWorkspace, /<SatyaBriefingRoom/);
   assert.match(intelligenceWorkspace, /className="llm-assist-span"/);
+  assert.doesNotMatch(satyaSources, /Interrogate LLM/);
+  assert.match(satyaPresence, /Satya/);
+  assert.match(satyaPresence, /satya-character/);
+  assert.match(satyaCss, /satya-idle-bob/);
+  assert.match(satyaCss, /satya-talk/);
+  assert.match(satyaCss, /satya-think-tilt/);
+  assert.match(satyaPresence, /data-state=\{state\}/);
+  assert.match(satyaCss, /data-state="listening"/);
+  assert.match(satyaCss, /data-state="thinking"/);
+  assert.match(satyaCss, /data-state="speaking"/);
+  assert.match(satyaCss, /data-state="citing"/);
+  assert.match(satyaCss, /data-state="error"/);
+  assert.match(satyaCss, /data-state="stale"/);
+  assert.doesNotMatch(intelligenceWorkspace, /title="Interrogate LLM"/);
   assert.doesNotMatch(intelligenceWorkspace, /LLM intelligence draft/i);
+  assert.doesNotMatch(intelligenceWorkspace, /number="M-5"|id: "m5"/);
+  assert.doesNotMatch(intelligenceWorkspace, /sector-intelligence-filter|sector-dimmed/);
+
+  assert.match(intelligenceWorkspace, /<SatyaBriefingRoom/);
+  assert.match(intelligenceWorkspace, /className="llm-assist-span"/);
+  assert.doesNotMatch(intelligenceWorkspace, /title="Interrogate LLM"/);
+  assert.doesNotMatch(intelligenceWorkspace, /LLM intelligence draft/i);
+  assert.doesNotMatch(intelligenceWorkspace, /number="M-5"|id: "m5"/);
+  assert.doesNotMatch(intelligenceWorkspace, /sector-intelligence-filter|sector-dimmed/);
   assert.match(
     intelligenceWorkspace,
-    /Newsletters \+ Axis Research \+ Podcast Transcript Summaries, as Source of Truth/,
+    /Newsletters \+ Axis Research \+ Axis PDFs \+ Podcast Transcript Summaries \+ verified earnings KPIs, as Source of Truth/,
   );
   assert.match(
     intelligenceWorkspace,
     /podcast summaries \(description unless a local transcript was available\)/,
   );
   assert.match(intelligenceWorkspace, /hasLocalPodcastTranscript/);
-  assert.match(intelligenceWorkspace, /LIVE_INTELLIGENCE_LLM_SUGGESTIONS/);
+  assert.match(intelligenceWorkspace, /SATYA_BRIEFING_SUGGESTIONS|Overnight newsletter themes/);
   assert.match(intelligenceWorkspace, /Overnight newsletter themes/);
   assert.match(intelligenceWorkspace, /Axis conviction vs holdings/);
   assert.match(intelligenceWorkspace, /Podcast vs Axis overlap/);
   assert.match(intelligenceWorkspace, /What changed since last digest/);
   assert.match(intelligenceWorkspace, /Axis result updates/);
   assert.match(intelligenceWorkspace, /Cautionary notes across sources/);
-  assert.match(intelligenceWorkspace, /\[\$\{evidence\}\/\$\{item\.summaryStatus/);
-  assert.match(llmPanel, /Smart Suggestions/);
-  assert.match(llmPanel, /setPrompt\(item\.prompt\)/);
-  assert.match(llmPanel, /\/api\/llm\/complete/);
-  assert.match(llmPanel, /settingsHref/);
-  assert.match(llmPanel, /if \(payload\.disabled\)/);
-  assert.doesNotMatch(llmPanel, /if \(payload\.settingsHref\)/);
-  assert.match(llmPanel, /enabled && error/);
-  assert.match(llmPanel, /llm-assist-error[\s\S]*Settings/);
-  assert.match(llmPanel, /title = "Interrogate LLM"/);
-  assert.match(llmPanel, /titleTone = "section"/);
-  assert.match(llmPanel, /applyLabel \?\? "Interrogate LLM"/);
-  assert.match(llmPanel, /createPortal/);
-  assert.match(llmPanel, /llm-assist-dock/);
-  assert.match(llmPanel, /data-open/);
-  assert.match(llmPanel, /data-llm-overlay/);
-  assert.match(llmPanel, /defaultSuggestions/);
-  assert.match(llmPanel, /zIndex: LLM_DOCK_Z/);
-  assert.doesNotMatch(llmPanel, /className="llm-assist-suggestion vo-pop"/);
-  assert.doesNotMatch(llmPanel, /Draft with LLM/i);
-  assert.match(symphonyEditor, /applyLabel="Interrogate LLM"/);
+  assert.match(intelligenceWorkspace, /Verified earnings prints|verified earnings KPIs/);
+  assert.doesNotMatch(intelligenceWorkspace, /<h3>Newsletter digest<\/h3>/);
+  assert.doesNotMatch(intelligenceWorkspace, /<h3>Podcast summaries<\/h3>/);
+  assert.doesNotMatch(intelligenceWorkspace, /view="live"/);
+  assert.doesNotMatch(satyaRoom, /context\?:/);
+  assert.match(intelligenceWorkspace, /Axis Mutual Fund[\s\S]*Groww Digest[\s\S]*Flipboard Tech Briefing[\s\S]*newsletter_other/);
+  assert.match(intelligenceWorkspace, /groupNewsletterItems/);
+  assert.match(intelligenceWorkspace, /classifySatyaFamily/);
+  assert.match(intelligenceWorkspace, /from ["']\.\.\/satya\/source-catalog\.ts["']/);
+  assert.doesNotMatch(intelligenceWorkspace, /haystack\.includes\("axis"\) && haystack\.includes\("mutual"\)/);
+  assert.doesNotMatch(intelligenceWorkspace, /NewsletterFamilyGroups/);
+  assert.match(satyaRoom, /Grounded on the Satya corpus/);
+  assert.match(satyaRoom, /Machine-drafted, never a source for numbers/);
+  assert.match(satyaRoom, /verified earnings KPIs remain the source of truth/);
+  assert.match(satyaUi, /\/api\/satya\/chat/);
+  assert.match(satyaUi, /\/api\/satya\/status/);
+  assert.match(satyaUi, /\/api\/satya\/sources/);
+  assert.match(satyaClient, /event: status\|token\|citation\|done\|error/);
+  assert.doesNotMatch(satyaClient, /record\?\.type/);
+  assert.match(satyaRoom, /fetchSatyaSources/);
+  assert.match(satyaClient, /Open in Mail/);
+  assert.match(satyaClient, /Open PDF/);
+  assert.match(satyaClient, /compactCitationLinks/);
+  assert.match(satyaClient, /citationSourceBadges/);
+  assert.match(satyaRoom, /SatyaCitationIcons/);
+  assert.match(satyaCss, /\.satya-citation-icons/);
+  assert.match(satyaCss, /\.satya-citation-icon/);
+  assert.match(satyaCss, /\.satya-citation-badge/);
+  assert.match(intelligenceWorkspace, /satya-citation-badge-count/);
+  assert.match(intelligenceWorkspace, /Cited source counts/);
+  assert.match(satyaCss, /\.satya-m2-canvas/);
+  assert.match(satyaPresence, /satya-axis-chip/);
+  assert.match(satyaPresence, /data-axis-category/);
+  assert.match(satyaRoom, /SatyaAxisCategoryChips/);
+  assert.match(satyaUi, /Webinars off unless selected/);
+  assert.match(satyaPresence, /satya-axis-ask/);
+  assert.match(satyaRoom, /satya-axis-ask|Ask this category|axisCategoryAskPrompt/);
+  assert.match(satyaRoom, /documentCount/);
+  assert.match(satyaRoom, /satya-corpus-health/);
+  assert.match(satyaPresence, /createSatyaSpeech/);
+  assert.match(satyaPresence, /installSatyaSpeech/);
+  assert.match(satyaSpeech, /window\.satyaSpeech/);
+  assert.match(satyaSpeech, /webkitSpeechRecognition/);
+  assert.match(satyaSpeech, /speechSynthesis/);
+  assert.match(satyaPresence, /Open briefing/);
+  assert.match(satyaPresence, /view=intelligence/);
+  assert.match(satyaPresence, /section=m2/);
+  assert.match(satyaPresence, /native-chrome-embed/);
+  assert.match(satyaPresence, /createPortal/);
+  assert.match(satyaPresence, /useLayoutEffect/);
+  assert.match(satyaPresence, /orbDisabled/);
+  assert.match(satyaPresence, /satya-orb-name/);
+  assert.match(satyaPresence, /SATYA/);
+  assert.match(satyaPresence, /className="satya-chats"/);
+  assert.match(satyaPresence, /CHATS/);
+  assert.match(satyaPresence, /satya-popup/);
+  assert.match(satyaPresence, /Sources \/ Categories/);
+  assert.match(satyaPresence, /satya-voice-picker/);
+  assert.match(satyaRoom, /currentSatyaTurn/);
+  assert.match(satyaRoom, /Open Chats/);
+  assert.match(satyaRoom, /openSatyaChats/);
+  assert.match(satyaRoom, /setSatyaThread/);
+  assert.match(satyaRoom, /getSatyaThread/);
+  assert.doesNotMatch(satyaRoom, /subscribeSatyaThread/);
+  assert.match(satyaPresence, /Chats/);
+  assert.match(satyaPresence, /Assistant/);
+  assert.match(satyaPresence, /fetchSatyaSessions/);
+  assert.match(satyaPresence, /satya-chats-panel/);
+  assert.match(satyaPresence, /satya-chats-head/);
+  assert.match(satyaPresence, /satya-chats-search/);
+  assert.match(satyaPresence, /Rename/);
+  assert.match(satyaPresence, /Delete/);
+  assert.match(satyaPresence, /filterSatyaChatItems/);
+  assert.match(satyaClient, /openSatyaChats/);
+  assert.match(satyaClient, /fetchSatyaSessions/);
+  assert.doesNotMatch(intelligenceWorkspace, /id: "m4"|number="M-4"/);
+  assert.match(pageSource, /<SatyaPresence variant="companion" workspace=\{workspace\} \/>/);
+  assert.equal((pageSource.match(/<SatyaPresence/g) ?? []).length, 1);
+  assert.doesNotMatch(pageSource, /workspace-tab-satya|key: "satya"/);
+  assert.match(satyaPresence, /Smart Suggestions/);
+  assert.match(satyaPresence, /setPrompt\(item\.prompt\)/);
+  assert.match(satyaClient, /\/api\/llm\/complete/);
+  assert.match(satyaClient, /completeSatyaWorkspaceTask/);
+  assert.match(satyaWorkspace, /useSatyaTaskContext/);
+  assert.match(satyaSuggestions, /defaultSatyaSuggestions/);
+  assert.doesNotMatch(satyaPresence, /Draft with LLM/i);
+  assert.match(symphonyEditor, /useSatyaTaskContext\("builder"/);
+  assert.match(symphonyEditor, /onApplyTree: applyDraftedTree/);
+  assert.doesNotMatch(symphonyEditor, /<LlmAssistPanel/);
   assert.doesNotMatch(symphonyEditor, /Apply drafted tree/);
   assert.match(globalCss, /\.llm-assist-span\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
   assert.match(globalCss, /\.llm-assist header h3\s*\{[^}]*text-transform:\s*none/s);
@@ -295,39 +392,75 @@ test("M-2 Interrogate LLM is full-width with source-of-truth copy and suggestion
   assert.match(intelligenceWorkspace, /Verified prints this week/);
   assert.doesNotMatch(`${visualOverhaul}\n${hoverPop}`, /\.llm-assist:hover/);
   assert.match(hoverPop, /@media \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(hoverPop, /\.satya-composer:hover/);
   assert.match(hoverPop, /\.llm-assist textarea:hover/);
   assert.match(hoverPop, /\.llm-assist-run:hover/);
+  assert.match(visualOverhaul, /@import "\.\/dashboard\/satya\.css"/);
+  assert.match(satyaCss, /prefers-reduced-motion:\s*reduce/);
+  assert.match(satyaCss, /\.satya-companion/);
+  assert.match(satyaCss, /html\.native-chrome-embed \.satya-companion/);
+  assert.match(satyaCss, /\.satya-companion\s*\{[^}]*z-index:\s*40/s);
+  assert.match(satyaCss, /\.satya-orb-name/);
+  assert.match(satyaCss, /\.satya-companion\[data-open="false"\] \.satya-orb/);
+  assert.match(satyaCss, /\.satya-companion\[data-open="false"\] \.satya-composer-label/);
+  assert.match(satyaCss, /\.satya-companion\[data-open="false"\] \.satya-talk-sheet/);
+  assert.doesNotMatch(satyaCss, /\.satya-companion\[data-open="false"\]\s*\{[^}]*display:\s*none/s);
+  assert.match(satyaCss, /\.satya-briefing/);
+  assert.match(satyaCss, /grid-column:\s*1\s*\/\s*-1/);
+  assert.match(satyaCss, /--axis-cat-axis-punch/);
+  assert.match(satyaCss, /\.satya-axis-chip/);
+  assert.match(satyaCss, /\.satya-axis-chip-group/);
+  assert.match(satyaCss, /\.satya-webinar-hint/);
+  assert.match(satyaCss, /\.satya-corpus-health/);
+  assert.match(satyaCss, /\.satya-chats-search/);
 });
 
-test("Market Intelligence digests collapse newsletters by sender and Axis by topic with source links", async () => {
-  const [intelligenceWorkspace, contentServer, contentTypes, globalCss, pdfRoute] = await Promise.all([
+test("Market Intelligence Satya chips replace digest walls", async () => {
+  const [intelligenceWorkspace, satyaPresence, contentServer, contentTypes, globalCss, pdfRoute] = await Promise.all([
     readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
+    readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
     readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8"),
     readFile(new URL("../app/content-types.ts", import.meta.url), "utf8"),
     readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("../app/api/axis-research/pdf/route.ts", import.meta.url), "utf8"),
   ]);
+  const satyaChips = `${intelligenceWorkspace}\n${satyaPresence}`;
 
-  assert.match(intelligenceWorkspace, /layout="axis"/);
-  assert.match(intelligenceWorkspace, /axisTopicFromTitle|topicGroup/);
+  assert.doesNotMatch(intelligenceWorkspace, /NewsletterFamilyGroups|SenderDigestGroups/);
+  assert.doesNotMatch(intelligenceWorkspace, /layout=\{"axis"\}|layout="axis"/);
+  assert.match(satyaChips, /satya-axis-chip/);
+  assert.match(satyaChips, /data-axis-category/);
+  assert.match(intelligenceWorkspace, /axisCategoryForItem/);
+  assert.doesNotMatch(intelligenceWorkspace, /sector-intelligence-filter/);
+  assert.match(contentTypes, /axisCategory\?:/);
   assert.match(intelligenceWorkspace, /Open in Mail/);
   assert.match(intelligenceWorkspace, /Open PDF/);
-  assert.match(intelligenceWorkspace, /axisResearch=\{layout === "axis"\}/);
-  assert.match(intelligenceWorkspace, /axis-open-pdf/);
-  assert.match(intelligenceWorkspace, /axisResearch && <DigestSourceLinks[\s\S]*?<WaveformStrip/);
-  assert.match(intelligenceWorkspace, /Open in Podcasts/);
-  assert.match(intelligenceWorkspace, /DigestSourceLinks/);
-  assert.match(intelligenceWorkspace, /return "Description"/);
-  assert.match(intelligenceWorkspace, /keyTakeaways/);
-  assert.match(intelligenceWorkspace, /AI transcript summary/);
-  assert.match(intelligenceWorkspace, /AI description summary/);
-  assert.match(intelligenceWorkspace, /Outcome · \{insight\.outcome\}/);
-  assert.match(intelligenceWorkspace, /Sentiment · \{insight\.sentiment\}/);
+  assert.match(intelligenceWorkspace, /Open episode/);
+  assert.doesNotMatch(intelligenceWorkspace, /axis-open-pdf/);
+  assert.doesNotMatch(intelligenceWorkspace, /DigestSourceLinks/);
+  assert.match(intelligenceWorkspace, /SATYA_SOURCE_CHIPS/);
+  assert.match(intelligenceWorkspace, /Axis Mutual Fund/);
+  assert.match(intelligenceWorkspace, /Groww Digest/);
+  assert.match(intelligenceWorkspace, /Flipboard Tech Briefing/);
+  assert.match(intelligenceWorkspace, /groupNewsletterItems/);
+  assert.match(intelligenceWorkspace, /classifySatyaFamily\(/);
+  assert.doesNotMatch(intelligenceWorkspace, /haystack\.includes\("axis"\)/);
   assert.match(contentTypes, /messageUrl\?:/);
+  assert.match(contentTypes, /sourceFamily\?:/);
   assert.match(contentTypes, /pdfUrl\?:/);
   assert.match(contentTypes, /topicGroup\?:/);
   assert.match(contentServer, /mailMessageId\(/);
   assert.match(contentServer, /mailMessageUrl\(/);
+  {
+    const newsletterStart = contentServer.indexOf("const newsletterMailboxHelpers");
+    const axisStart = contentServer.indexOf("const axisMailboxHelpers");
+    const newsletterBlock = contentServer.slice(newsletterStart, axisStart);
+    assert.ok(newsletterStart >= 0 && axisStart > newsletterStart);
+    assert.doesNotMatch(newsletterBlock, /mailLinkHelpers/);
+    assert.doesNotMatch(newsletterBlock, /mailReportLinks/);
+    assert.doesNotMatch(newsletterBlock, /message\.source\(\)/);
+    assert.match(contentServer.slice(axisStart), /mailReportLinks\(message\)/);
+  }
   assert.match(contentServer, /matchAxisResearchPdf\(/);
   assert.match(contentServer, /axisTopicGroup\(/);
   assert.match(contentServer, /\(\[\?&\]\[A-Za-z\]\[A-Za-z0-9_-\]\*\)=\\r\?\\n/);
@@ -368,11 +501,11 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.match(workspace, /<DailyKanbanBoard workspace="sectors"\/>/);
   assert.match(workspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\}/);
   assert.match(workspace, /benchmarks=\{benchmarks\}/);
-  assert.match(analytics, /task="industry"/);
+  assert.match(analytics, /task: "industry"/);
   assert.match(analytics, /industryAnalyticsSuggestions/);
   assert.match(analytics, /not Mail or Podcasts/);
-  assert.match(analytics, /<LlmAssistPanel/);
-  assert.match(analytics, /llm-assist-span/);
+  assert.match(analytics, /useSatyaTaskContext\("sectors-s2"/);
+  assert.doesNotMatch(analytics, /<LlmAssistPanel/);
   assert.doesNotMatch(analytics, /Newsletter digest|Podcast summaries|axisResearch/);
   assert.doesNotMatch(decisionLab, /title="LLM framework draft"/i);
   assert.doesNotMatch(decisionLab, /LLM FRAMEWORK DRAFT/i);
@@ -386,10 +519,9 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.match(workspace, /<SectorDecisionLab page=\{activePages\.s3 as SectorDecisionPage\}/);
   assert.doesNotMatch(workspace, /S-4|s4|Earnings|EarningsMonthCalendar|EarningsCalendarWorkbench/);
   assert.match(workspace, /SECTOR_TOP_SECTIONS/);
-  assert.match(workspace, /<WorkspaceSectionNav[\s\S]*label="Sectoral Analytics sections"/);
   assert.match(workspace, /\{ id: "s1", label: "Action Board" \}/);
   assert.match(workspace, /\{ id: "s2", label: "Industry Analytics" \}/);
-  assert.match(workspace, /\{ id: "s3", label: "Benchmarks & Decision Lab" \}/);
+  assert.match(workspace, /\{ id: "s3", label: "Decision Framework" \}/);
   assert.match(sharedUi, /export function WorkspaceSectionNav/);
   assert.match(sharedUi, /role="tablist"/);
   assert.match(sharedUi, /aria-selected=\{selected\}/);
@@ -437,13 +569,10 @@ test("Phase 3 Market Intelligence automation remains wired to local source paths
   assert.match(contentServer, /reminderVisual\(topic\)/);
   assert.match(contentTypes, /axisLastFetchedAt/);
   assert.match(dashboardRefresh, /axisResearchLastFetchedAt/);
-  assert.match(workspace, /dashboard-saved-items-v1/);
-  assert.match(workspace, /Read Later/);
   assert.match(workspace, /findEarningsHolidayConflicts/);
-  assert.match(workspace, /AI transcript summary/);
-  assert.match(workspace, /Publisher description evidence — AI summary not generated/);
-  assert.match(workspace, /Evidence unavailable/);
-  assert.match(workspace, /Open in Podcasts/);
+  assert.doesNotMatch(workspace, /AI transcript summary/);
+  assert.doesNotMatch(workspace, /Open in Podcasts/);
+  assert.match(workspace, /Open episode/);
   assert.match(globalCss, /--font-size-body:\s*15px/);
   assert.match(workspace, /data-reminder-list=\{item\.list \|\| "Unknown list"\}/);
   assert.match(workspace, /const listColor = reminderListColor\(item\.list\)/);
@@ -459,7 +588,8 @@ test("server-renders the portfolio dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>Portfolio Intelligence<\/title>/i);
   assert.match(html, /Investment Brief/);
-  assert.match(html, /On request/);
+  assert.match(html, /kite-auth-control/);
+  assert.match(html, /icon-only/);
   assert.doesNotMatch(html, /<span>Kite snapshot<\/span>/);
   assert.doesNotMatch(html, /aria-label="Open Integrations settings"/);
   assert.match(html, /Dashboard workspaces/);
@@ -487,9 +617,17 @@ test("server-renders the portfolio dashboard", async () => {
   assert.match(html, /Expand Axis picks/);
   assert.doesNotMatch(html, /Collapse Portfolio/);
   assert.doesNotMatch(html, /Read-only wellness view/);
+  assert.match(html, /workspace-glass-cluster/);
+  assert.match(html, /glass-sections/);
+  assert.match(html, /id="workspace-section-tab-i1"/);
+  assert.match(html, /id="workspace-section-tab-i4"/);
+  assert.match(html, /data-section-chip="i1"/);
+  assert.match(html, /data-workspace-section-chips="investment"/);
+  assert.doesNotMatch(html, /source-freshness-region/);
+  assert.doesNotMatch(html, /LIVE KITE CONNECT DATA/);
 });
 
-test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections", async () => {
+test("nativeChrome hides web masthead; Macintosh Stratji FOUC owns the combined droplet", async () => {
   const [page, routing, globalCss, nativeChromeCssFile, layout, visual, sharedUi, iosShell, iosBrowser] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
@@ -507,16 +645,19 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.match(routing, /function nativeChromeFromPageSearch/);
   assert.match(routing, /function detectNativeChrome/);
   assert.match(page, /detectNativeChrome/);
-  assert.match(page, /showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
   assert.match(page, /!nativeChrome && \([\s\S]*className="masthead"/);
   assert.doesNotMatch(page, /nativeChrome && <AppearanceToggle/);
   assert.doesNotMatch(page, /HealthIncognitoToggle/);
   assert.doesNotMatch(page, /Open Integrations settings/);
   assert.match(page, /nativeChrome && showPdfLink && <a className="masthead-pdf" href=\{pdfHref\}/);
-  assert.match(page, /sourceFreshness\.length > 0 && \([\s\S]*<PulseConstellation/);
+  assert.match(page, /IntegrationsWorkspace showDashboardExit=\{!nativeChrome\} sources=\{sourceFreshness\}/);
+  assert.doesNotMatch(page, /showWorkspaceShell && sourceFreshness/);
+  assert.doesNotMatch(page, /PulseConstellation/);
+  assert.doesNotMatch(page, /LIVE KITE CONNECT DATA/);
   assert.doesNotMatch(page, /!nativeChrome && <PulseConstellation/);
-  assert.match(page, /\{showWorkspaceShell && !nativeChrome && <DashboardTabs/);
-  assert.doesNotMatch(page, /\{showWorkspaceShell && <DashboardTabs/);
+  assert.match(page, /\{showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
+  assert.doesNotMatch(page, /\{showWorkspaceShell && !nativeChrome && <DashboardTabs/);
   assert.doesNotMatch(page, /!nativeChrome && <DailyKanbanBoard/);
   assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
   assert.match(page, /showWorkspaceShell && \(workspace === "investment" \|\| stayMounted\)/);
@@ -531,7 +672,11 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.match(layout, /import "\.\/native-chrome\.css"/);
   assert.match(layout, /nativeChromeFoucScript/);
   assert.match(layout, /nativeChrome\|native/);
-  assert.match(sharedUi, /className="workspace-section-nav"/);
+  assert.match(layout, /dataset\.nativeOwnsSections="1"/);
+  assert.match(layout, /dataset\.nativeWebNav="1"/);
+  assert.match(layout, /var macOverlay=stratji&&\/Macintosh\/i\.test\(ua\)/);
+  assert.match(layout, /!\/iPhone\|iPad\|iPod\/i\.test\(ua\)/);
+  assert.match(sharedUi, /className=\{`workspace-section-nav\$\{compact \? " glass-sections" : ""\}`\}/);
   assert.match(sharedUi, /className="workspace-navigation mode-dial glass-bar liquid-glass"/);
   assert.match(sharedUi, /export function AppearanceToggle/);
   assert.match(visual, /export function PulseConstellation/);
@@ -541,13 +686,20 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.match(visual, /export function WaveformStrip/);
   assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.masthead/);
   assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.workspace-navigation\.mode-dial/);
+  assert.match(nativeChromeCssFile, /data-native-owns-sections/);
+  assert.match(nativeChromeCssFile, /data-native-web-nav/);
+  assert.match(nativeChromeCssFile, /glass-sections[\s\S]{0,120}display:\s*flex !important/);
+  assert.match(nativeChromeCssFile, /padding-top:\s*96px/);
   assert.doesNotMatch(globalCss, /padding:\s*var\(--chrome-stack-gap\) 10px 8px/);
   assert.doesNotMatch(nativeChromeCssFile, /html\.native-chrome-embed \.live-feed-banner[\s\S]{0,120}margin:\s*0 0 6px/);
   assert.match(globalCss, /--chrome-stack-gap:\s*16px/);
-  assert.match(globalCss, /--section-nav-clearance:\s*28px/);
-  assert.match(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--section-nav-clearance\)/s);
+  assert.match(globalCss, /--section-nav-clearance:\s*8px/);
+  assert.match(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*0/s);
+  assert.match(globalCss, /prefers-reduced-motion:\s*reduce/);
+  assert.match(globalCss, /\.workspace-droplet/);
   assert.doesNotMatch(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin:\s*var\(--control-gap\) 0/s);
   assert.doesNotMatch(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--chrome-stack-gap\)/s);
+  assert.doesNotMatch(globalCss, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--section-nav-clearance\)/s);
   assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.health-workspace-shell\.health-full-workspace/);
   assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*source-freshness[^\n]*display:\s*none|source-freshness[^\n]*native-chrome[^\n]*display:\s*none/);
   assert.doesNotMatch(nativeChromeCssFile, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,180}display:\s*none/);
@@ -559,6 +711,7 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*incognito-toggle[^\n]*display:\s*none/);
   assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*workspace-panel[^\n]*overflow:\s*hidden/);
   assert.doesNotMatch(nativeChromeCssFile, /native-chrome[^\n]*health-workspace-shell[^\n]*overflow:\s*hidden/);
+  assert.match(nativeChromeCssFile, /health-workspace-shell\[data-focus-section\] > \.workspace-section\.health-full-section:not\(\[hidden\]\)[\s\S]{0,220}overflow-y:\s*auto/);
   assert.doesNotMatch(page, /nativeChrome && <PulseConstellation/);
   assert.doesNotMatch(page, /!nativeChrome && <InvestmentWorkspace/);
   const nativeChromeCss = `${globalCss}\n${nativeChromeCssFile}`.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -567,13 +720,17 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
     .flatMap(([, selector]) => selector.split(",").map((part) => part.trim()).filter(Boolean));
   assert.ok(nativeChromeHideSelectors.length >= 2, nativeChromeHideSelectors.join(" | "));
   for (const selector of nativeChromeHideSelectors) {
-    if (/workspace-navigation/.test(selector)) {
-      assert.match(selector, /native-chrome/);
+    if (/workspace-navigation|native-owns-sections/.test(selector)) {
+      assert.match(selector, /workspace-navigation/);
       continue;
     }
     assert.match(selector, /masthead/);
     assert.doesNotMatch(selector, /workspace-navigation|workspace-section-nav|footer|skip-link|workspace-panel|kanban|recharts|collapsible|source-freshness|pulse-constellation/);
   }
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed \.workspace-navigation\.mode-dial[\s\S]{0,280}display:\s*none !important/);
+  assert.match(nativeChromeCssFile, /html\[data-native-web-nav="1"\] \.workspace-navigation\.mode-dial/);
+  assert.match(nativeChromeCssFile, /html\[data-native-owns-sections="1"\] \.workspace-navigation\.mode-dial[\s\S]{0,160}display:\s*none !important/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed\[data-native-owns-sections="1"\] \.workspace-navigation/);
   assert.match(iosShell, /NavigationSplitView/);
   assert.match(iosShell, /DashboardOutline\.sidebarWidth/);
   assert.match(iosShell, /DashboardOutlineList\(selectedID:/);
@@ -585,28 +742,29 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
   const html = await (await render("/?nativeChrome=1")).text();
   assert.match(html, /data-native-chrome="1"/);
   assert.match(html, /native-chrome/);
-  assert.doesNotMatch(html, /aria-label="Dashboard workspaces"/);
-  assert.doesNotMatch(html, /id="workspace-tab-investment"/);
+  assert.match(html, /aria-label="Dashboard workspaces"/);
+  assert.match(html, /id="workspace-section-tab-i1"/);
+  assert.match(html, /data-web-section-chips="1"/);
   assert.doesNotMatch(html, /class="masthead"/);
   assert.doesNotMatch(html, /<h1>Investment Brief<\/h1>/);
   assert.doesNotMatch(html, /aria-label="Dashboard appearance"/);
   assert.doesNotMatch(html, /aria-label="Hide health statistics"/);
   assert.match(html, /Investment action board/);
-  assert.match(html, /On request/);
-  assert.match(html, /collapsible-section collapsed/);
+  assert.match(html, /kite-auth-control/);
+  assert.match(html, /Refresh all/);
   const htmlTrue = await (await render("/?nativeChrome=true")).text();
   assert.match(htmlTrue, /data-native-chrome="1"/);
   assert.doesNotMatch(htmlTrue, /aria-label="Dashboard appearance"/);
-  assert.doesNotMatch(htmlTrue, /id="workspace-tab-investment"/);
+  assert.match(htmlTrue, /id="workspace-section-tab-i1"/);
   const htmlNativeAlias = await (await render("/?native=1")).text();
   assert.match(htmlNativeAlias, /data-native-chrome="1"/);
-  assert.doesNotMatch(htmlNativeAlias, /id="workspace-tab-investment"/);
+  assert.match(htmlNativeAlias, /id="workspace-section-tab-i1"/);
 
   const distinctiveViews = [
-    ["investment", [/<span>I-1<\/span>/, /<span>I-3<\/span>/]],
-    ["sectors", [/<span>S-2<\/span>/, /<span>S-1<\/span>/]],
-    ["intelligence", [/<span>M-3<\/span>|license-gate/, /<span>M-1<\/span>|Market Intelligence/]],
-    ["health", [/<span>H-3<\/span>|license-gate/, /<span>H-1<\/span>|Health &amp; Wellness|license-gate/]],
+    ["investment", [/data-section-chip="i1"/, /data-section-chip="i3"/, />Risk</]],
+    ["sectors", [/data-section-chip="s2"/, /Industry Analytics/, /Decision Framework/]],
+    ["intelligence", [/data-section-chip="m3"|license-gate/, /Earnings Calendar|license-gate/, /Satya|Market Intelligence/]],
+    ["health", [/data-section-chip="h3"|license-gate/, /Vital Metrics|license-gate/, /Calendar \+ Reminders|license-gate/]],
     ["builder", [/id="builder-canvas"|license-gate/, /symphony-editor|Algorithm Canvas/]],
     ["strategies", [/class="strategy-card"|license-gate/, /strategies-gallery|Strategies/]],
   ];
@@ -628,10 +786,17 @@ test("nativeChrome hides web masthead and workspace tabs, keeps in-page sections
     assert.match(webHtml, /class="masthead"/);
     assert.match(webHtml, /aria-label="Dashboard workspaces"/);
     assert.doesNotMatch(nativeHtml, /class="masthead"/);
-    assert.doesNotMatch(nativeHtml, /aria-label="Dashboard workspaces"/);
-    assert.doesNotMatch(nativeHtml, /id="workspace-tab-investment"/);
+    assert.match(nativeHtml, /aria-label="Dashboard workspaces"/);
+    assert.match(nativeHtml, /workspace-section-tab-|license-gate/);
     assert.match(nativeHtml, /data-native-chrome="1"/);
-    assert.match(nativeHtml, /workspace-section-nav|license-gate/);
+    assert.match(webHtml, /workspace-section-nav|license-gate/);
+    assert.match(nativeHtml, /collapsible-section|license-gate/);
+    if (view === "intelligence") {
+      assert.doesNotMatch(webHtml, /S-1 Sectoral action board/);
+      assert.doesNotMatch(nativeHtml, /S-1 Sectoral action board/);
+      assert.doesNotMatch(webHtml, /data-workspace="sectors"/);
+      assert.doesNotMatch(nativeHtml, /data-workspace="sectors"/);
+    }
   }
 });
 
@@ -647,26 +812,35 @@ test("sticky workspace section nav sits fully above section headings", async () 
   assert.ok(lastWinsIdx >= 0, "visual-overhaul.css must end with the heading-clearance last-wins block");
   const lastWins = visualCss.slice(lastWinsIdx);
 
-  assert.match(lastWins, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*var\(--section-nav-clearance\)/s);
+  assert.match(lastWins, /\.workspace-section \.section-heading\s*\{[^}]*margin-top:\s*0/s);
   assert.match(lastWins, /\.workspace-section \.section-heading\s*\{[^}]*overflow:\s*visible/s);
   assert.doesNotMatch(lastWins, /\.workspace-section \.section-heading\s*\{[^}]*--control-gap/s);
+  assert.doesNotMatch(lastWins, /\.workspace-section \.section-heading\s*\{[^}]*--section-nav-clearance/s);
 
   assert.match(lastWins, /\.workspace-section-nav\s*,\s*\.intelligence-section-nav\s*\{[^}]*flex-shrink:\s*0/s);
   assert.match(lastWins, /\.workspace-section-nav\s*,\s*\.intelligence-section-nav\s*\{[^}]*margin:\s*0 0 var\(--section-nav-clearance\)/s);
-  assert.match(lastWins, /\.workspace-section-nav\s*,\s*\.intelligence-section-nav\s*\{[^}]*background(?:-color)?:\s*#344353/s);
+  assert.match(lastWins, /\.workspace-section-nav\s*,\s*\.intelligence-section-nav\s*\{[^}]*background(?:-color)?:\s*var\(--line\)/s);
 
   assert.match(lastWins, /(?:^|\n)\[data-focus-section\]\s*\{[^}]*min-height:\s*0/s);
   assert.match(lastWins, /(?:^|\n)\[data-focus-section\]\s*\{[^}]*overflow:\s*visible/s);
+  assert.match(lastWins, /(?:^|\n)\[data-focus-section\]\s*\{[^}]*gap:\s*0/s);
   assert.doesNotMatch(lastWins, /(?:^|\n)\[data-focus-section\]\s*\{[^}]*height:\s*100%/s);
+  assert.match(lastWins, /\[data-focus-section\]\s*>\s*\.workspace-section\s*\+\s*\.workspace-section\s*\{[^}]*margin-top:\s*0/s);
 
   assert.match(lastWins, /\.workspace-section \.section-heading h2\s*\{[^}]*line-height:\s*1\.2/s);
   assert.match(lastWins, /\.workspace-section \.section-heading h2\s*\{[^}]*overflow:\s*visible/s);
   assert.match(lastWins, /\[data-focus-section\][^{]*\.collapsible-content\s*\{[^}]*overflow:\s*auto/s);
+  assert.match(lastWins, /\.health-workspace-shell\[data-focus-section\]\s*>\s*\.workspace-section\.health-full-section:not\(\[hidden\]\)\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.doesNotMatch(lastWins, /\.health-workspace-shell\[data-focus-section\]\s*>\s*\.workspace-section:not\(\[hidden\]\)\s*\{[^}]*overflow:\s*visible/s);
 
   assert.match(nativeChromeCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,280}margin-bottom:\s*var\(--section-nav-clearance\)/);
-  assert.match(nativeChromeCss, /html\.native-chrome-embed \.workspace-section \.section-heading[\s\S]{0,180}margin-top:\s*var\(--section-nav-clearance\)/);
+  assert.match(nativeChromeCss, /html\.native-chrome-embed \.workspace-section \.section-heading[\s\S]{0,180}margin-top:\s*0/);
   assert.doesNotMatch(nativeChromeCss, /html\.native-chrome-embed \.workspace-section-nav[\s\S]{0,160}margin(?:-bottom)?:\s*0/);
-  assert.match(globalCss, /--section-nav-clearance:\s*28px/);
+  assert.match(globalCss, /--section-nav-clearance:\s*8px/);
+  assert.match(globalCss, /\.workspace-section\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/s);
+  assert.match(globalCss, /\.investment-workspace-shell\s*>\s*\.workspace-section:not\(\[hidden\]\)\s*\+\s*\.workspace-section:not\(\[hidden\]\)/);
+  assert.match(globalCss, /\.intelligence-workspace-shell\s*>\s*\.workspace-section:not\(\[hidden\]\)\s*\+\s*\.workspace-section:not\(\[hidden\]\)/);
+  assert.match(globalCss, /\.health-workspace-shell\s*>\s*\.workspace-section\[hidden\]/);
 });
 
 test("CollapsibleSection defaults to collapsed with v2 open-only persistence", async () => {
@@ -687,7 +861,7 @@ test("CollapsibleSection defaults to collapsed with v2 open-only persistence", a
   assert.doesNotMatch(sharedUi, /getItem\(storageKey\) !== "false"/);
   assert.match(intelligence, /function IntelligenceFeedSection[\s\S]*?const \[open, setOpen\] = useState\(false\)/);
   for (const workspace of [investment, sectors, intelligence, health, strategies]) {
-    assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(/);
+    assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(|revealDashboardSection\(/);
   }
 });
 
@@ -705,12 +879,12 @@ test("workspaces honor section/page from the URL on first paint and popstate", a
   assert.match(investment, /useState<string>\(investmentSectionFromUrl\)/);
   assert.match(investment, /revealDashboardSection\(section, `investment-\$\{section\}`\)/);
   assert.match(investment, /hidden=\{nativeChromeHidesSection\(activeSection, "i3"\)\}/);
-  assert.match(intelligence, /function intelligenceSectionFromUrl/);
-  assert.match(intelligence, /useState<string>\(intelligenceSectionFromUrl\)/);
+  assert.match(intelligence, /isLocationView\("intelligence"\)/);
+  assert.match(sectors, /isLocationView\("sectors"\)/);
   assert.match(sectors, /useState<SectorTopSection>\(\(\) => sectionFromUrl\(\)\.topSection\)/);
   assert.match(health, /useState<HealthRoute>\(healthRouteFromUrl\)/);
   assert.match(page, /__stratjiApplyNativeRoute/);
-  assert.match(page, /addEventListener\("popstate"/);
+  assert.match(page, /listenToStratjiLocation\(fromUrl\)/);
 });
 
 test("collapsed section preview is not constrained by the section-number badge", async () => {
@@ -723,14 +897,24 @@ test("collapsed section preview is not constrained by the section-number badge",
   assert.doesNotMatch(globalCss, /\.section-heading>span\s*\{[^}]*width:36px;[^}]*height:36px;/s);
 });
 
-test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", async () => {
-  const workspace = await readJoined(INTELLIGENCE_SOURCE_CANDIDATES);
+test("Market Intelligence defines M-1 through M-3 with exclusive M-3 earnings", async () => {
+  const [workspace, intelligenceShell, health] = await Promise.all([
+    readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
+    readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
   for (const [number, title] of [
     ["M-1", "Action Board"],
-    ["M-2", "Live Intelligence"],
+    ["M-2", "Satya"],
     ["M-3", "Earnings Calendar"],
-    ["M-4", "Calendar + Reminders"],
-  ]) assert.match(workspace, new RegExp(`number="${number}" title="${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  ]) assert.match(intelligenceShell, new RegExp(`number="${number}" title="${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  assert.doesNotMatch(intelligenceShell, /number="M-4"|id: "m4"|id="intelligence-m4"/);
+  assert.doesNotMatch(intelligenceShell, /view="calendar-reminders"|SectorIntelligenceDigest/);
+  assert.doesNotMatch(intelligenceShell, /digest-panel-podcasts|<h3>Newsletter digest<\/h3>|<h3>Axis Research<\/h3>/);
+  assert.match(health, /number: "H-4", title: "Calendar \+ Reminders"/);
+  assert.match(health, /view="calendar-reminders"/);
+  assert.match(health, /id="health-h4"/);
+  assert.equal((health.match(/view="calendar-reminders"/g) ?? []).length, 1);
   assert.equal((workspace.match(/data-earnings-owner="m3"/g) ?? []).length, 1);
   assert.match(workspace, /exactEarningsCalendarItems|mergeEarningsCalendarEvents/);
   assert.match(workspace, /!isEarningsCalendar\(item\.calendar\)/);
@@ -745,34 +929,53 @@ test("Market Intelligence defines M-1 through M-4 with exclusive M-3 earnings", 
   assert.match(workspace, /label=\{SCHEDULED_FEED_LABEL\}/);
   assert.match(workspace, /label=\{WORK_JOBS_LABEL\}/);
   assert.match(workspace, /Apple Calendar entries are scheduling evidence only/);
-  assert.match(workspace, /view="live"/);
-  assert.match(workspace, /view="calendar-reminders"/);
-  assert.match(workspace, /url\.searchParams\.set\("section", section\)/);
-  assert.match(workspace, /<WorkspaceSectionNav[\s\S]*label="Market Intelligence sections"/);
+  assert.match(workspace, /calendar-reminders/);
+  assert.doesNotMatch(workspace, /view="live"/);
   assert.match(workspace, /INTELLIGENCE_SECTIONS/);
   assert.doesNotMatch(workspace, /WATCHLIST_FEED_LABEL|DOWNLOAD_LIST_FEED_LABEL|sector-intelligence-filter|sector-dimmed/);
+  assert.doesNotMatch(workspace, /number="M-5"|id: "m5"/);
+  assert.match(workspace, /buildIntelligenceDailyActions/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="intelligence" items=\{intelligenceActions\}\s*\/>/);
+  assert.doesNotMatch(workspace, /intel-mail|Refresh exact Mail intelligence sources/);
 });
 
-test("all four workspaces share consistent cyan section navigation bars", async () => {
-  const [sharedUi, investment, sectors, intelligence, health, strategies, globalCss] = await Promise.all([
+test("section chips live on the workspace glass bar, not a second in-page pill row", async () => {
+  const [sharedUi, routing, investment, sectors, intelligence, health, strategies, builder, globalCss, glassBar, outline] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/workspace-routing.ts", import.meta.url), "utf8"),
     readJoined(INVESTMENT_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8"),
     readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
     readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/BuilderWorkspace.tsx", import.meta.url), "utf8"),
     readJoined(GLOBAL_CSS_CANDIDATES),
+    readFile(new URL("../apple-app/Stratji/StratjiWorkspaceGlassBar.swift", import.meta.url), "utf8"),
+    readFile(new URL("../apple-app/Outline/DashboardOutline.swift", import.meta.url), "utf8"),
   ]);
 
   assert.match(sharedUi, /export function WorkspaceSectionNav/);
-  assert.match(sharedUi, /role="tablist"/);
-  assert.match(sharedUi, /role="tab"/);
-  assert.match(sharedUi, /aria-selected=\{selected\}/);
-  assert.match(sharedUi, /event\.key === "ArrowLeft"/);
-  assert.match(sharedUi, /event\.key === "Enter" \|\| event\.key === " "/);
-  assert.match(globalCss, /\.workspace-section-nav button span[\s\S]*color:#72aaff/);
-  assert.match(globalCss, /\.workspace-section-nav button\.active[\s\S]*background:#182534/);
+  assert.match(sharedUi, /compact = false/);
+  assert.match(sharedUi, /className=\{`workspace-section-nav\$\{compact \? " glass-sections" : ""\}`\}/);
+  assert.match(sharedUi, /workspace-glass-cluster/);
+  assert.match(sharedUi, /workspace-droplet/);
+  assert.match(sharedUi, /data-glyph-only=\{expanded \? "0" : "1"\}/);
+  assert.match(sharedUi, /const WorkspaceIcon = workspace\.icon/);
+  assert.match(sharedUi, /expanded \? <b>\{workspace\.barLabel\}<\/b> : null/);
+  assert.match(globalCss, /button\[data-glyph-only="1"\] > b/);
+  assert.match(globalCss, /button\[data-glyph-only="1"\] > svg/);
+  assert.match(globalCss, /560ms cubic-bezier\(0\.16, 1, 0\.3, 1\)/);
+  assert.doesNotMatch(globalCss, /max-width:38rem/);
+  assert.doesNotMatch(globalCss, /min-width:min\(640px/);
+  assert.match(sharedUi, /aria-pressed=\{selected\}/);
+  assert.match(sharedUi, /data-section-chip=\{section\.id\}/);
+  assert.match(sharedUi, /WORKSPACE_SECTIONS\[workspace\.key\]/);
+  assert.match(routing, /export const WORKSPACE_SECTIONS/);
+  assert.match(routing, /workspaceSectionLabel/);
+  assert.match(globalCss, /\.workspace-section-nav button span[\s\S]*color:var\(--blue\)/);
+  assert.match(globalCss, /\.workspace-section-nav button\.active[\s\S]*background:var\(--bg-hover\)/);
   assert.match(globalCss, /\.workspace-section-nav button:focus-visible/);
+  assert.match(globalCss, /\.workspace-navigation \.workspace-section-nav\.glass-sections/);
 
   for (const [source, label, sections] of [
     [investment, "Investment sections", [
@@ -784,47 +987,62 @@ test("all four workspaces share consistent cyan section navigation bars", async 
     [sectors, "Sectoral Analytics sections", [
       ['s1', "Action Board"],
       ['s2', "Industry Analytics"],
-      ['s3', "Benchmarks & Decision Lab"],
+      ['s3', "Decision Framework"],
     ]],
     [intelligence, "Market Intelligence sections", [
       ['m1', "Action Board"],
-      ['m2', "Live Intelligence"],
+      ['m2', "Satya"],
       ['m3', "Earnings Calendar"],
-      ['m4', "Calendar + Reminders"],
     ]],
-    [health, "Health & Wellness sections", [
+    [health, "My Feed sections", [
       ['h1', "Action Board"],
       ['h2', "Daily Optimism"],
       ['h3', "Vital Metrics"],
+      ['h4', "Calendar + Reminders"],
     ]],
     [strategies, "Strategies sections", [
       ['y1', "Action Board"],
       ['y2', "Library"],
     ]],
   ]) {
-    assert.match(source, new RegExp(`<WorkspaceSectionNav[\\s\\S]*label="${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(routing, new RegExp(`return "${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.doesNotMatch(source, /<WorkspaceSectionNav/);
     for (const [id, title] of sections) {
       assert.match(source, new RegExp(`\\{ id: "${id}", label: "${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" \\}`));
+      assert.match(routing, new RegExp(`id: "${id}", label: "${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     }
   }
+  assert.doesNotMatch(builder, /<WorkspaceSectionNav/);
+  assert.match(builder, /\{ id: "board", label: "Action Board"/);
+  assert.match(routing, /id: "board", label: "Action Board"/);
 
   assert.match(investment, /id="investment-i1"/);
   assert.match(investment, /id="investment-i4"/);
   assert.match(sectors, /id="sector-s1"/);
   assert.match(sectors, /id="sector-s3"/);
   assert.match(intelligence, /id="intelligence-m1"/);
-  assert.match(intelligence, /id="intelligence-m4"/);
+  assert.match(intelligence, /id="intelligence-m3"/);
+  assert.doesNotMatch(intelligence, /id="intelligence-m4"/);
   assert.match(health, /id="health-h1"/);
   assert.match(health, /id="health-h2"/);
   assert.match(health, /id="health-h3"/);
+  assert.match(health, /id="health-h4"/);
   assert.match(strategies, /id="strategies-y1"/);
   assert.match(strategies, /id="strategies-y2"/);
   assert.match(health, /searchParams\.set\("section", "h1"\)/);
-  assert.doesNotMatch(health, /id="health-h4"|\{ id: "h4"|number="H-4"|Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
+  assert.match(health, /number: "H-4"|\{ id: "h4"/);
+  assert.doesNotMatch(health, /Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
   assert.doesNotMatch(sectors, /S-4|s4|EarningsMonthCalendar|sector-intelligence-filter|sector-dimmed/);
   assert.doesNotMatch(health, /health-overview-console|<HealthThumbnail/);
   assert.doesNotMatch(health, /sector-detail-shell|health-detail-shell/);
   assert.match(health, /className="health-workspace-shell"/);
+  assert.match(outline, /static func sectionDestinations\(forView/);
+  assert.match(glassBar, /DashboardOutline\.sectionDestinations\(forView: workspace\.rawValue\)/);
+  assert.match(glassBar, /let expanded = clusterWorkspace == workspace/);
+  assert.doesNotMatch(glassBar, /pillWorkspace/);
+  assert.match(glassBar, /accessibilityIdentifier\("workspace-section-tab-/);
+  assert.match(glassBar, /sectionDroplet/);
+  assert.doesNotMatch(glassBar, /hideDelay|hoverRevealStripHeight/);
 });
 
 test("sector market route uses yfinance live quotes without creating a Kite session", async () => {
@@ -949,8 +1167,8 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /role="tablist"/);
   assert.match(page, /event\.key === "Home"/);
   assert.match(page, /event\.key === "End"/);
-  assert.match(page, /searchParams\.set\("view", next\)/);
-  assert.match(page, /addEventListener\("popstate"/);
+  assert.match(page, /applyWorkspaceSectionParams\(url, next/);
+  assert.match(page, /listenToStratjiLocation\(fromUrl\)/);
   assert.match(page, /tabList\.scrollLeft = Math\.max/);
   assert.match(page, /window\.dispatchEvent\(new Event\("resize"\)\)/);
   assert.match(page, /loadSectorMarket/);
@@ -958,13 +1176,12 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /visibilitychange/);
   assert.doesNotMatch(page, /addEventListener\("focus"/);
   assert.doesNotMatch(page, /addEventListener\("online"/);
-  assert.match(page, /items=\{visibleNewsletters\}/);
-  assert.match(page, /items=\{visibleAxis\}/);
-  assert.match(page, /visiblePodcasts\.map|podcasts\.map/);
-  assert.match(page, /SenderDigestGroups/);
+  assert.doesNotMatch(page, /NewsletterFamilyGroups/);
+  assert.doesNotMatch(page, /SenderDigestGroups/);
+  assert.match(page, /groupNewsletterItems/);
   assert.match(page, /groupDigestItems/);
   assert.match(page, /axisTopicFromTitle|topicGroup/);
-  assert.match(page, /Open in Mail|Open in Podcasts|Open PDF/);
+  assert.match(page, /Open in Mail|Open episode|Open PDF/);
   assert.match(globalCss, /\.sender-group\s*\{/);
   assert.match(globalCss, /background:color-mix\(in srgb,var\(--sender-color\) 14%, var\(--bg-panel\)\)/);
   assert.doesNotMatch(globalCss, /background:color-mix\(in srgb,var\(--sender-color\) 30%,transparent\)/);
@@ -1020,9 +1237,10 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /number="S-3"/);
   assert.match(page, /value === "market-intelligence"/);
   assert.match(page, /number="M-1" title="Action Board"/);
-  assert.match(page, /number="M-2" title="Live Intelligence"/);
+  assert.match(page, /number="M-2" title="Satya"/);
   assert.match(page, /number="M-3" title="Earnings Calendar"/);
-  assert.match(page, /number="M-4" title="Calendar \+ Reminders"/);
+  assert.doesNotMatch(page, /number="M-4" title="Calendar \+ Reminders"/);
+  assert.match(page, /number="H-4" title="Calendar \+ Reminders"/);
   assert.match(page, /workspace="intelligence"/);
   assert.match(page, /number="S-1" title="Sectoral action board"/);
   assert.match(page, /number="H-1" title="Health action board"/);
@@ -1072,7 +1290,6 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(page, /event\.kpis\.find\(\(item\) => item\.label === label\)/);
   assert.match(page, /digest-panel-span/);
   assert.match(page, /digest-summary-bullets/);
-  assert.match(page, /digestItemBullets/);
   assert.match(page, /earningsEventBullets/);
   assert.match(page, /showItemSummaries/);
   assert.match(globalCss, /digest-summary-bullets/);
@@ -1099,18 +1316,26 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /digest-panel-podcasts/);
   assert.match(globalCss, /topic-feed-check/);
   assert.match(page, /topic-feed-completed[\s\S]*?topic-feed-scheduled[\s\S]*?topic-feed-work/);
-  // Market Intelligence M-2 order: Interrogate LLM (full width) → Newsletters | Axis → Podcasts; M-4 Calendar + action feeds
-  assert.match(page, /Interrogate LLM[\s\S]*?Newsletter digest[\s\S]*?Axis Research[\s\S]*?digest-panel-podcasts[\s\S]*?digest-panel-span/);
+  // Market Intelligence M-2 is Satya only (no digest wall); My Feed H-4 Calendar + action feeds
+  assert.match(page, /<SatyaBriefingRoom/);
+  assert.match(page, /digest-panel-span/);
+  assert.doesNotMatch(page, /<h3>Newsletter digest<\/h3>[\s\S]*?<h3>Axis Research<\/h3>[\s\S]*?digest-panel-podcasts/);
+  assert.match(page, /Axis Mutual Fund[\s\S]*Groww Digest[\s\S]*Flipboard Tech Briefing/);
+  assert.doesNotMatch(page, /number="M-5"|id: "m5"/);
   assert.doesNotMatch(page, /LLM intelligence draft/i);
   assert.doesNotMatch(page, /LLM framework draft/i);
   assert.doesNotMatch(page, /LLM composite commentary/i);
   assert.doesNotMatch(page, /LLM earnings narrative/i);
   assert.doesNotMatch(page, /LLM strategy assist/i);
-  assert.match(page, /task="industry"/);
+  assert.doesNotMatch(page, /Interrogate LLM/);
+  assert.match(page, /useSatyaTaskContext\("investment"/);
+  assert.match(page, /useSatyaTaskContext\("strategies"/);
+  assert.match(page, /task: "industry"/);
   assert.match(page, /industryAnalyticsSuggestions/);
   assert.match(page, /llm-assist-span/);
-  assert.match(page, /Newsletters \+ Axis Research \+ Podcast Transcript Summaries, as Source of Truth/);
-  assert.match(page, /digest-panel-podcasts/);
+  assert.match(page, /Newsletters \+ Axis Research \+ Axis PDFs \+ Podcast Transcript Summaries \+ verified earnings KPIs, as Source of Truth/);
+  assert.doesNotMatch(page, /<h3>Newsletter digest<\/h3>/);
+  assert.doesNotMatch(page, /<h3>Podcast summaries<\/h3>/);
   assert.match(page, /window\.localStorage\.setItem\(storageKey/);
   assert.match(page, /function CollapsibleSection/);
   assert.match(page, /aria-expanded=\{open\}/);
@@ -1229,7 +1454,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /className="kanban-board canonical-action-board"/);
   assert.match(page, /<DailyKanbanBoard workspace="investment"\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="sectors"\/>/);
-  assert.match(page, /<DailyKanbanBoard workspace="intelligence"\/>/);
+  assert.match(page, /<DailyKanbanBoard workspace="intelligence" items=\{intelligenceActions\}\s*\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="health"\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="strategies"\/>/);
   assert.doesNotMatch(page, /<DailyKanbanBoard[^>]+(?:lane|compact)=/);
@@ -1328,8 +1553,22 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.doesNotMatch(contentServer, /\[newsletters, axisResearch, podcasts, reminders, calendar, healthNote\] = await Promise\.all/);
   assert.match(contentServer, /NEWSLETTER_DIGEST_LIMIT = 500/);
   assert.match(contentServer, /NEWSLETTER_BODY_BUDGET_MS/);
+  assert.match(contentServer, /NEWSLETTER_CONTENT_CHARS/);
   assert.match(contentServer, /readNewsletterListing/);
   assert.match(contentServer, /readNewsletterBodies/);
+  {
+    const newsletterStart = contentServer.indexOf("const newsletterMailboxHelpers");
+    const axisStart = contentServer.indexOf("const axisMailboxHelpers");
+    const newsletterBlock = contentServer.slice(newsletterStart, axisStart);
+    assert.ok(newsletterStart >= 0 && axisStart > newsletterStart, "newsletter JXA scripts must precede Axis scripts");
+    assert.match(newsletterBlock, /mailMessageIdHelper/);
+    assert.match(newsletterBlock, /message\.content\(\)/);
+    assert.doesNotMatch(newsletterBlock, /mailLinkHelpers/);
+    assert.doesNotMatch(newsletterBlock, /mailReportLinks/);
+    assert.doesNotMatch(newsletterBlock, /mailAttachmentNames/);
+    assert.doesNotMatch(newsletterBlock, /message\.source\(\)/);
+    assert.match(contentServer.slice(axisStart), /mailReportLinks\(message\)/);
+  }
   assert.match(contentServer, /displayedCount: newsletterValue\.items\.length/);
   assert.match(contentServer, /message\.properties\(\)/);
   assert.match(contentServer, /refreshSource\("podcasts", "Apple Podcasts", readPodcasts\)/);
@@ -1358,7 +1597,6 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /partitionReminderSmartGroups/);
   assert.match(page, /scheduledImportantReminders/);
   assert.match(page, /workJobReminders/);
-  assert.match(page, /content bullets from mail body only/);
   assert.match(page, /Calendar and Reminders show title\/meta without 5-bullet padding/);
   assert.match(contentServer, /\/reminders\/complete/);
   assert.match(contentServer, /completeReminderViaEventKit/);
@@ -1451,14 +1689,17 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.doesNotMatch(healthWorkspace, /\{ id: "guidance", label: "Guidance" \}/);
     assert.doesNotMatch(healthWorkspace, /\{ id: "guardrails", label: "Guardrails" \}/);
     assert.match(healthWorkspace, /HEALTH_TOP_SECTIONS/);
-    assert.match(healthWorkspace, /<WorkspaceSectionNav[\s\S]*label="Health & Wellness sections"/);
     assert.match(healthWorkspace, /HealthWorkspaceSection = "h2" \| "h3"/);
     assert.match(healthWorkspace, /number="H-1" title="Health action board"/);
     assert.match(healthWorkspace, /healthRouteFromUrl/);
     assert.match(healthWorkspace, /health-workspace-shell/);
     assert.doesNotMatch(healthWorkspace, /health-overview-console/);
     assert.doesNotMatch(healthWorkspace, /<HealthThumbnail/);
-    assert.doesNotMatch(healthWorkspace, /Health Status|Daily Guidance|number="H-4"|HealthStatusOverview|HealthStatusWorkbench|id="health-h4"|\{ id: "h4"/);
+    assert.doesNotMatch(healthWorkspace, /Health Status|Daily Guidance|HealthStatusOverview|HealthStatusWorkbench/);
+    assert.match(healthWorkspace, /number="H-4" title="Calendar \+ Reminders"/);
+    assert.match(healthWorkspace, /id="health-h4"/);
+    assert.match(healthWorkspace, /\{ id: "h4", label: "Calendar \+ Reminders" \}/);
+    assert.match(healthWorkspace, /view="calendar-reminders"/);
     assert.doesNotMatch(healthWorkspace, /Health Daily|sector-detail-shell|health-detail-shell/);
     assert.match(healthWorkspace, /number="H-2" title="Daily Optimism"/);
     assert.match(healthWorkspace, /number="H-3" title="Vital Metrics"/);
@@ -1482,6 +1723,9 @@ test("server-renders the print report and keeps controls interactive", async () 
     assert.match(utilsSource, /Exclude<HealthDirectionBucket, "unavailable">/);
     assert.doesNotMatch(utilsSource, /title: "Average unavailable"/);
     assert.match(globalCss, /\.viewport-console-active body\{overflow:hidden\}/);
+    assert.match(globalCss, /\.health-workspace-shell\[data-focus-section\]\s*>\s*\.workspace-section\.health-full-section:not\(\[hidden\]\)\s*\{[^}]*overflow-y:\s*auto/s);
+    assert.match(globalCss, /\.health-console-active #dashboard-workspace-panel[\s\S]*?overflow-y:\s*auto/);
+    assert.match(globalCss, /\.health-direction-grid\s*\{[^}]*overflow:\s*visible/s);
     assert.match(globalCss, /\.sector-overview-grid\.sector-overview-trio/);
     assert.match(globalCss, /Typography floor: body UI/);
   }
@@ -1654,7 +1898,7 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(globalCss, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(globalCss, /\.workspace-navigation\s*\{/);
   assert.match(globalCss, /position:\s*sticky/);
-  assert.match(globalCss, /\.workspace-tabs\s*\{[^}]*grid-template-columns:repeat\(var\(--glass-count\)/);
+  assert.match(globalCss, /\.workspace-tabs\s*\{[^}]*display:\s*flex/);
   assert.match(globalCss, /\.workspace-tabs::after/);
   assert.match(globalCss, /\.workspace-tabs::before/);
   assert.match(globalCss, /--glass-count:6/);
@@ -1717,13 +1961,15 @@ test("native iPhone shell exposes complete workspace, freshness, pairing and off
 });
 
 test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", async () => {
-  const [sharedUi, page, layout, globalCss, visualCss, hoverPopCss] = await Promise.all([
+  const [sharedUi, page, layout, globalCss, visualCss, hoverPopCss, satyaCss, nativeChromeCssFile] = await Promise.all([
     readFile(new URL("../app/dashboard/shared-ui.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readJoined(GLOBAL_CSS_CANDIDATES),
     readJoined(VISUAL_CSS_CANDIDATES),
     readFile(new URL("../app/dashboard/hover-pop.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/native-chrome.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(sharedUi, /export function AppearanceToggle/);
@@ -1746,11 +1992,44 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.doesNotMatch(globalCss, /\*\s*\{\s*box-sizing:border-box;\s*border-radius:\s*0\s*!important/);
   assert.match(globalCss, /html\[data-appearance="dark"\]/);
   assert.match(globalCss, /html\[data-appearance="sepia"\]/);
+  assert.match(globalCss, /html\[data-appearance="black"\][\s\S]{0,900}--ink:#ffffff/);
+  assert.match(globalCss, /html\[data-appearance="black"\][\s\S]{0,900}--bg-page:#000000/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed body[\s\S]{0,220}background:var\(--bg-page\)/);
+  assert.match(nativeChromeCssFile, /html\.native-chrome-embed body[\s\S]{0,280}color:var\(--ink\)/);
   assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--bg-page:#0d1117/);
   assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--btn-bg:#000000/);
+  assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--ink:#e6edf3/);
+  assert.match(globalCss, /html\[data-appearance="dark"\][\s\S]*--btn-fg:#ffffff/);
+  assert.match(globalCss, /html\[data-appearance="black"\][\s\S]*--bg:var\(--bg-page\)/);
+  assert.match(globalCss, /html\[data-appearance="black"\][\s\S]*--border:var\(--line\)/);
   assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--bg-page:#faf7f2/);
-  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-bg:#1a140f/);
-  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-fg:#faf6ee/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-bg:#f3ebe0/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-fg:#000000/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-border:#b9a588/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--bg-control:#f3ebe0/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--bg:var\(--bg-page\)/);
+  assert.doesNotMatch(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-bg:#1a140f/);
+  assert.doesNotMatch(globalCss, /html\[data-appearance="sepia"\][\s\S]*--btn-fg:#faf6ee/);
+  assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*color-scheme:\s*light/);
+  assert.match(globalCss, /\.workspace-tabs button[\s\S]*color:color-mix\(in srgb, var\(--ink\)/);
+  assert.match(globalCss, /\.digest-show-all\{[^}]*color:var\(--btn-fg\)/);
+  assert.match(globalCss, /\.workspace-section-nav,[\s\S]*?background:var\(--line\)/);
+  assert.match(globalCss, /\.workspace-section-nav button,[\s\S]*?background:var\(--bg-panel\)/);
+  assert.match(globalCss, /\.pill\.neutral\{[^}]*background:var\(--chip-bg\)/);
+  assert.match(globalCss, /\.pill\.blue\{[^}]*background:color-mix\(in srgb, var\(--blue\)/);
+  assert.doesNotMatch(globalCss, /\.pill\.neutral\{[^}]*background:#171c22/);
+  assert.match(globalCss, /\.health-kpi-tile \{[^}]*background:var\(--bg-panel\)/);
+  assert.match(globalCss, /\.section-heading>span:first-child \{[^}]*background:var\(--btn-bg\)/);
+  assert.match(satyaCss, /\.satya-ptt[\s\S]*background:\s*var\(--btn-bg\)/);
+  assert.match(satyaCss, /\.satya-send[\s\S]*color:\s*var\(--satya-accent-fg/);
+  assert.match(satyaCss, /\.satya-chats/);
+  assert.match(satyaCss, /\.satya-popup/);
+  assert.match(satyaCss, /\.satya-axis-chip[\s\S]*background:\s*var\(--btn-bg\)/);
+  assert.match(satyaCss, /html\[data-appearance="dark"\] \.satya-companion/);
+  assert.match(satyaCss, /html\[data-appearance="sepia"\] \.satya-companion/);
+  assert.match(visualCss, /Last-wins paper buttons/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.satya-ptt/);
+  assert.match(visualCss, /html\[data-appearance="sepia"\] \.holding-ticker-actions button/);
   assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--ink:#000000/);
   assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--muted:#000000/);
   assert.match(globalCss, /html\[data-appearance="sepia"\][\s\S]*--navy:#000000/);
@@ -1816,7 +2095,12 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table:hover[\s\S]*?transform:\s*none !important/);
   assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody:hover[\s\S]*?transform:\s*none !important/);
   assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody tr:hover \.pill[\s\S]*?transform:\s*none !important/);
-  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table tbody tr \{[\s\S]*?display:\s*grid/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table \{[\s\S]*?display:\s*grid/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table thead,[\s\S]*?display:\s*contents/);
+  assert.match(hoverPopCss, /8\.75rem/);
+  assert.doesNotMatch(hoverPopCss, /minmax\(11rem,\s*max-content\)/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.table-scroll \{[\s\S]*?overflow-x:\s*auto/);
+  assert.match(hoverPopCss, /\.analyst-matrix \.analyst-table \.pill \{[\s\S]*?white-space:\s*normal/);
   assert.match(hoverPopCss, /\.industry-breadth-table tbody tr \{[\s\S]*?display:\s*grid/);
   assert.match(hoverPopCss, /\.axis-pick-group:hover[\s\S]*?transform:\s*none/);
   assert.match(hoverPopCss, /\.axis-category-strip > button:hover[\s\S]*?transform:\s*none/);
@@ -1842,7 +2126,11 @@ test("brutalist appearance themes wire toggle, FOUC, tokens and vo-pop motion", 
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.orbital-planet \.nested-chart-panel[\s\S]*var\(--bg-panel\) !important/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.risk-panel\.threat-flower[\s\S]*var\(--bg-panel\) !important/);
   assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-selector button \{[^}]*min-width:\s*78px/s);
-  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*620px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*420px/s);
+  assert.match(visualCss, /\.risk-panel\.threat-flower\.holdings-stack \.risk-chart \{[^}]*min-height:\s*480px/s);
+  assert.doesNotMatch(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.risk-chart \{[^}]*min-height:\s*620px/s);
+  assert.match(globalCss, /\.sector-company-table table \{[^}]*min-width:\s*0/);
+  assert.doesNotMatch(globalCss, /\.sector-company-table table \{[^}]*min-width:\s*1100px/);
   assert.match(visualCss, /\.risk-panel\.threat-flower:not\(\.holdings-stack\) \.axis-risk-stack/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.macro-workbench\.scenario-weather \.macro-event-tabs button\.active/);
   assert.match(visualCss, /html\[data-appearance="sepia"\] \.lifecycle-panel\.evolution-river \.chart-wrap/);
@@ -1941,7 +2229,7 @@ test("Integrations is Settings chrome, not a seventh DailyKanbanBoard workspace"
   assert.match(page, /DashboardTabs active=\{workspace\}/);
   assert.match(page, /nativeChrome/);
   assert.match(page, /native-chrome/);
-  assert.match(page, /showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
   assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
   assert.match(page, /document\.title = isIntegrationsChrome \? "Settings"/);
   assert.match(page, /if \(isIntegrationsChrome\) return;/);
@@ -1958,11 +2246,12 @@ test("Integrations is Settings chrome, not a seventh DailyKanbanBoard workspace"
   assert.doesNotMatch(globalCss, /\.integrations-chrome-link/);
 });
 
-test("Settings / Integrations chrome omits dashboard masthead, tiles, and freshness strip", async () => {
-  const [html, nativeHtml, stratjiWorkspace] = await Promise.all([
+test("Settings / Integrations chrome omits dashboard masthead and kite banner; freshness stays in Settings", async () => {
+  const [html, nativeHtml, stratjiWorkspace, integrations] = await Promise.all([
     (await render("/?view=integrations")).text(),
     (await render("/?view=integrations&nativeChrome=1")).text(),
     readFile(new URL("../apple-app/Shared/StratjiWorkspace.swift", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/IntegrationsWorkspace.tsx", import.meta.url), "utf8"),
   ]);
   for (const body of [html, nativeHtml]) {
     assert.match(body, /data-chrome-page="integrations"/);
@@ -1980,6 +2269,8 @@ test("Settings / Integrations chrome omits dashboard masthead, tiles, and freshn
     assert.match(body, /Dashboard appearance/);
     assert.match(body, /Health incognito/);
   }
+  assert.match(integrations, /id="integrations-freshness-heading">Source freshness/);
+  assert.match(integrations, /<PulseConstellation sources=\{freshness\} \/>/);
   assert.match(html, /Back to dashboard/);
   assert.doesNotMatch(nativeHtml, /Back to dashboard/);
   assert.match(stratjiWorkspace, /view: "integrations", nativeChrome: true/);

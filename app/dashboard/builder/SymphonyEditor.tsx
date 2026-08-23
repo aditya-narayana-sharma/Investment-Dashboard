@@ -30,9 +30,10 @@ import { createSeedTree } from "../../strategy/seed-tree";
 import { validateStrategyGraph } from "../../strategy/validate";
 import { STRATEGIES_LIVE_PATH } from "../../strategy/persist";
 import type { TreeLivePreview } from "../../strategy/tree-live";
-import { LlmAssistPanel } from "../LlmAssistPanel";
+import { useSatyaTaskContext } from "../satya-workspace";
 import { AlgorithmBuilder } from "./AlgorithmBuilder";
 import { BuilderLibraryActions } from "./BuilderLibraryActions";
+import { EquityCurve } from "./EquityCurve";
 import { TreeBrokerConfirm, type TreeBrokerDraft } from "./TreeBrokerConfirm";
 import { KpiRegistryPanel } from "./KpiRegistryPanel";
 import { TreeCanvas } from "./TreeCanvas";
@@ -88,31 +89,6 @@ function brokerDisabledReason(live: TreeLivePreview | null, kind: "order" | "gtt
     return "GTT needs a Kite last price on the trigger symbol.";
   }
   return null;
-}
-
-function EquityCurve({ curve }: { curve: Array<{ date: string; equity: number; benchmark?: number }> }) {
-  if (curve.length < 2) return null;
-  const width = 240;
-  const height = 120;
-  const min = Math.min(...curve.map((point) => Math.min(point.equity, point.benchmark ?? point.equity)));
-  const max = Math.max(...curve.map((point) => Math.max(point.equity, point.benchmark ?? point.equity)));
-  const span = max - min || 1;
-  const path = (key: "equity" | "benchmark") => curve
-    .map((point, index) => {
-      const value = key === "equity" ? point.equity : point.benchmark;
-      if (value === undefined) return "";
-      const x = (index / (curve.length - 1)) * width;
-      const y = height - ((value - min) / span) * height;
-      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <svg className="symphony-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Backtest equity curve">
-      <path d={path("benchmark")} fill="none" stroke="#64748b" strokeWidth="1.5" />
-      <path d={path("equity")} fill="none" stroke="#86efac" strokeWidth="2" />
-    </svg>
-  );
 }
 
 export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditorProps = {}) {
@@ -246,6 +222,19 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
     publish(next);
     setSelectedId(null);
   };
+
+  const applyDraftedTree = useCallback((next: StrategyTreeV1) => {
+    applyDocument({ tree: next, graph: compileTreeToGraph(next) });
+  }, [publish]);
+
+  useSatyaTaskContext("builder", {
+    task: "builder",
+    hint: "Draft a StrategyTreeV1 from a prompt. Invalid JSON is rejected and the canvas stays as-is.",
+    context: `Current tree name: ${tree.name}. Interval: ${tree.interval}. Description: ${tree.description ?? ""}.`,
+    placeholder: "e.g. Core-satellite with HDFCBANK quality sleeve and a RELIANCE trend gate",
+    disabled: readOnly,
+    onApplyTree: applyDraftedTree,
+  });
 
   const importDocument = (file: File) => {
     void file.text().then((text) => {
@@ -421,15 +410,6 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
                 <p>Select a block to inspect or delete it.</p>
               )}
             </div>
-            <LlmAssistPanel
-              task="builder"
-              hint="Draft a StrategyTreeV1 from a prompt. Invalid JSON is rejected and the canvas stays as-is."
-              context={`Current tree name: ${tree.name}. Interval: ${tree.interval}. Description: ${tree.description ?? ""}.`}
-              placeholder="e.g. Core-satellite with HDFCBANK quality sleeve and a RELIANCE trend gate"
-              applyLabel="Interrogate LLM"
-              disabled={readOnly}
-              onApplyTree={(next) => applyDocument({ tree: next, graph: compileTreeToGraph(next) })}
-            />
           </aside>
           <aside className="builder-preview" aria-label="Backtest overview">
             <h3>Backtest overview</h3>

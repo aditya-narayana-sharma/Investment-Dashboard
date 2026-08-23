@@ -130,3 +130,71 @@ test("runTreeBacktest equal-weights group baskets to 100% instead of stacking 1x
   assert.equal(result.ran, true);
   assert.ok(result.totalReturnPct !== null && result.totalReturnPct < 60);
 });
+
+function inverseVolTree(lookbackDays = 5) {
+  return {
+    treeVersion: "1",
+    id: "bt-invvol",
+    name: "Inverse vol",
+    interval: "day",
+    children: [
+      {
+        id: "weight-inv",
+        kind: "weight",
+        label: "Inv vol sleeve",
+        params: { method: "inverse_volatility", lookbackDays },
+        children: [
+          { node: { id: "a", kind: "asset", params: { symbol: "AAA" }, children: [] } },
+          { node: { id: "b", kind: "asset", params: { symbol: "BBB" }, children: [] } },
+        ],
+      },
+    ],
+  };
+}
+
+function specifiedTree() {
+  return twoAssetTree();
+}
+
+test("runTreeBacktest inverse_volatility produces weights when lookback bars exist", () => {
+  const volatile = [100, 130, 80, 140, 70, 150, 60, 160, 50, 40];
+  const stable = [100, 101, 100, 101, 100, 101, 100, 101, 100, 101];
+  const result = runTreeBacktest(inverseVolTree(5), {
+    AAA: bars("AAA", volatile),
+    BBB: bars("BBB", stable),
+  });
+  const equal = runTreeBacktest(specifiedTree(), {
+    AAA: bars("AAA", volatile),
+    BBB: bars("BBB", stable),
+  });
+  assert.equal(result.ran, true);
+  assert.equal(result.status, "ran");
+  assert.ok(!result.warnings.some((line) => /not executable/i.test(line)));
+  assert.ok(!result.warnings.some((line) => /lookback bars missing/i.test(line)));
+  assert.ok(result.curve.length >= 2);
+  assert.ok(typeof result.endingEquity === "number");
+  assert.notEqual(result.endingEquity, 100_000);
+  assert.ok(equal.ran);
+  assert.notEqual(result.endingEquity, equal.endingEquity);
+});
+
+test("runTreeBacktest inverse_volatility does not fabricate weights when lookback bars are missing", () => {
+  const result = runTreeBacktest(inverseVolTree(30), {
+    AAA: bars("AAA", [100, 110, 90]),
+    BBB: bars("BBB", [100, 101, 102]),
+  });
+  assert.equal(result.ran, true);
+  assert.ok(!result.warnings.some((line) => /not executable/i.test(line)));
+  assert.ok(result.warnings.some((line) => /lookback/i.test(line)));
+  assert.equal(result.endingEquity, 100_000);
+  assert.equal(result.totalReturnPct, 0);
+});
+
+test("runTreeBacktest inverse_volatility stays unavailable when a required series is missing", () => {
+  const result = runTreeBacktest(inverseVolTree(5), {
+    AAA: bars("AAA", [100, 110, 90, 120, 80, 130, 70, 140]),
+  });
+  assert.equal(result.ran, false);
+  assert.deepEqual(result.curve, []);
+  assert.deepEqual(result.missingSymbols, ["BBB"]);
+});

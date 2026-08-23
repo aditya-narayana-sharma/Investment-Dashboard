@@ -148,14 +148,24 @@ test("bundled dashboard refresh can force Mail Calendar Reminders and Podcasts",
   assert.match(flask, /X-Stratji-Local-Operator/);
   assert.match(flask, /_operator_only_proxy/);
   assert.match(flask, /api\/llm\/complete/);
-  assert.match(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.doesNotMatch(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.doesNotMatch(script, /Health ZIP\\tskipped/);
   assert.match(script, /PORTFOLIO_REFRESH_MODE:-complete/);
   assert.match(script, /--if-changed/);
+  assert.match(script, /run_check_bg kite/);
+  assert.match(script, /run_check_bg content/);
+  assert.match(script, /wait \|\| true/);
+  assert.match(script, /CONTENT_QUERY="force=1&startup=/);
+  assert.match(script, /REFRESH_MODE" == "incremental"[\s\S]*CONTENT_QUERY="refresh=/);
+  assert.match(script, /Health ZIP\\tcomplete\\tvalidate newest iCloud ZIP/);
+  assert.match(script, /Health ZIP\\tincremental\\tre-extract only if the export mtime changed/);
 });
 
 test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains unfiltered", async () => {
   const sectorsWorkspace = await readFile(new URL("../app/dashboard/SectorsWorkspace.tsx", import.meta.url), "utf8");
   const intelligenceWorkspace = await readJoined(INTELLIGENCE_SOURCE_CANDIDATES);
+  const intelligenceShell = await readFile(new URL("../app/dashboard/IntelligenceWorkspace.tsx", import.meta.url), "utf8");
+  const healthWorkspace = await readFile(new URL("../app/dashboard/HealthWorkspace.tsx", import.meta.url), "utf8");
   const analytics = await readFile(new URL("../app/dashboard/SectoralAnalytics.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readJoined(GLOBAL_CSS_CANDIDATES);
@@ -173,9 +183,15 @@ test("S-2 stays local while exclusive Market Intelligence M-3 earnings remains u
   assert.doesNotMatch(intelligenceWorkspace, /calendar-earnings-feed/);
   assert.match(intelligenceWorkspace, /EarningsMonthCalendar/);
   assert.match(intelligenceWorkspace, /number="M-1" title="Action Board"/);
-  assert.match(intelligenceWorkspace, /number="M-2" title="Live Intelligence"/);
+  assert.match(intelligenceWorkspace, /number="M-2" title="Satya"/);
   assert.match(intelligenceWorkspace, /number="M-3" title="Earnings Calendar"/);
-  assert.match(intelligenceWorkspace, /number="M-4" title="Calendar \+ Reminders"/);
+  assert.doesNotMatch(intelligenceShell, /number="M-4"|id: "m4"|id="intelligence-m4"/);
+  assert.doesNotMatch(intelligenceShell, /view="calendar-reminders"|SectorIntelligenceDigest/);
+  assert.doesNotMatch(intelligenceWorkspace, /number="M-4"|id="intelligence-m4"/);
+  assert.match(healthWorkspace, /number: "H-4", title: "Calendar \+ Reminders"/);
+  assert.match(healthWorkspace, /view="calendar-reminders"/);
+  assert.equal((healthWorkspace.match(/view="calendar-reminders"/g) ?? []).length, 1);
+  assert.doesNotMatch(healthWorkspace, /sector-intelligence-filter|sector-dimmed|selectedSectorId/);
   assert.match(intelligenceWorkspace, /workspace="intelligence"/);
   assert.match(sectorsWorkspace, /<SectorDecisionLab[\s\S]*page=\{activePages\.s3 as SectorDecisionPage\}[\s\S]*benchmarks=\{benchmarks\}[\s\S]*marketsBySector=\{sectorMarketById\}[\s\S]*\/>/);
   assert.doesNotMatch(intelligenceWorkspace, /showAllEarnings/);
@@ -398,6 +414,35 @@ test("refresh merge applies only newer successful source payloads", async () => 
   assert.equal(mergeHealthSnapshot(liveHealth, staleHealth).dataDate, "2026-08-16");
   assert.equal(retainHealthOnFailure(liveHealth, "zip failed").status, "stale");
   assert.equal(retainHealthOnFailure(liveHealth, "zip failed").categories[0].metrics.length, 1);
+
+  const fallbackJul16 = {
+    ...liveHealth,
+    status: "stale",
+    dataDate: "2026-07-16",
+    capturedAt: "2026-07-17T03:10:00+05:30",
+    categories: [{
+      name: "Activity",
+      note: "",
+      tone: "green",
+      metrics: [{ id: "steps", label: "Steps", value: "10495", unit: "", tone: "green", context: "Apple Health detail · 16 Jul" }],
+    }],
+  };
+  const xmlAug18 = {
+    ...liveHealth,
+    status: "stale",
+    dataDate: "2026-08-18",
+    capturedAt: "2026-08-20T10:28:29+05:30",
+    categories: [{
+      name: "Activity",
+      note: "",
+      tone: "green",
+      metrics: [{ id: "steps", label: "Steps", value: "1118", unit: "", tone: "green", context: "Apple Health export · 18 Aug 2026" }],
+    }],
+  };
+  const mergedXml = mergeHealthSnapshot(fallbackJul16, xmlAug18);
+  assert.equal(mergedXml.dataDate, "2026-08-18");
+  assert.equal(mergedXml.categories[0].metrics[0].context, "Apple Health export · 18 Aug 2026");
+  assert.equal(mergeHealthSnapshot(liveHealth, xmlAug18).dataDate, "2026-08-18");
 
   const liveSector = { status: "live", sectorId: "pharma", asOf: "2026-08-17T17:40:00.000Z", message: "ok", companies: [{ symbol: "SUNPHARMA", price: 1, previousClose: 1, returns: { day: 0, week: 0, month: 0, quarter: 0 } }] };
   const failedSector = { status: "unavailable", sectorId: "pharma", asOf: "2026-08-17T17:50:00.000Z", message: "down", companies: [] };

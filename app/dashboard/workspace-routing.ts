@@ -38,6 +38,22 @@ export function isStratjiNativeUserAgent(userAgent: string | null | undefined): 
   return /\bStratji\//i.test(userAgent);
 }
 
+/** Mac Stratji.app overlay owns the workspace droplet. iOS and localhost keep the web cluster. */
+export function isStratjiMacOverlayUserAgent(userAgent: string | null | undefined): boolean {
+  if (!userAgent) return false;
+  return /\bStratji\//i.test(userAgent)
+    && /Macintosh/i.test(userAgent)
+    && !/iPhone|iPad|iPod/i.test(userAgent);
+}
+
+export function stratjiMacOverlayOwnsWorkspaceNav(
+  userAgent: string | null | undefined = typeof navigator !== "undefined" ? navigator.userAgent : null,
+): boolean {
+  if (isStratjiMacOverlayUserAgent(userAgent)) return true;
+  if (typeof document === "undefined") return false;
+  return document.documentElement.dataset.nativeOwnsSections === "1";
+}
+
 /** Chrome pages are routed with `?view=` but are not `WorkspaceKey` values and must not mount DailyKanbanBoard. */
 export const CHROME_VIEW_VALUES = ["integrations"] as const;
 export type ChromeView = (typeof CHROME_VIEW_VALUES)[number];
@@ -45,7 +61,7 @@ export type AppView = WorkspaceKey | ChromeView;
 
 export const BUILDER_SECTIONS = ["board", "canvas", "json"] as const;
 export const STRATEGIES_SECTIONS = ["y1", "y2"] as const;
-export const HEALTH_TOP_SECTIONS = ["h1", "h2", "h3"] as const;
+export const HEALTH_TOP_SECTIONS = ["h1", "h2", "h3", "h4"] as const;
 export const HEALTH_H2_PAGES = ["optimism", "insights", "guidance", "guardrails"] as const;
 export const HEALTH_H3_PAGES = ["metrics-overview", "activity", "sleep", "heart", "respiratory", "mobility", "nutrition"] as const;
 
@@ -108,7 +124,7 @@ export function isStrategiesSection(value: string | null | undefined): value is 
   }
 }
 
-/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder, strategy-library → strategies, portfolio / portfolio-overview → investment. Chrome aliases (integrations/settings) are not workspaces and fall through to investment here. */
+/** Canonical `?view=` workspace. Aliases: market-intelligence → intelligence, algorithm-canvas → builder, strategy-library → strategies, feed / my-feed → health, portfolio / portfolio-overview → investment. Chrome aliases (integrations/settings) are not workspaces and fall through to investment here. */
 export function parseWorkspaceView(value: string | null | undefined): WorkspaceKey {
   switch (value) {
     case "investment":
@@ -124,6 +140,9 @@ export function parseWorkspaceView(value: string | null | undefined): WorkspaceK
       return "builder";
     case "strategy-library":
       return "strategies";
+    case "feed":
+    case "my-feed":
+      return "health";
     case "portfolio":
     case "portfolio-overview":
       return "investment";
@@ -164,7 +183,7 @@ export function parseStrategiesSection(value: string | null | undefined): Strate
   }
 }
 
-/** Health H-1 / H-2 / H-3. Aliases: board, optimism, metrics. Legacy Vital Metrics lived at h4. Callers treat a missing section as exclusive H-1. */
+/** Health H-1 / H-2 / H-3 / H-4. Aliases: board, optimism, metrics, calendar / calendar-reminders. Callers treat a missing section as exclusive H-1. */
 export function parseHealthTopSection(value: string | null | undefined): HealthTopSection | null {
   switch (value) {
     case "h1":
@@ -175,8 +194,11 @@ export function parseHealthTopSection(value: string | null | undefined): HealthT
       return "h2";
     case "h3":
     case "metrics":
-    case "h4":
       return "h3";
+    case "h4":
+    case "calendar":
+    case "calendar-reminders":
+      return "h4";
     default:
       return null;
   }
@@ -215,7 +237,7 @@ export function parseHealthH3Page(value: string | null | undefined): HealthH3Pag
 }
 
 export function parseHealthSectionPage(
-  section: Exclude<HealthTopSection, "h1">,
+  section: Exclude<HealthTopSection, "h1" | "h4">,
   value: string | null | undefined,
 ): HealthSectionPage {
   switch (section) {
@@ -256,6 +278,149 @@ export function strategiesSectionNumber(section: StrategiesSection): "Y-1" | "Y-
       return _exhaustive;
     }
   }
+}
+
+/** Compact glass-bar section chips. In-page pill rows must not duplicate these. */
+export type WorkspaceSectionChip = {
+  id: string;
+  label: string;
+  prefix: string;
+};
+
+export const WORKSPACE_SECTIONS: Record<WorkspaceKey, readonly WorkspaceSectionChip[]> = {
+  investment: [
+    { id: "i1", label: "Action Board", prefix: "I-1" },
+    { id: "i2", label: "Portfolio", prefix: "I-2" },
+    { id: "i3", label: "Risk", prefix: "I-3" },
+    { id: "i4", label: "Axis picks", prefix: "I-4" },
+  ],
+  sectors: [
+    { id: "s1", label: "Action Board", prefix: "S-1" },
+    { id: "s2", label: "Industry Analytics", prefix: "S-2" },
+    { id: "s3", label: "Decision Framework", prefix: "S-3" },
+  ],
+  intelligence: [
+    { id: "m1", label: "Action Board", prefix: "M-1" },
+    { id: "m2", label: "Satya", prefix: "M-2" },
+    { id: "m3", label: "Earnings Calendar", prefix: "M-3" },
+  ],
+  health: [
+    { id: "h1", label: "Action Board", prefix: "H-1" },
+    { id: "h2", label: "Daily Optimism", prefix: "H-2" },
+    { id: "h3", label: "Vital Metrics", prefix: "H-3" },
+    { id: "h4", label: "Calendar + Reminders", prefix: "H-4" },
+  ],
+  builder: [
+    { id: "board", label: "Action Board", prefix: "B-1" },
+    { id: "canvas", label: "Canvas", prefix: "B-2" },
+    { id: "json", label: "JSON", prefix: "B-3" },
+  ],
+  strategies: [
+    { id: "y1", label: "Action Board", prefix: "Y-1" },
+    { id: "y2", label: "Library", prefix: "Y-2" },
+  ],
+};
+
+export function defaultSectionForWorkspace(workspace: WorkspaceKey): string {
+  switch (workspace) {
+    case "investment":
+      return "i1";
+    case "sectors":
+      return "s1";
+    case "intelligence":
+      return "m1";
+    case "health":
+      return "h1";
+    case "builder":
+      return "canvas";
+    case "strategies":
+      return "y2";
+    default: {
+      const _exhaustive: never = workspace;
+      return _exhaustive;
+    }
+  }
+}
+
+export function workspaceSectionLabel(workspace: WorkspaceKey): string {
+  switch (workspace) {
+    case "investment":
+      return "Investment sections";
+    case "sectors":
+      return "Sectoral Analytics sections";
+    case "intelligence":
+      return "Market Intelligence sections";
+    case "health":
+      return "My Feed sections";
+    case "builder":
+      return "Algorithm Canvas sections";
+    case "strategies":
+      return "Strategies sections";
+    default: {
+      const _exhaustive: never = workspace;
+      return _exhaustive;
+    }
+  }
+}
+
+function sectionIdAllowed(workspace: WorkspaceKey, sectionId: string): boolean {
+  return WORKSPACE_SECTIONS[workspace].some((section) => section.id === sectionId);
+}
+
+/** Canonical section for a workspace, including builder/strategies/health aliases. */
+export function parseWorkspaceSection(workspace: WorkspaceKey, value: string | null | undefined): string {
+  switch (workspace) {
+    case "builder":
+      return parseBuilderSection(value);
+    case "strategies":
+      return parseStrategiesSection(value);
+    case "health":
+      return parseHealthTopSection(value) ?? defaultSectionForWorkspace(workspace);
+    case "investment":
+    case "sectors":
+    case "intelligence":
+      if (value && sectionIdAllowed(workspace, value)) return value;
+      return defaultSectionForWorkspace(workspace);
+    default: {
+      const _exhaustive: never = workspace;
+      return _exhaustive;
+    }
+  }
+}
+
+/** True when the current `?view=` (aliases included) is this workspace. Foreign leftover `section=` must not drive a hidden sibling. */
+export function isLocationView(workspace: WorkspaceKey, search?: string | URLSearchParams | null): boolean {
+  if (search instanceof URLSearchParams) return parseWorkspaceView(search.get("view")) === workspace;
+  if (typeof search === "string") {
+    const query = search.startsWith("?") ? search.slice(1) : search;
+    return parseWorkspaceView(new URLSearchParams(query).get("view")) === workspace;
+  }
+  if (typeof window === "undefined") return false;
+  return parseWorkspaceView(new URLSearchParams(window.location.search).get("view")) === workspace;
+}
+
+/** Write view/section/page query items for a workspace section chip. */
+export function applyWorkspaceSectionParams(url: URL, workspace: WorkspaceKey, sectionId: string): string {
+  const section = parseWorkspaceSection(workspace, sectionId);
+  url.searchParams.set("view", workspace);
+  url.searchParams.set("section", section);
+  switch (workspace) {
+    case "sectors":
+      if (section === "s2") url.searchParams.set("page", "pulse");
+      else if (section === "s3") url.searchParams.set("page", "benchmarks");
+      else url.searchParams.delete("page");
+      break;
+    case "health":
+      if (section === "h2") url.searchParams.set("page", "optimism");
+      else if (section === "h3") url.searchParams.set("page", "metrics-overview");
+      else url.searchParams.delete("page");
+      break;
+    default:
+      url.searchParams.delete("page");
+      break;
+  }
+  if (workspace !== "builder") url.searchParams.delete("tree");
+  return section;
 }
 
 function firstQueryValue(value: string | string[] | null | undefined): string | null {
@@ -333,7 +498,21 @@ export function applyCanonicalAppUrl(url: URL): { appView: AppView; rewritten: b
     url.searchParams.set("section", "y2");
     rewritten = true;
   }
+  if (view === "intelligence") {
+    const section = url.searchParams.get("section");
+    if (section === "m4" || section === "calendar" || section === "calendar-reminders") {
+      url.searchParams.set("view", "health");
+      url.searchParams.set("section", "h4");
+      rewritten = true;
+      return { appView: "health", rewritten };
+    }
+  }
   if (view === "health") {
+    const section = url.searchParams.get("section");
+    if (section === "calendar" || section === "calendar-reminders") {
+      url.searchParams.set("section", "h4");
+      rewritten = true;
+    }
     const page = url.searchParams.get("page");
     if (page === "nutrition-1" || page === "nutrition-2") {
       url.searchParams.set("page", "nutrition");

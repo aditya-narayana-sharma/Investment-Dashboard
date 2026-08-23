@@ -118,6 +118,12 @@ enum DashboardOutline {
         strategies,
     ]
 
+    /// Top-level section chips for the native glass droplet. Nested pages are not chips.
+    static func sectionDestinations(forView rawView: String) -> [DashboardDestination] {
+        let view = canonicalView(rawView)
+        return workspaces.first(where: { $0.view == view })?.children ?? []
+    }
+
     static var defaultDestination: DashboardDestination { investment.clickTarget }
 
     static func destination(id: String) -> DashboardDestination? {
@@ -133,7 +139,7 @@ enum DashboardOutline {
     }
 
     static func workspaceID(containing id: String) -> String? {
-        var current: DashboardDestination? = lookup[id]
+        var current: DashboardDestination? = destination(id: id)
         while let node = current {
             if workspaces.contains(where: { $0.id == node.id }) {
                 return node.id
@@ -145,7 +151,7 @@ enum DashboardOutline {
 
     static func expansionIDs(forSelected id: String) -> Set<String> {
         var ids: Set<String> = []
-        var currentID: String? = id
+        var currentID: String? = canonicalDestinationID(id)
         while let nodeID = currentID {
             if let parent = parent(of: nodeID) {
                 ids.insert(parent.id)
@@ -167,9 +173,13 @@ enum DashboardOutline {
         func value(_ name: String) -> String? {
             items.first(where: { $0.name == name })?.value
         }
-        let view = canonicalView(value("view"))
+        var view = canonicalView(value("view"))
         guard workspaces.contains(where: { $0.view == view }) else { return nil }
-        let section = canonicalSection(view: view, section: value("section"))
+        var section = canonicalSection(view: view, section: value("section"))
+        if view == "intelligence", let currentSection = section, ["m4", "calendar", "calendar-reminders"].contains(currentSection) {
+            view = "health"
+            section = "h4"
+        }
         let page = canonicalPage(view: view, page: value("page"))
         let focus = value("focus")
 
@@ -210,6 +220,8 @@ enum DashboardOutline {
             return "builder"
         case "strategy-library":
             return "strategies"
+        case "feed", "my-feed":
+            return "health"
         case "portfolio", "portfolio-overview":
             return "investment"
         default:
@@ -230,6 +242,13 @@ enum DashboardOutline {
                 return "y1"
             case "library":
                 return "y2"
+            default:
+                return section
+            }
+        case "health":
+            switch section {
+            case "calendar", "calendar-reminders":
+                return "h4"
             default:
                 return section
             }
@@ -265,6 +284,8 @@ enum DashboardOutline {
             return "health/h3"
         case "health/h3/nutrition-1", "health/h3/nutrition-2":
             return "health/h3/nutrition"
+        case "intelligence/m4":
+            return "health/h4"
         default:
             return id
         }
@@ -313,7 +334,7 @@ private extension DashboardOutline {
             leaf("investment/i1", "Action Board", view: "investment", section: "i1", image: "checklist"),
             leaf("investment/i2", "Portfolio", view: "investment", section: "i2", image: "chart.bar.fill"),
             leaf("investment/i3", "Risk", view: "investment", section: "i3", image: "shield.lefthalf.filled"),
-            leaf("investment/i4", "Axis / research picks", view: "investment", section: "i4", image: "sparkles"),
+            leaf("investment/i4", "Axis picks", view: "investment", section: "i4", image: "sparkles"),
         ]
     )
 
@@ -342,7 +363,7 @@ private extension DashboardOutline {
             ),
             DashboardDestination(
                 id: "sectors/s3",
-                title: "Benchmarks & Decision Lab",
+                title: "Decision Framework",
                 systemImage: "chart.line.uptrend.xyaxis",
                 view: "sectors",
                 section: "s3",
@@ -365,15 +386,14 @@ private extension DashboardOutline {
         defaultChildID: "intelligence/m1",
         children: [
             leaf("intelligence/m1", "Action Board", view: "intelligence", section: "m1", image: "checklist"),
-            leaf("intelligence/m2", "Live Intelligence", view: "intelligence", section: "m2", image: "dot.radiowaves.up.forward"),
+            leaf("intelligence/m2", "Satya", view: "intelligence", section: "m2", image: "dot.radiowaves.up.forward"),
             leaf("intelligence/m3", "Earnings Calendar", view: "intelligence", section: "m3", image: "calendar"),
-            leaf("intelligence/m4", "Calendar + Reminders", view: "intelligence", section: "m4", image: "bell.fill"),
         ]
     )
 
     static let health = DashboardDestination(
         id: "health",
-        title: "Health & Wellness",
+        title: "My Feed",
         systemImage: "heart.text.square.fill",
         view: "health",
         defaultChildID: "health/h1",
@@ -408,6 +428,7 @@ private extension DashboardOutline {
                     leaf("health/h3/nutrition", "Nutrition", view: "health", section: "h3", page: "nutrition"),
                 ]
             ),
+            leaf("health/h4", "Calendar + Reminders", view: "health", section: "h4", image: "bell.fill"),
         ]
     )
 

@@ -49,6 +49,8 @@ test("parseWorkspaceView maps builder and algorithm-canvas without breaking exis
   assert.equal(parseWorkspaceView("sectors"), "sectors");
   assert.equal(parseWorkspaceView("intelligence"), "intelligence");
   assert.equal(parseWorkspaceView("health"), "health");
+  assert.equal(parseWorkspaceView("feed"), "health");
+  assert.equal(parseWorkspaceView("my-feed"), "health");
   assert.equal(parseWorkspaceView("strategies"), "strategies");
   assert.equal(parseWorkspaceView("strategy-library"), "strategies");
   assert.equal(parseWorkspaceView("market-intelligence"), "intelligence");
@@ -349,4 +351,12 @@ test("palette includes COMPARATOR and canvas keeps click-to-connect handles", as
   assert.match(overlay, /TUTORIAL_STEPS/);
   assert.match(overlay, /Do not show again/);
   assert.match(overlay, /Click an output handle/);
+});
+
+test("inverse volatility sleeves participate in runTreeBacktest instead of skipping", async () => {
+  const source = await readFile(new URL("../app/strategy/tree-backtest.ts", import.meta.url), "utf8");
+  assert.match(source, /function inverseVolatilityWeights/);
+  assert.doesNotMatch(source, /stored but not executable/);
+  const compile = await readFile(new URL("../app/strategy/tree-compile.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(compile, /weight_method_unsupported/);
 });

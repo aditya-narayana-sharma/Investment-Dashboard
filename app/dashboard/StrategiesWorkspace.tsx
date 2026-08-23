@@ -18,12 +18,14 @@ import {
   type LibraryNseStatsCache,
 } from "../strategy/library-nse-stats";
 import type { StrategyTreeV1 } from "../strategy/graph-types";
-import { CollapsibleSection, DailyKanbanBoard, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
-import { LlmAssistPanel } from "./LlmAssistPanel";
+import { CollapsibleSection, DailyKanbanBoard, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
+import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
+import { useSatyaTaskContext } from "./satya-workspace";
 import { ReadOnlyTree } from "./strategies/ReadOnlyTree";
+import { LibraryLab } from "./strategies/LibraryLab";
 import "./strategies/strategies-workspace.css";
 import type { StrategiesSection } from "./types";
-import { parseStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
+import { isLocationView, parseStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
 
 const STRATEGIES_SECTIONS = [
   { id: "y1", label: "Action Board" },
@@ -38,7 +40,8 @@ type OpenStrategy =
 
 function strategiesSectionFromUrl(): StrategiesSection {
   if (typeof window === "undefined") return "y2";
-  return parseStrategiesSection(new URLSearchParams(window.location.search).get("section"));
+  const requested = new URLSearchParams(window.location.search).get("section");
+  return STRATEGIES_SECTIONS.some((section) => section.id === requested) ? parseStrategiesSection(requested) : "y2";
 }
 
 function formatPct(value: number | undefined): string {
@@ -75,7 +78,7 @@ function openInBuilder(id: string) {
   url.searchParams.set("section", "canvas");
   url.searchParams.set("tree", id);
   url.searchParams.delete("page");
-  window.history.pushState({ view: "builder", section: "canvas", tree: id }, "", url);
+  stratjiPushState(url, { view: "builder", section: "canvas", tree: id });
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
@@ -134,6 +137,35 @@ function StrategyDetailDialog({
   const name = open.source === "composer" ? open.card.name : open.item.name;
   const tree = open.source === "composer" ? open.card.tree : open.item.tree;
   const titleId = `strategy-dialog-title-${id}`;
+  const [streakBusy, setStreakBusy] = useState(false);
+  const [streakNote, setStreakNote] = useState<string | null>(null);
+
+  const exportToStreak = useCallback(async () => {
+    setStreakBusy(true);
+    setStreakNote(null);
+    try {
+      const response = await fetch("/api/streak/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tree }),
+      });
+      const payload = await response.json() as { error?: string; placesOrders?: boolean; checklist?: string[] };
+      if (!response.ok) {
+        setStreakNote(payload.error ?? "Streak export failed.");
+        return;
+      }
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setStreakNote(
+        payload.placesOrders === false
+          ? "Copied Streak scanner JSON. Stratji does not place unattended orders."
+          : "Copied Streak scanner JSON.",
+      );
+    } catch (error) {
+      setStreakNote(error instanceof Error ? error.message : "Streak export failed.");
+    } finally {
+      setStreakBusy(false);
+    }
+  }, [tree]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -215,7 +247,16 @@ function StrategyDetailDialog({
           >
             Open in Algorithm Canvas
           </button>
+          <button
+            type="button"
+            className="vo-pop"
+            disabled={streakBusy}
+            onClick={() => { void exportToStreak(); }}
+          >
+            {streakBusy ? "Exporting…" : "Export to Streak"}
+          </button>
         </div>
+        {streakNote ? <p className="strategy-engine-note" role="status">{streakNote}</p> : null}
       </section>
     </div>
   );
@@ -230,6 +271,13 @@ export function StrategiesWorkspace() {
   const sorted = useMemo(
     () => sortComposerStrategies(applyLibraryNseStats(COMPOSER_STRATEGIES, engineCache), sortKey),
     [engineCache, sortKey],
+  );
+  const catalogPicks = useMemo(
+    () => [
+      ...mine.map((item) => ({ id: item.id, name: item.name })),
+      ...sorted.map((card) => ({ id: card.id, name: card.name })),
+    ],
+    [mine, sorted],
   );
   const closeDialog = useCallback(() => setOpen(null), []);
 
@@ -259,41 +307,31 @@ export function StrategiesWorkspace() {
 
   useEffect(() => {
     const sync = () => {
+      if (!isLocationView("strategies")) return;
       const section = strategiesSectionFromUrl();
       setActiveSection(section);
       expandDashboardSection(dashboardSectionNumberFromNavId(section));
     };
     sync();
     const retry = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
+    const stopListening = listenToStratjiLocation(sync);
     return () => {
       window.clearTimeout(retry);
-      window.removeEventListener("popstate", sync);
+      stopListening();
     };
   }, []);
 
-  const selectSection = useCallback((sectionId: string) => {
-    const section = parseStrategiesSection(sectionId);
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", "strategies");
-    url.searchParams.set("section", section);
-    url.searchParams.delete("page");
-    url.searchParams.delete("tree");
-    window.history.pushState({ view: "strategies", section }, "", url);
-    setActiveSection(section);
-    expandDashboardSection(dashboardSectionNumberFromNavId(section));
-  }, []);
+  useSatyaTaskContext("strategies", {
+    task: "strategy",
+    hint: "Machine-drafted notes on the public library. Missing KPIs stay —. Open Algorithm Canvas to edit trees.",
+    context: `${COMPOSER_STRATEGIES.length} NSE ETF trees as-of ${COMPOSER_RESEARCH_AS_OF}. Mine: ${mine.map((item) => item.name).join(", ") || "none"}. Top cards: ${sorted.slice(0, 8).map((card) => card.name).join("; ")}.`,
+    placeholder: "e.g. Compare quality vs momentum sleeves and what to verify on the canvas",
+  });
 
   return (
     <div className="strategies-workspace-shell investment-workspace-shell" data-workspace="strategies" data-active-section={activeSection} data-focus-section={activeSection}>
       <header className="strategies-workspace-chrome">
         <h2>Strategies</h2>
-        <WorkspaceSectionNav
-          label="Strategies sections"
-          sections={STRATEGIES_SECTIONS}
-          activeId={activeSection}
-          onSelect={selectSection}
-        />
       </header>
 
       <div id="strategies-y1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "y1"}>
@@ -304,12 +342,6 @@ export function StrategiesWorkspace() {
 
       <div id="strategies-y2" className="workspace-section" hidden={activeSection !== "y2"}>
         <CollapsibleSection number={strategiesSectionNumber("y2")} title="Library" note="NSE ETF adaptations · complete StrategyTreeV1 · Indian market only · live 128-KPI values open on Algorithm Canvas" defaultOpen={activeSection === "y2"}>
-          <LlmAssistPanel
-            task="strategy"
-            hint="Machine-drafted notes on the public library. Missing KPIs stay —. Open Algorithm Canvas to edit trees."
-            context={`${COMPOSER_STRATEGIES.length} NSE ETF trees as-of ${COMPOSER_RESEARCH_AS_OF}. Mine: ${mine.map((item) => item.name).join(", ") || "none"}. Top cards: ${sorted.slice(0, 8).map((card) => card.name).join("; ")}.`}
-            placeholder="e.g. Compare quality vs momentum sleeves and what to verify on the canvas"
-          />
           {mine.length > 0 && (
             <section className="strategies-mine" aria-label="My library">
               <h3>My library</h3>
@@ -351,6 +383,7 @@ export function StrategiesWorkspace() {
                 >{label}</button>
               ))}
             </div>
+            <LibraryLab catalog={catalogPicks} />
           </div>
           <div className="strategies-gallery" data-testid="strategies-gallery">
             {sorted.map((card) => (

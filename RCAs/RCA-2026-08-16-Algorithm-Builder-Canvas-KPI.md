@@ -2,7 +2,7 @@
 
 **Audit time:** 2026-08-16 11:51–12:00 IST  
 **Scope:** Algorithm Canvas / Algorithm Builder (`?view=builder`, sections `board` | `canvas` | `json`). Focus: canvas + KPI boxes, then comparison to the attached Composer.trade Symphony editor screenshot.  
-**Do not implement** the new editor from this document. Use `Plans/PLAN-2026-08-16-Algorithm-Builder-Symphony-Editor.md` as the implementation plan.
+**Do not implement** the new editor from this document. Use `Plans/PLAN-2026-08-16-Algorithm-Builder-Symphony-Editor.md` as the implementation plan. (RCA lives in `RCAs/`.)
 
 ---
 

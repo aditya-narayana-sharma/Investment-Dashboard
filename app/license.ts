@@ -52,8 +52,8 @@ export const TIER_INCLUDES: Record<LicenseTier, string[]> = {
   ],
   pro: [
     "Everything in Basic",
-    "Market Intelligence M-1–M-4",
-    "Health & Wellness H-1–H-3",
+    "Market Intelligence M-1–M-3",
+    "My Feed H-1–H-4",
     "S-3 Benchmarks & Decision Lab",
     "Investment Brief PDF export",
   ],

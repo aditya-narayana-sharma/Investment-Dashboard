@@ -23,26 +23,31 @@ import {
 import { healthCaveats, type HealthMetric } from "../health-data";
 import { enrichHealthGuidanceActions } from "../health-insights";
 import type { HealthCategorySnapshot, HealthLiveSnapshot } from "../health-live-types";
-import { CollapsibleSection, DailyKanbanBoard, HealthCategoryIcon, HealthMasonryGrid, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection } from "./shared-ui";
+import type { ContentDigestSnapshot } from "../content-types";
+import { SectorIntelligenceDigest } from "./IntelligenceDigest";
+import { CollapsibleSection, DailyKanbanBoard, HealthCategoryIcon, HealthMasonryGrid, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection } from "./shared-ui";
+import { listenToStratjiLocation, stratjiPushState, stratjiReplaceState } from "./stratji-navigate";
 import { compactHealthDate, healthTrendTone } from "./utils";
 import {
   parseHealthH2Page,
   parseHealthH3Page,
   parseHealthSectionPage,
   parseHealthTopSection,
+  isLocationView,
   type HealthH2Page,
   type HealthH3Page,
   type HealthSectionPage,
 } from "./workspace-routing";
 
 export type HealthWorkspaceSection = "h2" | "h3";
-export type HealthTopSection = "h1" | HealthWorkspaceSection;
+export type HealthTopSection = "h1" | "h4" | HealthWorkspaceSection;
 export type { HealthSectionPage };
 
 const HEALTH_TOP_SECTIONS = [
   { id: "h1", label: "Action Board" },
   { id: "h2", label: "Daily Optimism" },
   { id: "h3", label: "Vital Metrics" },
+  { id: "h4", label: "Calendar + Reminders" },
 ] as const;
 
 const LEGACY_STATUS_PAGES = ["summary", "coverage", "archive"] as const;
@@ -65,6 +70,7 @@ const SECTION_PAGES: Record<HealthWorkspaceSection, Array<{ id: HealthSectionPag
 const SECTION_META = {
   h2: { number: "H-2", title: "Daily Optimism", note: "HealthKit guidance plus Health Shortcut / Health Stats evidence and guardrails" },
   h3: { number: "H-3", title: "Vital Metrics", note: "Collapsible direction rows with category-coloured KPIs and weekly/monthly comparisons" },
+  h4: { number: "H-4", title: "Calendar + Reminders", note: "Complete non-earnings calendars and the three-group reminders experience" },
 } as const;
 
 const HEALTH_CATEGORY_PAGE: Record<string, HealthH3Page> = {
@@ -106,7 +112,7 @@ function HealthTrend({
 
 function resolveHealthSection(rawSection: string | null, rawPage: string | null): HealthWorkspaceSection | null {
   const top = parseHealthTopSection(rawSection);
-  if (!top || top === "h1") return null;
+  if (!top || top === "h1" || top === "h4") return null;
   if (top === "h2" && LEGACY_STATUS_PAGES.includes(rawPage as typeof LEGACY_STATUS_PAGES[number])) return null;
   switch (rawPage) {
     case "optimism":
@@ -302,6 +308,8 @@ export function HealthWorkspace({
   healthError: _healthError,
   healthRequiredDate: _healthRequiredDate,
   healthMissingDates,
+  content,
+  mailWindow,
 }: {
   active?: boolean;
   healthIncognito: boolean;
@@ -311,6 +319,8 @@ export function HealthWorkspace({
   healthError: string;
   healthRequiredDate: string;
   healthMissingDates: string[];
+  content: ContentDigestSnapshot;
+  mailWindow: string;
 }) {
   void _healthError;
   void _healthRequiredDate;
@@ -329,6 +339,7 @@ export function HealthWorkspace({
       : "amber";
   useEffect(() => {
     const sync = () => {
+      if (!isLocationView("health")) return;
       const next = healthRouteFromUrl();
       setRoute(next);
       const navId = next.section ?? next.focus;
@@ -336,10 +347,10 @@ export function HealthWorkspace({
     };
     sync();
     const retry = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
+    const stopListening = listenToStratjiLocation(sync);
     return () => {
       window.clearTimeout(retry);
-      window.removeEventListener("popstate", sync);
+      stopListening();
     };
   }, []);
 
@@ -365,7 +376,7 @@ export function HealthWorkspace({
     fit();
     window.addEventListener("resize", fit);
     const layoutObserver = new ResizeObserver(fit);
-    document.querySelectorAll(".masthead, .live-feed-banner, .source-freshness-region, .workspace-navigation").forEach((element) => layoutObserver.observe(element));
+    document.querySelectorAll(".masthead, .live-feed-banner, .workspace-navigation").forEach((element) => layoutObserver.observe(element));
     const mutationObserver = new MutationObserver(() => window.requestAnimationFrame(fit));
     const dashboardRoot = document.querySelector(".dashboard-app");
     if (dashboardRoot) mutationObserver.observe(dashboardRoot, { childList: true, characterData: true, subtree: true });
@@ -383,17 +394,21 @@ export function HealthWorkspace({
     };
   }, [active, route.exclusive, route.page, route.section]);
 
-  const navigate = useCallback((section: HealthWorkspaceSection | null, page?: HealthSectionPage, replace = false) => {
+  const navigate = useCallback((section: HealthWorkspaceSection | "h4" | null, page?: HealthSectionPage, replace = false) => {
     const url = new URL(window.location.href);
     if (!section) {
       url.searchParams.set("section", "h1");
+      url.searchParams.delete("page");
+    } else if (section === "h4") {
+      url.searchParams.set("section", "h4");
       url.searchParams.delete("page");
     } else {
       url.searchParams.set("section", section);
       url.searchParams.set("page", page ?? SECTION_PAGES[section][0]!.id);
     }
     url.searchParams.delete("focus");
-    window.history[replace ? "replaceState" : "pushState"]({}, "", url);
+    if (replace) stratjiReplaceState(url);
+    else stratjiPushState(url);
     setRoute(healthRouteFromUrl());
   }, []);
 
@@ -401,6 +416,11 @@ export function HealthWorkspace({
     const section = sectionId as HealthTopSection;
     if (section === "h1") {
       navigate(null);
+      expandDashboardSection(dashboardSectionNumberFromNavId(section));
+      return;
+    }
+    if (section === "h4") {
+      navigate("h4");
       expandDashboardSection(dashboardSectionNumberFromNavId(section));
       return;
     }
@@ -426,12 +446,6 @@ export function HealthWorkspace({
   const h3ShowsCategory = route.section === "h3" && h3Page !== "metrics-overview";
 
   return <div className="health-workspace-shell" data-focus-section={focusedSection ?? undefined} ref={shellRef} tabIndex={-1} onKeyDown={onKeyDown}>
-    <WorkspaceSectionNav
-      label="Health & Wellness sections"
-      sections={HEALTH_TOP_SECTIONS}
-      activeId={activeTopSection}
-      onSelect={selectTopSection}
-    />
     <div id="health-h1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(focusedSection, "h1")}>
       <CollapsibleSection number="H-1" title="Health action board" note="Clickable daily source, trend and optimisation actions" defaultOpen={focusedSection === "h1"}>
         <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
@@ -462,6 +476,13 @@ export function HealthWorkspace({
           {h3ShowsCategory
             ? <HealthMetricsWorkbench page={h3Page} categories={healthSnapshot.categories} dataDate={healthSnapshot.dataDate} onOpenPage={(page) => navigate("h3", page)}/>
             : <HealthMasonryGrid categories={healthSnapshot.categories} dataDate={healthSnapshot.dataDate}/>}
+        </HealthIncognitoGate>
+      </CollapsibleSection>
+    </div>
+    <div id="health-h4" className="workspace-section health-full-section" hidden={nativeChromeHidesSection(focusedSection, "h4")}>
+      <CollapsibleSection number="H-4" title="Calendar + Reminders" note={healthIncognito ? "Calendar and reminders hidden by Incognito" : SECTION_META.h4.note} defaultOpen={focusedSection === "h4"}>
+        <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
+          <SectorIntelligenceDigest content={content} mailWindow={mailWindow} view="calendar-reminders" />
         </HealthIncognitoGate>
       </CollapsibleSection>
     </div>

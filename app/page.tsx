@@ -32,11 +32,12 @@ import type { MacroBandKey, MacroEventKey, WorkspaceKey } from "./dashboard/type
 import {
   applyCanonicalAppUrl,
   appViewFromPageSearch,
+  applyWorkspaceSectionParams,
   detectNativeChrome,
-  parseBuilderSection,
-  parseStrategiesSection,
+  stratjiMacOverlayOwnsWorkspaceNav,
   type AppView,
 } from "./dashboard/workspace-routing";
+import { listenToStratjiLocation, stratjiPushState, stratjiReplaceState } from "./dashboard/stratji-navigate";
 import {
   analysisWindowLabel,
   buildExposureDrivers,
@@ -48,7 +49,7 @@ import {
   missingHealthDateKeys,
 } from "./dashboard/utils";
 import { DashboardTabs, DemoCaptionBar, type DashboardAppearance } from "./dashboard/shared-ui";
-import { PulseConstellation, resolveSourceWorkspace } from "./dashboard/visual-components";
+import { SatyaPresence } from "./dashboard/SatyaPresence";
 import { InvestmentWorkspace } from "./dashboard/InvestmentWorkspace";
 import { SectorsWorkspace } from "./dashboard/SectorsWorkspace";
 import { IntelligenceWorkspace } from "./dashboard/IntelligenceWorkspace";
@@ -139,6 +140,9 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     locationSearch: typeof window !== "undefined" ? window.location.search : null,
     userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
   });
+  const nativeOwnsWorkspaceNav = stratjiMacOverlayOwnsWorkspaceNav(
+    typeof navigator !== "undefined" ? navigator.userAgent : null,
+  );
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
   const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
@@ -588,18 +592,9 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const selectWorkspace = useCallback((next: WorkspaceKey, historyMode: "push" | "replace" = "push") => {
     setAppView(next);
     const url = new URL(window.location.href);
-    url.searchParams.set("view", next);
-    if (next === "builder") {
-      url.searchParams.set("section", parseBuilderSection(url.searchParams.get("section")));
-      url.searchParams.delete("page");
-    } else if (next === "strategies") {
-      url.searchParams.set("section", parseStrategiesSection(url.searchParams.get("section")));
-      url.searchParams.delete("page");
-      url.searchParams.delete("tree");
-    } else {
-      url.searchParams.delete("section");
-    }
-    window.history[historyMode === "push" ? "pushState" : "replaceState"]({ view: next }, "", url);
+    applyWorkspaceSectionParams(url, next, url.searchParams.get("view") === next ? url.searchParams.get("section") : null);
+    if (historyMode === "push") stratjiPushState(url, { view: next });
+    else stratjiReplaceState(url, { view: next });
   }, []);
 
   const toggleSector = useCallback((sectorId: string) => {
@@ -646,14 +641,14 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         || value === "settings"
         || rewritten
       ) {
-        window.history.replaceState({ view: next }, "", url);
+        stratjiReplaceState(url, { view: next });
       }
     };
     fromUrl();
-    window.addEventListener("popstate", fromUrl);
+    const stopListening = listenToStratjiLocation(fromUrl);
     (window as Window & { __stratjiApplyNativeRoute?: () => void }).__stratjiApplyNativeRoute = fromUrl;
     return () => {
-      window.removeEventListener("popstate", fromUrl);
+      stopListening();
       const holder = window as Window & { __stratjiApplyNativeRoute?: () => void };
       if (holder.__stratjiApplyNativeRoute === fromUrl) delete holder.__stratjiApplyNativeRoute;
     };
@@ -723,13 +718,24 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
 
   useEffect(() => {
     document.documentElement.classList.toggle("native-chrome-embed", nativeChrome);
-    if (nativeChrome) document.documentElement.dataset.nativeChrome = "1";
-    else delete document.documentElement.dataset.nativeChrome;
+    if (nativeChrome) {
+      document.documentElement.dataset.nativeChrome = "1";
+      if (nativeOwnsWorkspaceNav) {
+        document.documentElement.dataset.nativeOwnsSections = "1";
+        delete document.documentElement.dataset.nativeWebNav;
+      } else {
+        document.documentElement.dataset.nativeWebNav = "1";
+      }
+    } else {
+      delete document.documentElement.dataset.nativeChrome;
+      delete document.documentElement.dataset.nativeOwnsSections;
+      delete document.documentElement.dataset.nativeWebNav;
+    }
     return () => {
       document.documentElement.classList.remove("native-chrome-embed");
       delete document.documentElement.dataset.nativeChrome;
     };
-  }, [nativeChrome]);
+  }, [nativeChrome, nativeOwnsWorkspaceNav]);
 
   useEffect(() => {
     document.title = isIntegrationsChrome ? "Settings" : "Portfolio Intelligence";
@@ -787,7 +793,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const pdfLabel = pdfAllowed ? "Generate Report PDF" : "PDF is Pro";
 
   return (
-    <main className={`dashboard-app${demoMode ? " demo-mode" : ""}${nativeChrome ? " native-chrome" : ""}${isIntegrationsChrome ? " chrome-page" : ""}`} data-native-chrome={nativeChrome ? "1" : undefined} data-chrome-page={isIntegrationsChrome ? "integrations" : undefined} data-license-tier={license.tier} data-license-source={license.source}>
+    <main className={`dashboard-app${demoMode ? " demo-mode" : ""}${nativeChrome ? " native-chrome" : ""}${isIntegrationsChrome ? " chrome-page" : ""}`} data-native-chrome={nativeChrome ? "1" : undefined} data-active-workspace={isIntegrationsChrome ? "integrations" : workspace} data-chrome-page={isIntegrationsChrome ? "integrations" : undefined} data-license-tier={license.tier} data-license-source={license.source}>
       {showWorkspaceShell && !nativeChrome && <a className="skip-link" href="#dashboard-workspace-panel">Skip to workspace content</a>}
       {showWorkspaceShell && !nativeChrome && (
       <header className="masthead">
@@ -803,44 +809,33 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         )}
       </header>
       )}
-      {showWorkspaceShell && !nativeChrome && <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status} hideHealth={demoMode} licenseTier={license.tier}/>}
-      {showWorkspaceShell && <section className={`live-feed-banner ${snapshot.status}`}>
-        <div><Activity size={17}/><span><b>{isLive ? "Live Kite Connect data" : isPartial ? "Partial Kite Connect data" : isSnapshot ? "Last validated Kite data" : snapshot.status === "auth_required" ? "Kite authentication required" : "Waiting for live Kite data"}</b><small>{sanitizeKiteStatusNote(snapshot.message)}</small></span></div>
+      {showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status} hideHealth={demoMode} licenseTier={license.tier}/>}
+      {showWorkspaceShell && <section className={`live-feed-banner chrome-actions ${snapshot.status}`} aria-label="Dashboard source actions">
         <div className="live-feed-actions">
           {nativeChrome && showPdfLink && <a className="masthead-pdf" href={pdfHref}><FileText size={15}/> {pdfLabel}</a>}
           {kiteAuthControl === "authenticated"
-            ? <button className="kite-auth-control authenticated" type="button" disabled title={tokenExpiryLabel ? `Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
+            ? <button className="kite-auth-control authenticated icon-only" type="button" disabled aria-label="Kite authenticated" title={tokenExpiryLabel ? `${nearTokenExpiry ? `Re-auth after ~${tokenExpiryLabel}. ` : ""}Kite access token is valid until ~${tokenExpiryLabel} (Zerodha daily ~06:00 IST boundary)` : "Kite access token is valid and the latest refresh succeeded"}><CheckCircle2 size={15}/><span>Kite authenticated</span></button>
             : kiteAuthControl === "partial"
-              ? <button className="kite-auth-control partial" type="button" disabled title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
+              ? <button className="kite-auth-control partial icon-only" type="button" disabled aria-label="Kite partial" title={`Kite session is valid; ${snapshot.unavailableSections?.join(", ") || "one or more portfolio sections"} failed to refresh`}><Activity size={15}/><span>Kite partial</span></button>
               : kiteAuthControl === "cached" && !showAuthAction
-                ? <button className="kite-auth-control unavailable" type="button" disabled title="Showing retained Kite data; a confirmed session still exists for the retained snapshot"><Activity size={15}/><span>Kite cached</span></button>
-                : <a className="kite-auth-control" href={kiteLoginHref(snapshot.authUrl)} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); void openKiteLogin(snapshot.authUrl); }} title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login. Stratji.app opens this in Safari so the dashboard stays put."}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>}
-          {nearTokenExpiry && (kiteAuthControl === "authenticated" || kiteAuthControl === "partial") && tokenExpiryLabel && <em title="Zerodha requires a fresh login each trading day">Re-auth after ~{tokenExpiryLabel}</em>}
+                ? <button className="kite-auth-control unavailable icon-only" type="button" disabled aria-label="Kite cached" title="Showing retained Kite data; a confirmed session still exists for the retained snapshot"><Activity size={15}/><span>Kite cached</span></button>
+                : <a className="kite-auth-control icon-only" href={kiteLoginHref(snapshot.authUrl)} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); void openKiteLogin(snapshot.authUrl); }} aria-label={kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"} title={kiteAuthStatus === "expired" ? "Kite session expired at the daily ~06:00 IST boundary — open Zerodha login" : "Open Zerodha Kite login. Stratji.app opens this in Safari so the dashboard stays put."}><LogIn size={15}/><span>{kiteAuthStatus === "expired" ? "Kite expired — re-auth" : "Authenticate Kite"}</span><ExternalLink size={13}/></a>}
           <button onClick={()=>void refreshAll(true)} disabled={refreshing} title="Refresh Kite, earnings, HealthKit snapshot, Mail, Podcasts and every tracked sector now"><RefreshCw size={15} className={refreshing?"spin":""}/><span>{refreshing?"Refreshing complete dashboard":"Refresh all"}</span></button>
-          <em>On request</em>
         </div>
       </section>}
-      {showWorkspaceShell && sourceFreshness.length > 0 && (
-        <PulseConstellation
-          sources={demoMode ? sourceFreshness.filter((source) => resolveSourceWorkspace(source.source) !== "health") : sourceFreshness}
-          onNavigate={(next) => {
-            if (demoMode && next === "health") return;
-            selectWorkspace(next);
-          }}
-        />
-      )}
 
       {showWorkspaceShell && demoMode && <DemoCaptionBar />}
 
       <section
         id="dashboard-workspace-panel"
         className="workspace-panel"
+        data-active-workspace={isIntegrationsChrome ? "integrations" : workspace}
         role={nativeChrome || isIntegrationsChrome ? "region" : "tabpanel"}
-        aria-labelledby={isIntegrationsChrome ? "integrations-chrome-heading" : nativeChrome ? undefined : `workspace-tab-${workspace}`}
+        aria-labelledby={isIntegrationsChrome ? "integrations-chrome-heading" : `workspace-tab-${workspace}`}
         aria-label={nativeChrome ? "Workspace content" : undefined}
       >
 
-      {isIntegrationsChrome && <IntegrationsWorkspace showDashboardExit={!nativeChrome} />}
+      {isIntegrationsChrome && <IntegrationsWorkspace showDashboardExit={!nativeChrome} sources={sourceFreshness} />}
 
       {showWorkspaceShell && (workspace === "investment" || stayMounted) && (
       <div className="workspace-mount" hidden={workspace !== "investment"} data-workspace="investment">
@@ -900,7 +895,6 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       <IntelligenceWorkspace
         content={content}
         contentError={contentError}
-        mailWindow={mailWindow}
         earningsSnapshot={earningsSnapshot}
         earningsError={earningsError}
         holdings={snapshot.holdings}
@@ -923,9 +917,11 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         healthError={healthError}
         healthRequiredDate={healthRequiredDate}
         healthMissingDates={healthMissingDates}
+        content={content}
+        mailWindow={mailWindow}
       />
         )
-        : <LicenseGate feature="health" license={license} title="Health & Wellness" />}
+        : <LicenseGate feature="health" license={license} title="My Feed" />}
       </div>
       )}
 
@@ -946,6 +942,8 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       )}
 
       </section>
+
+      {showWorkspaceShell && <SatyaPresence variant="companion" workspace={workspace} />}
 
       {isIntegrationsChrome
         ? <footer className="integrations-chrome-footer"><p>Settings / Integrations — Stratji chrome, not a workspace. Secrets stay on this Mac. Writes need confirmation. Live strategy execution is only via Zerodha Streak.</p></footer>

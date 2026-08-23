@@ -23,11 +23,15 @@ final class StratjiAppDelegate: NSObject, NSApplicationDelegate {
     private var inspectorWindow: NSWindow?
     private var session: StratjiSessionModel?
     private let auth = AuthenticationService()
+    private var isStoppingDataPlane = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         StratjiConfiguration.persistRepoRoot()
-        Task { @MainActor in
-            self.finishLaunchingOnMain()
+        Task(priority: .userInitiated) {
+            await FlaskServiceSupervisor.kickoffAtLaunch()
+            await MainActor.run {
+                self.finishLaunchingOnMain()
+            }
         }
     }
 
@@ -87,8 +91,8 @@ final class StratjiAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let session = StratjiSessionModel(baseURL: StratjiConfiguration.dashboardURL)
-        session.startDataPlane = { [session] in
-            await FlaskServiceSupervisor.ensureRunning {
+        session.startDataPlane = { [session] recycle in
+            await FlaskServiceSupervisor.ensureRunning(recycle: recycle) {
                 session.noteLogTick()
             }
         }
@@ -114,6 +118,20 @@ final class StratjiAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if isStoppingDataPlane {
+            return .terminateNow
+        }
+        isStoppingDataPlane = true
+        Task.detached(priority: .userInitiated) {
+            FlaskServiceSupervisor.stopDataPlane()
+            await MainActor.run {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

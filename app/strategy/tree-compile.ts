@@ -100,10 +100,10 @@ function collectIfElse(nodes: readonly TreeNode[]): TreeNode[] {
   return found;
 }
 
-function collectSpecifiedWeights(nodes: readonly TreeNode[]): WeightNode[] {
+function collectWeightSleeves(nodes: readonly TreeNode[]): WeightNode[] {
   const found: WeightNode[] = [];
   walkTreeNodes(nodes, (node) => {
-    if (node.kind === "weight" && node.params.method === "specified") found.push(node);
+    if (node.kind === "weight") found.push(node);
   });
   return found;
 }
@@ -240,12 +240,15 @@ export function validateTree(tree: StrategyTreeV1): TreeValidation {
         break;
       case "weight": {
         if (node.params.method === "inverse_volatility") {
-          issues.push({
-            severity: "warning",
-            code: "weight_method_unsupported",
-            message: "Inverse Volatility is stored but not executable yet",
-            nodeId: node.id,
-          });
+          const lookback = node.params.lookbackDays ?? 30;
+          if (lookback < 2) {
+            issues.push({
+              severity: "warning",
+              code: "weight_lookback",
+              message: "Inverse Volatility lookbackDays must be at least 2",
+              nodeId: node.id,
+            });
+          }
         }
         if (node.params.method === "specified" && node.children.length > 0) {
           const sum = node.children.reduce((total, child) => total + (child.percent ?? 0), 0);
@@ -330,10 +333,16 @@ export function compileTreeToGraph(tree: StrategyTreeV1, now = new Date()): Stra
     pushEdge(ctx, booleanSource, entry.id, "boolean");
   }
 
-  const specified = collectSpecifiedWeights(tree.children);
-  const rootWeight = specified[0];
+  const weightNodes = collectWeightSleeves(tree.children);
+  const rootWeight = weightNodes[0];
   if (rootWeight && rootWeight.children.length > 0) {
-    emitSleeveAllocations(ctx, rootWeight.children, entry.id);
+    const sleeves = rootWeight.params.method === "inverse_volatility"
+      ? rootWeight.children.map((child, index, list) => ({
+          ...child,
+          percent: child.percent ?? (100 / list.length),
+        }))
+      : rootWeight.children;
+    emitSleeveAllocations(ctx, sleeves, entry.id);
   } else {
     fallbackAllocation(ctx, tree, entry.id);
   }

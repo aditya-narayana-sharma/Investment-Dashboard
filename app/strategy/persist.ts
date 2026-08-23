@@ -22,6 +22,8 @@ export const STRATEGIES_VALIDATE_PATH = "/api/strategies/validate";
 export const STRATEGIES_VALIDATE_ALIAS = "/strategies/validate";
 export const BACKTESTS_CONFIGURE_PATH = "/api/backtests";
 export const BACKTESTS_RUN_PATH = "/api/backtests/run";
+export const BACKTESTS_CAMPAIGN_PATH = "/api/backtests/campaign";
+export const BACKTESTS_BOOK_PATH = "/api/backtests/book";
 export const STRATEGIES_LIST_PATH = "/api/strategies";
 export const STRATEGIES_PREVIEW_PATH = "/api/strategies/preview";
 export const STRATEGIES_LIVE_PATH = "/api/strategies/live";
@@ -394,6 +396,108 @@ export async function runTreeBacktestOnServer(tree: StrategyTreeV1): Promise<Bac
     message: failureMessage(payload, "Backtest did not run."),
     missingSymbols: Array.isArray(payload.missingSymbols) ? payload.missingSymbols as string[] : [],
     warnings: Array.isArray(payload.warnings) ? payload.warnings as string[] : [],
+  };
+}
+
+export type CampaignRowResponse = {
+  id: string;
+  name: string;
+  ran: boolean;
+  message: string;
+  missingSymbols?: string[];
+  warnings?: string[];
+  curve: Array<{ date: string; equity: number; benchmark?: number }>;
+  totalReturnPct: number | null;
+  annualizedReturnPct: number | null;
+  sharpe: number | null;
+  maxDrawdownPct: number | null;
+  endingEquity: number | null;
+  oosFrom: string | null;
+  oosTotalReturnPct: number | null;
+  oosAnnualizedReturnPct: number | null;
+  oosSharpe: number | null;
+  oosMaxDrawdownPct: number | null;
+};
+
+export type CampaignRunResponse = {
+  status: "ok" | "failed";
+  placesOrders: false;
+  message?: string;
+  warnings?: string[];
+  rows: CampaignRowResponse[];
+};
+
+export type BookRunResponse = {
+  status: "ran" | "unavailable" | "failed";
+  ran: boolean;
+  placesOrders: false;
+  message?: string;
+  warnings?: string[];
+  missingIds?: string[];
+  curve?: Array<{ date: string; equity: number; benchmark?: number }>;
+  totalReturnPct?: number | null;
+  annualizedReturnPct?: number | null;
+  sharpe?: number | null;
+  maxDrawdownPct?: number | null;
+  endingEquity?: number | null;
+  legs?: Array<{ id: string; name: string; weight: number; ran: boolean }>;
+};
+
+export async function runLibraryCampaignOnServer(input: {
+  ids: string[];
+  from?: string;
+  to?: string;
+  walkForward?: boolean;
+}): Promise<CampaignRunResponse> {
+  const response = await fetch(BACKTESTS_CAMPAIGN_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  const payload = await readJson(response);
+  const rows = Array.isArray(payload.rows) ? payload.rows as CampaignRowResponse[] : [];
+  if (!response.ok) {
+    return {
+      status: "failed",
+      placesOrders: false,
+      message: failureMessage(payload, `Campaign failed (${response.status})`),
+      rows,
+    };
+  }
+  return {
+    status: "ok",
+    placesOrders: false,
+    message: typeof payload.message === "string" ? payload.message : undefined,
+    warnings: Array.isArray(payload.warnings) ? payload.warnings as string[] : [],
+    rows,
+  };
+}
+
+export async function runStrategyBookOnServer(
+  legs: Array<{ id: string; weight: number }>,
+): Promise<BookRunResponse> {
+  const response = await fetch(BACKTESTS_BOOK_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ legs }),
+    cache: "no-store",
+  });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    return {
+      status: "failed",
+      ran: false,
+      placesOrders: false,
+      message: failureMessage(payload, `Book run failed (${response.status})`),
+      missingIds: Array.isArray(payload.missingIds) ? payload.missingIds as string[] : [],
+    };
+  }
+  return {
+    ...(payload as BookRunResponse),
+    placesOrders: false,
+    ran: payload.ran === true,
+    status: payload.ran === true ? "ran" : "unavailable",
   };
 }
 

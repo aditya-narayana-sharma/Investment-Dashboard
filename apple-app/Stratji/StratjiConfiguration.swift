@@ -11,6 +11,7 @@ enum StratjiConfiguration {
     static let defaultDashboardURL = URL(string: "http://127.0.0.1:5050/")!
     static let healthPath = "/_flask/health"
     static let startScriptRelativePath = "scripts/start-flask-app.sh"
+    static let stopScriptRelativePath = "scripts/stop-flask-app.sh"
     static let setupScriptRelativePath = "scripts/setup-flask-app.sh"
     static let serviceScriptRelativePath = "scripts/run-dashboard-service.sh"
     static let refreshScriptRelativePath = "scripts/refresh-dashboard-data.sh"
@@ -74,6 +75,10 @@ enum StratjiConfiguration {
         scriptURL(relativePath: startScriptRelativePath)
     }
 
+    static var stopFlaskScript: URL? {
+        scriptURL(relativePath: stopScriptRelativePath)
+    }
+
     static var setupFlaskScript: URL? {
         scriptURL(relativePath: setupScriptRelativePath)
     }
@@ -132,11 +137,12 @@ enum StratjiConfiguration {
         SUPPORT_DIR="$HOME/Library/Application Support/Stratji"
         START_SCRIPT="$SUPPORT_DIR/start-dashboard.command"
         mkdir -p "$LOG_DIR"
-        healthy() {
-          curl -sf --max-time 3 http://127.0.0.1:5050/_flask/health >/dev/null 2>&1
+        flask_bound() {
+          body=$(curl -sS --max-time 8 http://127.0.0.1:5050/_flask/health 2>/dev/null || true)
+          printf '%s' "$body" | grep -q '"gateway": "flask"'
         }
         while true; do
-          if healthy; then
+          if flask_bound; then
             sleep 12
             continue
           fi

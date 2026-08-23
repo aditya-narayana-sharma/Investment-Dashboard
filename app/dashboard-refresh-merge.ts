@@ -83,24 +83,28 @@ function earningsSuccessful(status: EarningsSnapshot["status"]): boolean {
   }
 }
 
-function healthSuccessful(status: HealthLiveSnapshot["status"]): boolean {
+function healthHasMetrics(snapshot: HealthLiveSnapshot): boolean {
+  return snapshot.categories.some((category) => category.metrics.length > 0);
+}
+
+/** Prefer a newer Health day over live/stale rank. Stale means behind the operational target, not discard this XML. */
+function healthStatusRank(status: HealthLiveSnapshot["status"]): number {
   switch (status) {
     case "live":
+      return 4;
     case "partial":
-      return true;
+      return 3;
     case "cached":
+      return 2;
     case "stale":
+      return 1;
     case "unavailable":
-      return false;
+      return 0;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
     }
   }
-}
-
-function healthHasMetrics(snapshot: HealthLiveSnapshot): boolean {
-  return snapshot.categories.some((category) => category.metrics.length > 0);
 }
 
 function sectorMarketRank(status: SectorMarketSnapshot["status"]): number {
@@ -393,19 +397,23 @@ export function mergeEarningsSnapshot(current: EarningsSnapshot, incoming: Earni
 }
 
 export function mergeHealthSnapshot(current: HealthLiveSnapshot, incoming: HealthLiveSnapshot): HealthLiveSnapshot {
-  const dateOk = isAtLeastAsFresh(incoming.dataDate, current.dataDate);
-  const sameDate = incoming.dataDate === current.dataDate || parseFreshnessMs(incoming.dataDate) === parseFreshnessMs(current.dataDate);
-  const capturedOk = !sameDate || isAtLeastAsFresh(incoming.capturedAt, current.capturedAt);
-  if (shouldReplacePopulated({
-    currentHasData: healthHasMetrics(current),
-    incomingHasData: healthHasMetrics(incoming),
-    incomingSuccessful: healthSuccessful(incoming.status),
-    freshnessOk: dateOk && capturedOk,
-    incomingRank: incoming.status === "live" ? 3 : incoming.status === "partial" ? 2 : incoming.status === "cached" && healthHasMetrics(incoming) ? 1 : 0,
-    currentRank: current.status === "live" ? 3 : current.status === "partial" ? 2 : current.status === "cached" && healthHasMetrics(current) ? 1 : 0,
-  })) {
-    return incoming;
+  const currentHasData = healthHasMetrics(current);
+  const incomingHasData = healthHasMetrics(incoming);
+  if (!incomingHasData) return currentHasData ? current : incoming;
+  if (!currentHasData) return incoming;
+
+  const incomingDateMs = parseFreshnessMs(incoming.dataDate);
+  const currentDateMs = parseFreshnessMs(current.dataDate);
+  if (incomingDateMs != null && currentDateMs != null) {
+    if (incomingDateMs > currentDateMs) return incoming;
+    if (incomingDateMs < currentDateMs) return current;
   }
+
+  const incomingRank = healthStatusRank(incoming.status);
+  const currentRank = healthStatusRank(current.status);
+  if (incomingRank > currentRank) return incoming;
+  if (incomingRank < currentRank) return current;
+  if (isAtLeastAsFresh(incoming.capturedAt, current.capturedAt)) return incoming;
   return current;
 }
 

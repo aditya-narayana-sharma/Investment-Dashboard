@@ -245,8 +245,7 @@ html[data-appearance="sepia"] .signal.two-way { color: var(--sepia-warning-ink) 
 html[data-appearance="sepia"] .signal.headwind { color: var(--sepia-negative-ink) !important; }
 html[data-appearance="sepia"] .signal.na { color: var(--ink) !important; }
 
-/* Colored badges on light paper need dark ink; dark control chrome keeps its
-   cream foreground. */
+/* Colored badges and paper buttons use dark ink. Control chrome is paper, not navy. */
 html[data-appearance="sepia"] .sector-lead-score em { color: var(--ink) !important; }
 html[data-appearance="sepia"] .section-heading > .shutter-preview,
 html[data-appearance="sepia"] .section-heading > .shutter-preview em,
@@ -419,9 +418,10 @@ html[data-appearance="sepia"] .spark-filament-label {
   border-radius: var(--radius) !important;
 }
 
-/* LAST-WINS (this file loads after globals.css): sticky I1–I4 / S1–S3 / M1–M4 / H1–H3
-   must sit fully above the section heading + 36px badge. Do not reuse --control-gap.
-   html.native-chrome-embed must not zero this gap — glass bar is an overlay, not a host. */
+/* LAST-WINS (this file loads after globals.css): one tight gap under sticky I1–I4 /
+   S1–S3 / M1–M3 / H1–H4. Nav margin-bottom only — heading margin-top stays 0 so I-2+
+   do not grow a blank band. Hidden siblings must not occupy space. Glass overlay is
+   not a host; html.native-chrome-embed must not zero --section-nav-clearance. */
 .workspace-section-nav,
 .intelligence-section-nav {
   position: sticky;
@@ -429,13 +429,18 @@ html[data-appearance="sepia"] .spark-filament-label {
   z-index: 12;
   flex-shrink: 0;
   margin: 0 0 var(--section-nav-clearance);
-  background: #344353;
-  background-color: #344353;
+  background: var(--line);
+  background-color: var(--line);
 }
 [data-focus-section] {
   min-height: 0;
   height: auto;
   overflow: visible;
+  gap: 0;
+}
+[data-focus-section] > .workspace-section,
+[data-focus-section] > .workspace-section + .workspace-section {
+  margin-top: 0;
 }
 [data-focus-section] > .workspace-section:not([hidden]) {
   min-height: 0;
@@ -448,13 +453,14 @@ html[data-appearance="sepia"] .spark-filament-label {
 [data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .section-heading,
 [data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-heading {
   overflow: visible;
+  margin-top: 0;
 }
 [data-focus-section] > .workspace-section:not([hidden]) > .collapsible-section.open > .collapsible-content {
   min-height: 0;
   overflow: auto;
 }
 .workspace-section .section-heading {
-  margin-top: var(--section-nav-clearance);
+  margin-top: 0;
   margin-bottom: var(--chrome-stack-gap);
   overflow: visible;
 }
@@ -464,7 +470,160 @@ html[data-appearance="sepia"] .spark-filament-label {
 }
 .health-workspace-shell[data-focus-section] {
   overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.health-workspace-shell[data-focus-section] > .workspace-section:not([hidden]) {
+.health-workspace-shell[data-focus-section] > .workspace-section.action-board-workspace-section:not([hidden]) {
   overflow: visible;
+}
+.health-workspace-shell[data-focus-section] > .workspace-section.health-full-section:not([hidden]) {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.workspace-navigation .workspace-section-nav.glass-sections {
+  position: relative;
+  top: auto;
+  z-index: 2;
+  display: flex;
+  flex-shrink: 0;
+  margin: 0;
+  overflow: visible;
+}
+
+/* Last-wins paper buttons/chips: never navy/black pills under sepia.
+   Color-only; prefers-reduced-motion is unchanged. */
+html[data-appearance="sepia"] .workspace-section-nav,
+html[data-appearance="sepia"] .intelligence-section-nav {
+  background: var(--line);
+  background-color: var(--line);
+}
+html[data-appearance="sepia"] .holding-ticker-actions button,
+html[data-appearance="sepia"] .holding-mobile-order-actions button,
+html[data-appearance="sepia"] .kite-order-ticket > footer button:not(.buy):not(.sell):not(.alert),
+html[data-appearance="sepia"] .sector-back-button,
+html[data-appearance="sepia"] .health-guidance-preview button,
+html[data-appearance="sepia"] .intelligence-feed-collapse,
+html[data-appearance="sepia"] .analyst-group-header,
+html[data-appearance="sepia"] .activity-create-bar button,
+html[data-appearance="sepia"] .collapse-button,
+html[data-appearance="sepia"] .appearance-toggle button.active,
+html[data-appearance="sepia"] .incognito-toggle,
+html[data-appearance="sepia"] .digest-show-all,
+html[data-appearance="sepia"] .digest-show-more,
+html[data-appearance="sepia"] .live-feed-actions button,
+html[data-appearance="sepia"] .live-feed-actions .masthead-pdf,
+html[data-appearance="sepia"] .masthead-actions .masthead-pdf,
+html[data-appearance="sepia"] .status-panel .masthead-pdf,
+html[data-appearance="sepia"] .satya-ptt,
+html[data-appearance="sepia"] .satya-send,
+html[data-appearance="sepia"] .satya-sheet-close,
+html[data-appearance="sepia"] .satya-open-briefing,
+html[data-appearance="sepia"] .satya-source-chip,
+html[data-appearance="sepia"] .satya-suggestion-chip,
+html[data-appearance="sepia"] .satya-axis-chip,
+html[data-appearance="sepia"] .satya-orb,
+html[data-appearance="sepia"] .integrations-wizard-grid button,
+html[data-appearance="sepia"] .integrations-card-actions button,
+html[data-appearance="sepia"] .integrations-streak button,
+html[data-appearance="sepia"] .integrations-privacy-link,
+html[data-appearance="sepia"] .secret-toggle,
+html[data-appearance="sepia"] .health-incognito-placeholder button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-border);
+}
+html[data-appearance="sepia"] .intelligence-feed-collapse,
+html[data-appearance="sepia"] .analyst-group-header,
+html[data-appearance="sepia"] .analyst-group-header .analyst-group-title,
+html[data-appearance="sepia"] .intelligence-feed-collapse strong,
+html[data-appearance="sepia"] .intelligence-feed-collapse > b {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .intelligence-feed-collapse small,
+html[data-appearance="sepia"] .analyst-group-header span {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .intelligence-feed-collapse:hover,
+html[data-appearance="sepia"] .analyst-group-header:hover,
+html[data-appearance="sepia"] .analyst-group-header:focus-visible,
+html[data-appearance="sepia"] .health-guidance-preview button:hover,
+html[data-appearance="sepia"] .health-guidance-preview button:focus-visible,
+html[data-appearance="sepia"] .sector-back-button:hover,
+html[data-appearance="sepia"] .holding-ticker-actions button:hover:not(:disabled),
+html[data-appearance="sepia"] .collapse-button:hover {
+  background: var(--bg-control-hover);
+  color: var(--btn-fg);
+  border-color: var(--chip-border);
+}
+html[data-appearance="sepia"] .incognito-toggle.active {
+  background: var(--amber-bg);
+  color: var(--btn-fg);
+  border-color: var(--amber);
+}
+html[data-appearance="sepia"] .incognito-toggle i {
+  background: var(--chip-bg);
+  border-color: var(--chip-border);
+}
+html[data-appearance="sepia"] .incognito-toggle i::after {
+  background: var(--ink);
+}
+html[data-appearance="sepia"] .pulse-detail-lane {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .integrations-safety {
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--line));
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .integrations-safety small {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .integrations-status {
+  background: var(--chip-bg);
+  border-color: var(--chip-border);
+  color: var(--chip-fg);
+}
+html[data-appearance="sepia"] .integrations-status.live,
+html[data-appearance="sepia"] .integrations-status.connected {
+  background: var(--green-bg);
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+  color: var(--sepia-positive-ink, #075b32);
+}
+html[data-appearance="sepia"] .integrations-status.partial,
+html[data-appearance="sepia"] .integrations-status.stale,
+html[data-appearance="sepia"] .integrations-status.auth_required,
+html[data-appearance="sepia"] .integrations-status.permission_required {
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 40%, var(--line));
+  color: var(--sepia-warning-ink, #704600);
+}
+html[data-appearance="sepia"] .integrations-status.unavailable,
+html[data-appearance="sepia"] .integrations-status.denied {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+  color: var(--sepia-negative-ink, #8f1d2c);
+}
+html[data-appearance="sepia"] .integrations-exit a {
+  color: var(--blue);
+}
+html[data-appearance="sepia"] .live-feed-actions a {
+  color: var(--on-dark);
+}
+
+html[data-appearance="sepia"] .satya-orb,
+html[data-appearance="sepia"] .satya-launcher,
+html[data-appearance="sepia"] .satya-send,
+html[data-appearance="sepia"] .satya-launcher.satya-open-popup {
+  background: var(--satya-accent, #c4893a);
+  color: var(--satya-accent-fg, #1a140f);
+  border-color: var(--satya-accent-border, #9a6a28);
+}
+
+html[data-appearance="sepia"] .satya-chats,
+html[data-appearance="sepia"] .satya-open-chats {
+  background: var(--satya-chats-accent, #2a9a7a);
+  color: var(--satya-chats-fg, #04140f);
+  border-color: color-mix(in srgb, var(--satya-chats-accent, #2a9a7a) 55%, #1a140f);
 }

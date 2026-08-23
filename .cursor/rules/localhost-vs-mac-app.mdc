@@ -1,0 +1,16 @@
+---
+description: Localhost vs Stratji.app work must run $project-status then $auditor then $rca-agent before implementing chrome/native fixes.
+alwaysApply: true
+---
+
+# Localhost vs Mac App
+
+When the task is **localhost (`:3000` / Flask `:5050`) vs Stratji.app** (WKWebView, liquid glass, section/workspace nav, splash/hydrate, native overlay vs web chrome, Dock vs `apple-app/build/Stratji.app`):
+
+1. **`$project-status`** — inventory both surfaces; mark parity Done / In-Progress / Not Implemented. Do not implement in this step. Write `Project-Status/PROJECT-STATUS.md`.
+2. **`$auditor`** — thermonuclear audit of the native/web chrome diff (correctness, quality, layout). Verdict required. Do not implement in this step. Write `Code-Reviews/`.
+3. **`$rca-agent`** — root-cause localhost vs Mac drift (hydrate race, two bars, I-1 chips vs full names, Intel→S-1). Write `RCAs/` plus a `Plans/` remediation plan.
+
+Do **not** skip or reorder these three. Do **not** “just fix the glass bar” from a screenshot. After the RCA plan exists, implement only if the user asks.
+
+Verify **both** `http://127.0.0.1:5050` (or `:3000`) **and** Stratji.app. Do not treat Dock/`~/Applications/Stratji.app` as current if `apple-app/build/Stratji.app` is newer. Do not kill healthy Flask on `:5050`.

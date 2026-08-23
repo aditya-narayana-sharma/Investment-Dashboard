@@ -3,6 +3,11 @@ import SwiftUI
 struct MacUnlockView: View {
     @ObservedObject var auth: AuthenticationService
     var onUnlocked: (() -> Void)?
+    @AppStorage(StratjiAppearanceStore.defaultsKey) private var appearanceRaw = StratjiAppearanceStore.defaultValue
+
+    private var appearance: StratjiAppearance {
+        StratjiAppearance(rawValue: appearanceRaw) ?? .black
+    }
 
     var body: some View {
         VStack(spacing: 22) {
@@ -12,12 +17,13 @@ struct MacUnlockView: View {
                 .foregroundStyle(Color.accentColor)
             Text("Stratji")
                 .font(.largeTitle.bold())
+                .foregroundStyle(appearance.canvasInk)
             Text("Unlock this Mac session")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(appearance.canvasMuted)
             Text("Use Touch ID or your Mac login password. Unlock lasts until you choose Lock or quit Stratji. Auth0 is not required.")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(appearance.canvasMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
             Button {
@@ -52,7 +58,9 @@ struct MacUnlockView: View {
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(appearance.canvasFill)
+        .preferredColorScheme(appearance.colorScheme)
+        .environment(\.colorScheme, appearance.colorScheme)
         .onAppear {
             Task {
                 await auth.unlockWithLocalAuthentication()

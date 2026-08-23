@@ -1,7 +1,9 @@
 import ApplicationServices
 import AppKit
+import AVFoundation
 import EventKit
 import Foundation
+import Speech
 
 enum StratjiAppleSource: String, CaseIterable, Identifiable {
     case mail
@@ -9,6 +11,7 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
     case reminders
     case podcasts
     case notes
+    case speech
 
     var id: String { rawValue }
 
@@ -19,13 +22,14 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
         case .reminders: "Reminders"
         case .podcasts: "Podcasts"
         case .notes: "Notes"
+        case .speech: "Speech / Mic"
         }
     }
 
     var isFirstRunRequired: Bool {
         switch self {
         case .mail, .calendars, .reminders, .podcasts: true
-        case .notes: false
+        case .notes, .speech: false
         }
     }
 
@@ -34,6 +38,7 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
         case .calendars: .eventKitCalendars
         case .reminders: .eventKitReminders
         case .mail, .podcasts, .notes: .appleEvents
+        case .speech: .speechMicrophone
         }
     }
 
@@ -49,6 +54,8 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
             "Connect asks macOS to let Stratji control Apple Podcasts. Eligible episodes then refresh through the existing digest pipeline. Transcript is labelled only when a local transcript exists."
         case .notes:
             "Optional research notes. Never a Health source — Health stays HealthKit / export / Health Shortcut."
+        case .speech:
+            "Optional Satya push-to-talk. Microphone + speech recognition on this Mac only. No wake word. Mailboxes stay iCloud → Newsletters and iCloud → Axis Research."
         }
     }
 
@@ -59,6 +66,7 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
         case .reminders: []
         case .podcasts: ["com.apple.podcasts"]
         case .notes: ["com.apple.Notes"]
+        case .speech: []
         }
     }
 
@@ -67,7 +75,7 @@ enum StratjiAppleSource: String, CaseIterable, Identifiable {
     var usesAppleScriptProbe: Bool {
         switch self {
         case .mail, .notes: true
-        case .podcasts, .calendars, .reminders: false
+        case .podcasts, .calendars, .reminders, .speech: false
         }
     }
 
@@ -94,6 +102,7 @@ enum StratjiAppleTCC: String {
     case eventKitCalendars = "eventkit-calendars"
     case eventKitReminders = "eventkit-reminders"
     case appleEvents = "apple-events"
+    case speechMicrophone = "speech-microphone"
 }
 
 struct StratjiApplePermissionState: Equatable, Identifiable {
@@ -143,6 +152,8 @@ enum StratjiApplePermissions {
             return await requestEventKit(.reminder, source: source)
         case .mail, .podcasts, .notes:
             return await requestAppleEvents(source)
+        case .speech:
+            return await requestSpeech(source)
         }
     }
 
@@ -163,6 +174,13 @@ enum StratjiApplePermissions {
             queries = [
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+            ]
+        case .speech:
+            queries = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_SpeechRecognition",
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
             ]
         }
         for value in queries {
@@ -196,7 +214,50 @@ enum StratjiApplePermissions {
         case .mail, .podcasts, .notes:
             guard let bundleID = source.bundleIdentifiers.first else { return .permissionRequired }
             return determineAutomation(bundleID: bundleID, prompt: false)
+        case .speech:
+            return mapSpeechStatus()
         }
+    }
+
+    /// Used by Satya push-to-talk so listen can request TCC without opening Settings.
+    static func ensureSpeechAccess() async -> Bool {
+        let state = await requestSpeech(.speech)
+        return state.status == .connected
+    }
+
+    private static func mapSpeechStatus() -> StratjiApplePermissionStatus {
+        let speech = SFSpeechRecognizer.authorizationStatus()
+        let mic = AVCaptureDevice.authorizationStatus(for: .audio)
+        if speech == .authorized && mic == .authorized {
+            return .connected
+        }
+        if speech == .denied || speech == .restricted || mic == .denied || mic == .restricted {
+            return .denied
+        }
+        return .permissionRequired
+    }
+
+    private static func requestSpeech(_ source: StratjiAppleSource) async -> StratjiApplePermissionState {
+        if mapSpeechStatus() == .connected {
+            return makeState(source: source, status: .connected)
+        }
+        let speechGranted: Bool = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+        let micGranted: Bool = await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+        let status: StratjiApplePermissionStatus
+        if speechGranted && micGranted {
+            status = .connected
+        } else {
+            status = mapSpeechStatus()
+        }
+        return makeState(source: source, status: status)
     }
 
     private static func requestEventKit(_ entity: EKEntityType, source: StratjiAppleSource) async -> StratjiApplePermissionState {
@@ -341,7 +402,7 @@ enum StratjiApplePermissions {
               get name of first account
             end tell
             """
-        case .podcasts, .calendars, .reminders:
+        case .podcasts, .calendars, .reminders, .speech:
             return .permissionRequired
         }
         var error: NSDictionary?
@@ -382,7 +443,7 @@ enum StratjiApplePermissionActions {
         await persist(session: session)
         guard state.status == .connected else { return }
         switch source {
-        case .notes:
+        case .notes, .speech:
             break
         case .mail, .calendars, .reminders, .podcasts:
             await session.reload(keepDocument: true)

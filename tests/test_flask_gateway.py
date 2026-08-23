@@ -36,8 +36,8 @@ class FakeUpstream:
         for key, value in (headers or {}).items():
             self.headers[key] = value
 
-    def read(self) -> bytes:
-        return self._body.read()
+    def read(self, n: int = -1) -> bytes:
+        return self._body.read() if n is None or n < 0 else self._body.read(n)
 
     def __enter__(self):
         return self
@@ -121,6 +121,117 @@ class FlaskGatewayTests(unittest.TestCase):
                 )
         mocked_urlopen.assert_not_called()
         self.assertEqual(paired.status_code, 403)
+
+    @patch("flask_gateway.urlopen")
+    def test_proxies_satya_chat_post(self, mocked_urlopen):
+        mocked_urlopen.return_value = FakeUpstream(
+            b'event: done\ndata: {"ok":true}\n\n',
+            headers={"Content-Type": "text/event-stream"},
+        )
+        body = b'{"messages":[{"role":"user","content":"Axis on HDFC Bank"}]}'
+        response = self.client.post("/api/satya/chat", data=body, content_type="application/json")
+        upstream_request = mocked_urlopen.call_args.args[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(upstream_request.method, "POST")
+        self.assertEqual(upstream_request.full_url, "http://127.0.0.1:3000/api/satya/chat")
+        self.assertEqual(upstream_request.data, body)
+        self.assertEqual(response.headers["X-Portfolio-Gateway"], "Flask")
+        self.assertEqual(_request_header(upstream_request, "X-Stratji-Local-Operator"), "1")
+        self.assertIn(b"event: done", response.data)
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_cannot_post_satya_chat(self, mocked_urlopen):
+        response = self.client.post(
+            "/api/satya/chat",
+            data=b'{"messages":[{"role":"user","content":"Axis on HDFC Bank"}]}',
+            content_type="application/json",
+            environ_base={"REMOTE_ADDR": "100.64.1.9"},
+        )
+        mocked_urlopen.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", Path(directory) / "pairings.json"):
+                code = self.client.post("/_health/pair/code").get_json()["code"]
+                token = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-satya-install",
+                    "label": "LAN iPhone",
+                }, environ_base={"REMOTE_ADDR": "100.64.1.9"}).get_json()["token"]
+                paired = self.client.post(
+                    "/api/satya/chat",
+                    data=b'{"messages":[{"role":"user","content":"Axis on HDFC Bank"}]}',
+                    content_type="application/json",
+                    headers={"Authorization": f"Bearer {token}"},
+                    environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                )
+        mocked_urlopen.assert_not_called()
+        self.assertEqual(paired.status_code, 403)
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_cannot_get_satya_sessions(self, mocked_urlopen):
+        response = self.client.get(
+            "/api/satya/sessions",
+            environ_base={"REMOTE_ADDR": "100.64.1.9"},
+        )
+        mocked_urlopen.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_cannot_rename_or_delete_satya_sessions(self, mocked_urlopen):
+        for method, kwargs in (
+            ("patch", {"data": b'{"id":"s1","title":"Nope"}', "content_type": "application/json"}),
+            ("delete", {}),
+        ):
+            response = getattr(self.client, method)(
+                "/api/satya/sessions?id=s1",
+                environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                **kwargs,
+            )
+            self.assertEqual(response.status_code, 403, method)
+        mocked_urlopen.assert_not_called()
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_cannot_post_streak_or_license_jwt(self, mocked_urlopen):
+        for path in ("/api/streak/export", "/api/license/activate", "/api/license/razorpay"):
+            response = self.client.post(
+                path,
+                data=b"{}",
+                content_type="application/json",
+                environ_base={"REMOTE_ADDR": "100.64.1.9"},
+            )
+            self.assertEqual(response.status_code, 403, path)
+        mocked_urlopen.assert_not_called()
+
+    @patch("flask_gateway.urlopen")
+    def test_lan_can_get_satya_sources_and_status(self, mocked_urlopen):
+        mocked_urlopen.return_value = FakeUpstream(
+            b'{"asOf":"2026-08-19","families":[]}',
+            headers={"Content-Type": "application/json"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(flask_gateway, "HEALTH_PAIRINGS_PATH", Path(directory) / "pairings.json"):
+                code = self.client.post("/_health/pair/code").get_json()["code"]
+                token = self.client.post("/_health/pair", json={
+                    "code": code,
+                    "installId": "iphone-satya-get",
+                    "label": "LAN iPhone",
+                }, environ_base={"REMOTE_ADDR": "100.64.1.9"}).get_json()["token"]
+                headers = {"Authorization": f"Bearer {token}"}
+                sources = self.client.get(
+                    "/api/satya/sources",
+                    headers=headers,
+                    environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                )
+                status = self.client.get(
+                    "/api/satya/status",
+                    headers=headers,
+                    environ_base={"REMOTE_ADDR": "100.64.1.9"},
+                )
+        self.assertEqual(sources.status_code, 200)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(mocked_urlopen.call_count, 2)
 
     @patch("flask_gateway.urlopen")
     def test_strips_spoofed_operator_header_on_lan(self, mocked_urlopen):

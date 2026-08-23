@@ -187,7 +187,7 @@ export function RiskRadar({ profiles, selected, onSelect, averageLabel, idPrefix
   const meanScore = Number((profile.scores.reduce((sum, score) => sum + score, 0) / profile.scores.length).toFixed(1));
   const seriesColor = riskScoreColor(meanScore);
   const tabPanelId = `${idPrefix}-panel`;
-  const chartHeight = explainSelected ? 480 : 620;
+  const chartHeight = explainSelected ? 480 : 420;
   const selectorLabel = (item: RiskProfile) => explainSelected ? (item.name || item.symbol) : item.symbol;
   const renderAxisTick = (props: { x?: number; y?: number; payload?: { value?: string }; textAnchor?: string }) => {
     const label = String(props.payload?.value ?? "");

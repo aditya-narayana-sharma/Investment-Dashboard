@@ -43,6 +43,36 @@ enum StratjiAppearance: String, CaseIterable, Identifiable {
     var colorScheme: ColorScheme {
         prefersDarkChrome ? .dark : .light
     }
+
+    /// Opaque canvas behind splash, unlock, and permission sheets.
+    /// Absolute RGB only. `Color.primary` / `Color.secondary` / `Color.white` invert when
+    /// NSHostingView stays light while SwiftUI `colorScheme` is `.dark` (black-on-black splash).
+    var canvasFill: Color {
+        switch self {
+        case .black, .dark:
+            Color(red: 0.0, green: 0.0, blue: 0.0)
+        case .sepia:
+            Color(red: 0.98, green: 0.97, blue: 0.95)
+        }
+    }
+
+    var canvasInk: Color {
+        switch self {
+        case .black, .dark:
+            Color(red: 0.97, green: 0.98, blue: 1.0)
+        case .sepia:
+            Color(red: 0.17, green: 0.12, blue: 0.08)
+        }
+    }
+
+    var canvasMuted: Color {
+        switch self {
+        case .black, .dark:
+            Color(red: 0.82, green: 0.84, blue: 0.88)
+        case .sepia:
+            Color(red: 0.35, green: 0.28, blue: 0.20)
+        }
+    }
 #endif
 }
 

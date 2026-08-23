@@ -8,12 +8,15 @@ import { axisArchiveAudit, type RiskProfile } from "../portfolio-data";
 import type { ContentDigestSnapshot, MailRecommendation } from "../content-types";
 import type { KiteSnapshot } from "../live-types";
 import { portfolioReturnTone } from "../portfolio-concentration.mjs";
+import { thesisBullets } from "../thesis-bullets";
 import type { MacroBandKey, MacroEventKey } from "./types";
-import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, DemoSensitive, HoldingLabel, WorkspaceSectionNav, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
+import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, DemoSensitive, HoldingLabel, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
 import { KiteAlertTicket, type KiteAlertSelection } from "./KiteAlertTicket";
 import { KiteGttTicket, type KiteGttSelection } from "./KiteGttTicket";
 import { KiteOrderTicket, type KiteOrderSelection } from "./KiteOrderTicket";
-import { LlmAssistPanel } from "./LlmAssistPanel";
+import { useSatyaTaskContext } from "./satya-workspace";
+import { listenToStratjiLocation } from "./stratji-navigate";
+import { isLocationView } from "./workspace-routing";
 import { InstrumentGauge } from "./visual-components";
 import { analysisWindowLabel, exposureFactors, holdingOuterFill, inr, type ExposureDriverBullet } from "./utils";
 import {
@@ -212,34 +215,28 @@ export function InvestmentWorkspace({
 
   useEffect(() => {
     const sync = () => {
+      if (!isLocationView("investment")) return;
       const section = investmentSectionFromUrl();
       setActiveSection(section);
       if (section) revealDashboardSection(section, `investment-${section}`);
     };
     sync();
     const retry = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
+    const stopListening = listenToStratjiLocation(sync);
     return () => {
       window.clearTimeout(retry);
-      window.removeEventListener("popstate", sync);
+      stopListening();
     };
   }, []);
-  const selectSection = (section: string) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("section", section);
-    url.searchParams.delete("page");
-    window.history.pushState({}, "", url);
-    setActiveSection(section);
-    expandDashboardSection(dashboardSectionNumberFromNavId(section));
-  };
+
+  useSatyaTaskContext("investment", {
+    task: "composite",
+    hint: "Does not change composite scores or invent CMP/targets. Missing fields stay missing.",
+    context: `Analyst matrix grouped by ${analystGroupMode}. Groups: ${analystGroups.map((group) => `${group.label} (${group.rows.length})`).join("; ")}.`,
+    placeholder: "e.g. What stands out in Target achieved vs active BUY rows?",
+  });
 
   return <div className="investment-workspace-shell" data-focus-section={activeSection ?? undefined}>
-      <WorkspaceSectionNav
-        label="Investment sections"
-        sections={INVESTMENT_SECTIONS}
-        activeId={activeSection ?? "i1"}
-        onSelect={selectSection}
-      />
       <div id="investment-i1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(activeSection, "i1")}>
       <CollapsibleSection number="I-1" title="Investment action board" note="Clickable daily actions, numeric advantages and strategic rationale" defaultOpen={activeSection === "i1"}>
         <DailyKanbanBoard workspace="investment"/>
@@ -500,12 +497,6 @@ export function InvestmentWorkspace({
               </select>
             </label>
           </div>
-          <LlmAssistPanel
-            task="composite"
-            hint="Does not change composite scores or invent CMP/targets. Missing fields stay missing."
-            context={`Analyst matrix grouped by ${analystGroupMode}. Groups: ${analystGroups.map((group) => `${group.label} (${group.rows.length})`).join("; ")}.`}
-            placeholder="e.g. What stands out in Target achieved vs active BUY rows?"
-          />
           {analystGroups.length ? analystGroups.map((group) => {
             const groupStateKey = `${analystGroupMode}:${group.key}`;
             const groupControlId = `analyst-group-${groupStateKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;

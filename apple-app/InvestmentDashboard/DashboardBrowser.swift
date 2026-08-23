@@ -142,11 +142,14 @@ final class PortfolioDashboardBrowserModel: NSObject, ObservableObject {
             in: .page
         )
         configuration.userContentController.addUserScript(hideChrome)
+        let satyaSpeech = StratjiSatyaSpeechBridge()
+        configuration.userContentController.add(satyaSpeech, name: StratjiSatyaSpeechBridge.messageName)
         configuration.applicationNameForUserAgent = "Stratji/1"
 #if os(iOS)
         configuration.allowsInlineMediaPlayback = true
 #endif
         let view = WKWebView(frame: .zero, configuration: configuration)
+        satyaSpeech.webView = view
         view.navigationDelegate = self
         view.uiDelegate = self
         view.allowsBackForwardNavigationGestures = true

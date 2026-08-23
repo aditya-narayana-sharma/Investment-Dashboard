@@ -57,7 +57,7 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         case .investment: "Portfolio Overview"
         case .sectors: "Sectoral Analytics"
         case .intelligence: "Market Intelligence"
-        case .health: "Health & Wellness"
+        case .health: "My Feed"
         case .builder: "Algorithm Builder"
         case .strategies: "Strategies"
         }
@@ -68,7 +68,7 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         case .investment: "Portfolio"
         case .sectors: "Sectors"
         case .intelligence: "Intel"
-        case .health: "Health"
+        case .health: "My Feed"
         case .builder: "Builder"
         case .strategies: "Strategies"
         }
@@ -116,6 +116,8 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
             return .builder
         case "strategy-library":
             return .strategies
+        case "feed", "my-feed":
+            return .health
         case "integrations", "settings":
             return nil
         case "portfolio", "portfolio-overview":

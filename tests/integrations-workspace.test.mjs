@@ -9,6 +9,7 @@ import {
   isIntegrationsView,
   isNativeChromeEnabled,
   isStratjiNativeUserAgent,
+  isStratjiMacOverlayUserAgent,
   isWorkspaceKey,
   nativeChromeFromPageSearch,
   detectNativeChrome,
@@ -86,6 +87,9 @@ test("nativeChrome query is detected and preserved", () => {
   assert.equal(url.searchParams.get("nativeChrome"), "1");
   assert.equal(isStratjiNativeUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Stratji/1"), true);
   assert.equal(isStratjiNativeUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"), false);
+  assert.equal(isStratjiMacOverlayUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Stratji/1"), true);
+  assert.equal(isStratjiMacOverlayUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Stratji/1"), false);
+  assert.equal(isStratjiMacOverlayUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"), false);
   assert.equal(detectNativeChrome({ userAgent: "Mozilla/5.0 Stratji/1" }), true);
   assert.equal(detectNativeChrome({ locationSearch: "?view=investment" }), false);
   assert.equal(detectNativeChrome({ searchParams: { native: "1" } }), true);
@@ -206,7 +210,7 @@ test("Integrations page is chrome: six workspaces, no DailyKanbanBoard, isolatio
   assert.match(utils, /key: "investment", label: "Portfolio Overview"/);
   assert.match(utils, /key: "sectors", label: "Sectoral Analytics"/);
   assert.match(utils, /key: "intelligence", label: "Market Intelligence"/);
-  assert.match(utils, /key: "health", label: "Health & Wellness"/);
+  assert.match(utils, /key: "health", label: "My Feed"/);
   assert.match(utils, /key: "builder", label: "Algorithm Canvas"/);
   assert.match(utils, /key: "strategies", label: "Strategies"/);
   assert.doesNotMatch(utils, /key: "integrations"/);
@@ -219,7 +223,7 @@ test("Integrations page is chrome: six workspaces, no DailyKanbanBoard, isolatio
   assert.match(page, /IntegrationsWorkspace/);
   assert.doesNotMatch(page, /integrations-chrome-link/);
   assert.match(page, /DashboardTabs active=\{workspace\}/);
-  assert.match(page, /showWorkspaceShell && !nativeChrome && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
   assert.match(page, /showWorkspaceShell && \(workspace === "investment" \|\| stayMounted\)/);
   assert.doesNotMatch(page, /<DailyKanbanBoard workspace="integrations"/);
 

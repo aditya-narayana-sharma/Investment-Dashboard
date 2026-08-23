@@ -32,6 +32,11 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(session, /applyProgress/);
   assert.match(session, /pollRefreshProgress/);
   assert.match(session, /waitForDocumentReady/);
+  assert.match(session, /waitUntilFlaskReady/);
+  assert.match(session, /attempts: Int = 180/);
+  assert.match(session, /health.serviceReady/);
+  assert.match(session, /recoverIfServiceAlreadyLive/);
+  assert.match(session, /The local Stratji service did not become ready/);
   assert.match(session, /StratjiLoadStage\.hydrate\.startProgress/);
   assert.match(session, /document\.isLoading/);
   assert.match(session, /isHydrateReady/);
@@ -47,6 +52,7 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.doesNotMatch(supervisor, /PORTFOLIO_SKIP_HEALTH_ZIP"\] = "1"/);
   assert.doesNotMatch(supervisor, /Health ZIP skipped/);
   assert.match(supervisor, /removeValue\(forKey: "PORTFOLIO_SKIP_HEALTH_ZIP"\)/);
+  assert.match(supervisor, /hasPrefix\("PORTFOLIO_SKIP_"\)/);
   assert.match(supervisor, /onProgress/);
   assert.match(supervisor, /latestRefreshProgress/);
   assert.match(supervisor, /return process.terminationStatus == 0/);
@@ -62,6 +68,14 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(
     await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
     /dataset\.appearance/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /var canvasFill: Color/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /Absolute RGB only/,
   );
   assert.match(
     await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
@@ -107,12 +121,45 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(views, /static let glyphSize: CGFloat = 22/);
   assert.match(views, /static let glyphLabelSpacing: CGFloat = 4/);
   assert.match(views, /static let cellPadding: CGFloat = 4/);
+  assert.match(views, /static let idleGlyphOpacity: CGFloat = 1/);
+  assert.match(views, /appearance\.canvasFill/);
+  assert.match(views, /appearance\.canvasInk/);
+  assert.match(views, /foregroundColor\(appearance\.canvasInk\)/);
+  assert.match(views, /foregroundColor\(appearance\.canvasMuted\)/);
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /0\.97, green: 0\.98, blue: 1\.0/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /NSHostingView stays light/,
+  );
+  assert.doesNotMatch(
+    await readFile(new URL("apple-app/Shared/StratjiAppearanceStore.swift", root), "utf8"),
+    /case \.black, \.dark: Color\.white/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Stratji/StratjiDashboardViewController.swift", root), "utf8"),
+    /loadingHosting\?\.layer\?\.isOpaque = true/,
+  );
+  assert.match(
+    await readFile(new URL("apple-app/Stratji/StratjiDashboardViewController.swift", root), "utf8"),
+    /recoverIfServiceAlreadyLive/,
+  );
+  assert.match(views, /preferredColorScheme\(appearance\.colorScheme\)/);
+  assert.doesNotMatch(views, /saturation\(isCurrent \? 1 : 0\)/);
+  assert.doesNotMatch(views, /Color\.primary : Color\.secondary/);
+  assert.doesNotMatch(views, /Color\.primary/);
+  assert.doesNotMatch(views, /Color\.secondary/);
+  assert.doesNotMatch(views, /Color\.white/);
+  assert.doesNotMatch(views, /\.background\(Color\.black\)/);
   assert.match(views, /VStack\(alignment: \.center, spacing: SplashMetrics.glyphRowsSpacing\)/);
   assert.match(views, /splashStageRow\(Array\(stages.prefix\(6\)\)\)/);
   assert.match(views, /splashStageRow\(Array\(stages.suffix\(from: 6\)\)\)/);
   assert.match(views, /HStack\(alignment: \.top, spacing: SplashMetrics.glyphColumnsSpacing\)/);
   assert.match(views, /splashSFSymbol\("mic.fill"/);
   assert.match(views, /splashSFSymbol\("heart.fill"/);
+  assert.match(views, /recoverIfServiceAlreadyLive/);
   assert.doesNotMatch(views, /exclamationmark\.circle\.fill/);
   assert.doesNotMatch(views, /LazyVGrid\(/);
   assert.doesNotMatch(views, /Color\.clear\.frame\(maxWidth: \.infinity\)/);
@@ -173,8 +220,13 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(script, /emit_progress health/);
   assert.match(script, /PROGRESS\\t/);
   assert.match(digest, /writeStartupProgress/);
-  assert.match(digest, /MAIL_STAGE_TIMEOUT_MS/);
-  assert.match(digest, /killSignal: "SIGKILL"/);
+  assert.match(digest, /MAIL_STAGE_TIMEOUT_MS = 40_000/);
+  assert.match(digest, /FORCE_REFRESH_BUDGET_MS = 90_000/);
+  assert.match(digest, /NEWSLETTER_LIST_TIMEOUT_MS = 20_000/);
+  assert.match(digest, /mailJxaTimedOut/);
+  assert.match(digest, /killOsascriptTree/);
+  assert.match(digest, /process\.kill\(-child\.pid/);
+  assert.match(digest, /Newsletters osascript timed out/);
   assert.match(digest, /refreshSource\("calendar"/);
   assert.match(digest, /refreshSource\("mail"/);
   assert.match(digest, /refreshSource\("axis"/);
@@ -184,21 +236,81 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(flask, /_startup\/progress/);
 });
 
-test("Mac Stratji starts Flask and Next headlessly without Terminal.app", async () => {
-  const [supervisor, config, install, start] = await Promise.all([
+test("Mac Stratji tears down leftover processes on launch and quit, then dash-starts fresh", async () => {
+  const [supervisor, appDelegate, session, config, install, start, stop] = await Promise.all([
     readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/AppDelegate.swift", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/StratjiSessionModel.swift", root), "utf8"),
     readFile(new URL("apple-app/Stratji/StratjiConfiguration.swift", root), "utf8"),
     readFile(new URL("scripts/install-macos-service.sh", root), "utf8"),
     readFile(new URL("scripts/start-flask-app.sh", root), "utf8"),
+    readFile(new URL("scripts/stop-flask-app.sh", root), "utf8"),
   ]);
 
+  assert.match(appDelegate, /kickoffAtLaunch/);
+  assert.ok(appDelegate.indexOf("kickoffAtLaunch") < appDelegate.indexOf("finishLaunchingOnMain"));
+  assert.match(appDelegate, /applicationShouldTerminate/);
+  assert.match(appDelegate, /FlaskServiceSupervisor.stopDataPlane\(\)/);
+  assert.match(appDelegate, /terminateLater/);
+  assert.match(supervisor, /func kickoffAtLaunch/);
+  assert.match(supervisor, /func stopDataPlane/);
+  assert.match(supervisor, /stopping leftover dashboard processes for a fresh start/);
+  assert.match(supervisor, /waitUntilDashboardPortsFree/);
+  assert.match(supervisor, /ports :3000 and :5050 are free/);
+  assert.match(supervisor, /isDashStartRunning/);
+  assert.match(supervisor, /waiting for leftover :3000\/:5050 listeners to exit/);
+  assert.match(supervisor, /dash-start still running; waiting for serviceReady/);
+  assert.match(supervisor, /return health\.serviceReady/);
+  assert.doesNotMatch(supervisor, /\(200 \.\.< 300\)\.contains\(http\.statusCode\)/);
+  assert.match(supervisor, /Gateway reachable; skip a second dash-start/);
+  assert.match(supervisor, /adoptLiveGatewayWithoutRecycle/);
+  assert.match(supervisor, /healthTimeout: TimeInterval = 8/);
+  assert.match(supervisor, /runDashStartInBackground/);
+  assert.match(supervisor, /stop-flask-app\.sh/);
+  assert.match(supervisor, /ensureRunning\(recycle:/);
+  assert.match(session, /bootstrap\(forceRestartService: true\)/);
+  assert.match(session, /startDataPlane\(forceRestartService\)/);
+  assert.match(session, /isDashStartRunning/);
+  assert.match(session, /attempts: Int = 180/);
+  assert.match(session, /extraWhileStarting/);
+  assert.doesNotMatch(session, /The local Stratji service is still starting\./);
+  assert.match(config, /stopScriptRelativePath = "scripts\/stop-flask-app.sh"/);
+  assert.match(stop, /launchctl bootout/);
+  assert.match(stop, /kill_listeners_on_port 5050/);
+  assert.match(stop, /kill_listeners_on_port 3000/);
+  assert.match(stop, /kill_listeners_on_port 3002/);
+  assert.match(stop, /kill_listeners_on_port 3003/);
+  assert.match(stop, /wait_until_port_free 5050/);
+  assert.match(stop, /wait_until_port_free 3000/);
+  assert.match(stop, /run-dashboard-service\.sh/);
+  assert.match(stop, /content-digest-server\.mjs/);
+  assert.match(supervisor, /exec \\"\$1\\"/);
+  assert.match(supervisor, /started dash-start in background/);
+  assert.match(supervisor, /dashStartStarted = false/);
+  assert.match(supervisor, /dash-start flag reset/);
+  assert.match(supervisor, /keep waiting before launchd fallback/);
+  assert.match(supervisor, /private static let pollLimit = 180/);
+  assert.match(start, /flask_bound/);
+  assert.match(start, /wait_until_ports_free/);
+  assert.match(start, /wait_until_healthy 180/);
+  assert.match(start, /Leftover Flask on :5050 is not ready/);
+  assert.match(start, /not starting a second copy on :5050/);
+  assert.match(start, /start_vinext_only/);
+  assert.match(start, /starting Vinext only/);
+  assert.match(config, /flask_bound/);
+  assert.match(config, /"gateway": "flask"/);
+  assert.match(install, /flask_bound/);
+  assert.match(install, /"gateway": "flask"/);
+  assert.doesNotMatch(supervisor, /osascript/);
+  assert.doesNotMatch(supervisor, /tell application \\"Terminal\\"/);
+  assert.doesNotMatch(supervisor, /do script/);
   assert.doesNotMatch(supervisor, /\/usr\/bin\/open/);
   assert.doesNotMatch(supervisor, /open -g -j/);
   assert.doesNotMatch(config, /open -g -j/);
   assert.doesNotMatch(install, /open -g -j/);
   assert.doesNotMatch(start, /open -a Terminal/);
   assert.match(supervisor, /startHeadlessService/);
-  assert.match(supervisor, /executableURL = URL\(fileURLWithPath: "\/bin\/bash"\)/);
+  assert.match(supervisor, /falling back to headless start/);
   assert.match(config, /\/bin\/bash "\$START_SCRIPT"/);
   assert.match(install, /\/bin\/bash "\\\$START_SCRIPT"/);
   assert.match(start, /run-dashboard-service\.sh/);
@@ -218,6 +330,7 @@ test("native splash runs a complete Health ZIP ingest; later ticks are increment
 
   assert.match(session, /startupRefreshCompleted = true/);
   assert.match(session, /await waitForDocumentReady\(\)/);
+  assert.match(session, /waitUntilFlaskReady/);
   assert.match(session, /startPeriodicRefresh\(\)/);
   assert.match(session, /runIncrementalRefresh/);
   assert.match(session, /incremental: true/);
@@ -238,15 +351,84 @@ test("native splash runs a complete Health ZIP ingest; later ticks are increment
   assert.match(session, /promptKiteLoginIfNeeded/);
   assert.match(supervisor, /mode: "complete"/);
   assert.doesNotMatch(supervisor, /PORTFOLIO_SKIP_HEALTH_ZIP"\] = "1"/);
+  assert.match(supervisor, /hasPrefix\("PORTFOLIO_SKIP_"\)/);
   assert.match(script, /PORTFOLIO_REFRESH_MODE:-complete/);
+  assert.doesNotMatch(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.doesNotMatch(script, /Health ZIP\\tskipped/);
   assert.match(script, /refresh-apple-health\.sh/);
   assert.match(script, /--if-changed/);
+  assert.match(script, /run_check_bg/);
+  assert.match(script, /wait \|\| true/);
   assert.match(health, /--if-changed/);
+  assert.match(health, /waiting to acquire the lock/);
+  assert.doesNotMatch(health, /waiting for the validated snapshot/);
   assert.match(health, /import_health_shortcut\.py/);
   assert.match(health, /prepare_apple_health_export\.py/);
   assert.match(health, /import_apple_health\.py/);
   assert.match(health, /if import_health_shortcut_if_present; then/);
   assert.match(health, /run_apple_health_import/);
+});
+
+test("complete load fans out mail kite sectors composite podcasts health calendar; incremental skips unchanged Health ZIP", async () => {
+  const [script, service, supervisor, health, digest, sectorData, page] = await Promise.all([
+    readFile(new URL("scripts/refresh-dashboard-data.sh", root), "utf8"),
+    readFile(new URL("scripts/run-dashboard-service.sh", root), "utf8"),
+    readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
+    readFile(new URL("scripts/refresh-apple-health.sh", root), "utf8"),
+    readFile(new URL("scripts/content-digest-server.mjs", root), "utf8"),
+    readFile(new URL("app/sector-data.ts", root), "utf8"),
+    readFile(new URL("app/page.tsx", root), "utf8"),
+  ]);
+
+  assert.match(script, /REFRESH_MODE="complete"/);
+  assert.match(script, /grep '\^PORTFOLIO_SKIP_'/);
+  assert.match(script, /run_check_bg kite/);
+  assert.match(script, /run_check_bg content/);
+  assert.match(script, /\/api\/kite\/snapshot/);
+  assert.match(script, /\/api\/content\/refresh\?\$\{CONTENT_QUERY\}/);
+  assert.match(script, /CONTENT_QUERY="force=1&startup=/);
+  assert.match(script, /REFRESH_MODE" == "incremental"[\s\S]*CONTENT_QUERY="refresh=/);
+  assert.match(script, /\/api\/sectors\/snapshot\?sector=\$\{sector\}/);
+  assert.match(script, /SECTORS=\(it pharma power infrastructure auto telecom banking nbfc fmcg consumer energy metals defence\)/);
+  assert.match(script, /composite-scoring inputs/);
+  assert.match(script, /\/api\/sectors\/news/);
+  assert.match(script, /\/api\/sectors\/benchmarks/);
+  assert.match(script, /\/api\/earnings\/snapshot/);
+  assert.match(script, /\/_health\/snapshot/);
+  assert.match(script, /emit_progress calendar start/);
+  assert.match(script, /emit_progress mail start/);
+  assert.match(script, /emit_progress axis start/);
+  assert.match(script, /emit_progress reminders start/);
+  assert.match(script, /emit_progress podcasts start/);
+  assert.match(script, /Health ZIP\\tcomplete\\tvalidate newest iCloud ZIP/);
+  assert.match(script, /Health ZIP\\tincremental\\tre-extract only if the export mtime changed/);
+  assert.match(script, /REFRESH_MODE" == "incremental"[\s\S]*"\$HEALTH_SCRIPT" --if-changed/);
+  assert.doesNotMatch(script, /PORTFOLIO_SKIP_HEALTH_ZIP/);
+  assert.match(script, /wait \|\| true/);
+  assert.match(sectorData, /export function sectorComposite/);
+  assert.match(digest, /refreshSource\("calendar"/);
+  assert.match(digest, /refreshSource\("mail"/);
+  assert.match(digest, /refreshSource\("axis"/);
+  assert.match(digest, /refreshSource\("reminders"/);
+  assert.match(digest, /refreshSource\("podcasts"/);
+  assert.match(digest, /summarizePodcastTranscript/);
+  assert.match(digest, /readLocalPodcastTranscript/);
+  assert.match(digest, /ingestSatyaDigestRefresh/);
+  assert.match(digest, /ingestSatyaAxisPdfArchive/);
+  assert.match(health, /health_export_unchanged/);
+  assert.match(health, /Apple Health export unchanged; skipped re-extract/);
+  assert.match(health, /waiting to acquire the lock/);
+  assert.match(service, /PORTFOLIO_REFRESH_MODE=complete/);
+  assert.match(service, /grep '\^PORTFOLIO_SKIP_'/);
+  assert.match(service, /--threads=24/);
+  assert.match(service, /refresh-apple-health\.sh/);
+  assert.match(supervisor, /mode: "complete"/);
+  assert.match(supervisor, /mode: "incremental"/);
+  assert.match(supervisor, /hasPrefix\("PORTFOLIO_SKIP_"\)/);
+  assert.match(supervisor, /runIncrementalRefresh/);
+  assert.match(page, /refreshAll\(true\)/);
+  assert.match(page, /refreshAll\(false, \{ silent: true \}\)/);
+  assert.match(page, /Promise\.allSettled\(\s*Object\.keys\(sectorCompanies\)/);
 });
 
 test("iOS splash refresh does not schedule a second complete refresh on become-active", async () => {

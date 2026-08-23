@@ -38,6 +38,26 @@ test("health nutrition aliases resolve to the combined Nutrition page", () => {
   assert.equal(canonical.searchParams.get("page"), "nutrition");
 });
 
+test("feed aliases resolve to My Feed health workspace", () => {
+  assert.equal(parseWorkspaceView("feed"), "health");
+  assert.equal(parseWorkspaceView("my-feed"), "health");
+  assert.equal(parseWorkspaceView("health"), "health");
+
+  const aliased = new URL("http://localhost/?view=feed&section=h4");
+  assert.deepEqual(applyCanonicalWorkspaceUrl(aliased), { view: "health", rewritten: true });
+  assert.equal(aliased.searchParams.get("view"), "health");
+  assert.equal(aliased.searchParams.get("section"), "h4");
+
+  const calendarAlias = new URL("http://localhost/?view=health&section=calendar-reminders");
+  assert.deepEqual(applyCanonicalWorkspaceUrl(calendarAlias), { view: "health", rewritten: true });
+  assert.equal(calendarAlias.searchParams.get("section"), "h4");
+
+  const legacyIntelligenceCalendar = new URL("http://localhost/?view=intelligence&section=m4");
+  assert.deepEqual(applyCanonicalWorkspaceUrl(legacyIntelligenceCalendar), { view: "health", rewritten: true });
+  assert.equal(legacyIntelligenceCalendar.searchParams.get("view"), "health");
+  assert.equal(legacyIntelligenceCalendar.searchParams.get("section"), "h4");
+});
+
 test("Composer seed module stores nine StrategyTreeV1 reconstructions", async () => {
   const source = await readFile(new URL("../app/strategy/composer-strategies.ts", import.meta.url), "utf8");
   const cache = JSON.parse(await readFile(new URL("../app/strategy/library-nse-stats.cache.json", import.meta.url), "utf8"));
@@ -94,7 +114,7 @@ test("Strategies workspace uses DailyKanbanBoard and compact vertical read-only 
   assert.match(utils, /kanbanItems[\s\S]*\bstrategies\s*:/);
   assert.match(utils, /key: "strategies", label: "Strategies"/);
   assert.match(utils, /key: "builder", label: "Algorithm Canvas"[\s\S]*icon: GitBranch/);
-  assert.match(utils, /key: "strategies", label: "Strategies", note: "NSE strategy library", icon: Library/);
+  assert.match(utils, /key: "strategies", label: "Strategies", barLabel: "Strategies", note: "NSE strategy library", icon: Library/);
   assert.doesNotMatch(utils, /NSE ETF strategy library/);
   assert.doesNotMatch(utils, /key: "strategies"[\s\S]*icon: GitBranch/);
 });
@@ -128,6 +148,9 @@ test("Library gallery is KPI-only 2x2 cards; full tree opens in a dialog", async
   assert.doesNotMatch(gallery, /ReadOnlyTree/);
   assert.match(dialog, /role="dialog"/);
   assert.match(dialog, /<ReadOnlyTree tree=\{tree\} \/>/);
+  assert.match(dialog, /Export to Streak/);
+  assert.match(dialog, /\/api\/streak\/export/);
+  assert.match(dialog, /does not place unattended orders/);
   assert.match(dialog, /unavailableReason/);
   assert.match(workspace, /source: "mine"/);
   assert.match(css, /\.strategy-kpi-grid \{[\s\S]*grid-template-columns:repeat\(2/);
@@ -167,4 +190,35 @@ test("Library NSE stats route uses the existing tree backtest path", async () =>
   assert.match(api, /runTreeBacktest\(tree, bars\)/);
   assert.match(persist, /LIBRARY_NSE_STATS_PATH = "\/api\/strategies\/library-stats"/);
   assert.doesNotMatch(api, /TQQQ|Composer published/);
+});
+
+test("Y-2 library lab compares two trees, books a 60/40 ensemble, and campaigns without a seventh workspace", async () => {
+  const [workspace, lab, css, book, campaign, api] = await Promise.all([
+    readFile(new URL("../app/dashboard/StrategiesWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/strategies/LibraryLab.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/strategies/strategies-workspace.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/strategy/strategy-book.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/backtests/campaign/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/strategy/strategy-api.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspace, /<LibraryLab catalog=\{catalogPicks\} \/>/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="strategies"\s*\/>/);
+  assert.doesNotMatch(workspace, /view=strategies-book|view=campaign|view=ensemble/);
+  assert.match(lab, /data-testid="strategy-compare-open"/);
+  assert.match(lab, /data-testid=\{`strategy-\$\{mode\}-dialog`\}/);
+  assert.match(lab, /data-testid="strategy-compare-columns"/);
+  assert.match(lab, /KPIs stay —/);
+  assert.match(lab, /<EquityCurve/);
+  assert.match(lab, /data-testid="strategy-book-open"/);
+  assert.match(lab, /placesOrders is false/);
+  assert.match(lab, /data-testid="strategy-campaign-open"/);
+  assert.match(lab, /data-testid="strategy-campaign-table"/);
+  assert.match(lab, /Blank — if a tree did not run/);
+  assert.match(css, /\.strategy-lab-compare/);
+  assert.match(book, /placesOrders: false/);
+  assert.match(book, /combineStrategyBook/);
+  assert.match(campaign, /handleBacktestCampaign/);
+  assert.match(api, /handleBacktestCampaign/);
+  assert.match(api, /handleBacktestBook/);
+  assert.match(api, /STRATEGY_CAMPAIGN_PLACES_ORDERS/);
 });

@@ -45,6 +45,8 @@ next-env.d.ts
 /work/
 /tmp/
 /artifacts/private/
+# Satya FTS corpus and catalog (private mail index; also covered by /artifacts/private/)
+/artifacts/private/satya/
 /artifacts/demo/*.webm
 /artifacts/demo/*.mp4
 

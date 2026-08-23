@@ -710,7 +710,61 @@ def all_dated_calls(calls: list[dict], *, since: str | None = "2026-07-01") -> l
     )
 
 
+def extract_text_layer(path: Path) -> dict:
+    """Extract the PDF text layer for Satya ingest. Never invents numbers."""
+    meta = {
+        "path": str(path),
+        "name": path.name,
+        "ok": False,
+        "pages": 0,
+        "chars": 0,
+        "text": "",
+        "skipReason": None,
+    }
+    if not is_valid_pdf(path):
+        meta["skipReason"] = "invalid_pdf_header"
+        return meta
+    try:
+        doc = fitz.open(path)
+    except Exception as exc:  # noqa: BLE001
+        meta["skipReason"] = f"open_failed:{exc}"
+        return meta
+    try:
+        pages = doc.page_count
+        text = "\n".join(page.get_text("text") for page in doc)
+    except Exception as exc:  # noqa: BLE001
+        meta["skipReason"] = f"extract_failed:{exc}"
+        return meta
+    finally:
+        try:
+            doc.close()
+        except Exception:  # noqa: BLE001
+            pass
+    cleaned = clean_text(text)
+    meta["ok"] = True
+    meta["pages"] = pages
+    meta["chars"] = len(cleaned)
+    meta["text"] = cleaned
+    if len(cleaned) < 40:
+        meta["skipReason"] = "no_text_layer"
+        meta["text"] = ""
+    return meta
+
+
+def dump_text_jsonl(paths: list[Path]) -> int:
+    for path in paths:
+        payload = extract_text_layer(path)
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--text-jsonl":
+        raw_paths = sys.argv[2:]
+        if not raw_paths:
+            raw_paths = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+        return dump_text_jsonl([Path(item) for item in raw_paths])
+
     archive = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_ARCHIVE
     if not archive.is_dir():
         print(f"Archive not found: {archive}", file=sys.stderr)

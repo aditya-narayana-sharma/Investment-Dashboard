@@ -4,12 +4,90 @@ export type PodcastInsight = {
   sentiment: "Positive" | "Neutral" | "Negative";
 };
 
+export type SatyaSourceFamily =
+  | "axis_research"
+  | "axis_mutual_fund"
+  | "groww_digest"
+  | "flipboard_tech"
+  | "newsletter_other"
+  | "podcasts"
+  | "earnings";
+
+export type SatyaCatalogSender = {
+  id: string;
+  family: SatyaSourceFamily;
+  label: string;
+  sender: string;
+  senderEmail?: string;
+  messageCount: number;
+  latestAt: string | null;
+  status: "live" | "stale" | "empty";
+};
+
+export type AxisResearchCategoryId =
+  | "result_update"
+  | "sector_update"
+  | "auto_monthly_sales_volume"
+  | "earnings_preview"
+  | "axis_alpha"
+  | "company_update"
+  | "axis_punch"
+  | "axis_top_picks"
+  | "book_profits"
+  | "call_closure"
+  | "result_preview"
+  | "daily_derivatives_insights"
+  | "daily_morning_note"
+  | "daily_stock_derivative_lens"
+  | "daily_technical_outlook"
+  | "sector_opportunity"
+  | "monthly_quant_report"
+  | "monthly_technical_outlook_picks"
+  | "pick_of_the_week"
+  | "quarterly_result_updates"
+  | "sector_seasonality_report"
+  | "target_achieved"
+  | "top_conviction_ideas"
+  | "weekly_derivatives_insights"
+  | "weekly_technical_picks"
+  | "axis_annual_analysis"
+  | "important_update"
+  | "live_webinars"
+  | "other_research";
+
+export type SatyaCatalog = {
+  asOf: string;
+  families: Array<{ family: SatyaSourceFamily; label: string; count: number }>;
+  senders: SatyaCatalogSender[];
+  axisCategories?: Array<{ id: AxisResearchCategoryId; label: string; count: number }>;
+};
+
+export type SatyaCitation = {
+  family: SatyaSourceFamily;
+  title: string;
+  date: string;
+  sender: string;
+  excerpt: string;
+  messageUrl?: string;
+  pdfUrl?: string | null;
+  episodeUrl?: string;
+  /** IR/NSE (or other verified) URL for the `earnings` family. */
+  sourceUrl?: string;
+  axisCategory?: AxisResearchCategoryId | null;
+  /** Corpus row origin. Podcast transcript vs description is `evidenceKind`, not this field. */
+  contentSource?: "mail" | "podcast" | "pdf" | string | null;
+  /** Podcast evidence only. Never treat a missing or `description` value as a transcript. */
+  evidenceKind?: "transcript" | "description" | null;
+};
+
 export type DigestItem = {
   source: string;
   time: string;
   receivedAt?: string;
   title: string;
   summary: string;
+  /** Satya source family for retrieval and the live catalog. */
+  sourceFamily?: SatyaSourceFamily;
   /** Source-backed summary points for Market Intelligence (≥5 when body supports it). */
   bullets?: string[];
   /** Podcast evidence. Descriptions are sanitized and explicitly labelled when no transcript exists. */
@@ -29,8 +107,10 @@ export type DigestItem = {
   messageId?: string;
   /** `message://…` deep link into Apple Mail when messageId is available. */
   messageUrl?: string;
-  /** Axis Research topic/subject collapsible group (Punch, Result Updates, …). */
+  /** Axis Research topic/subject collapsible group (canonical category label). */
   topicGroup?: string;
+  /** Canonical Axis Research subject category (28 named + other_research). */
+  axisCategory?: AxisResearchCategoryId;
   /** Local Axis PDF basename when matched under the Axis Research archive. */
   pdfFile?: string | null;
   /** Dashboard route that serves the matched local Axis PDF inline. */

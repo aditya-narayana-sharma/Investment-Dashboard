@@ -22,7 +22,7 @@ final class InvestmentDashboardUITests: XCTestCase {
             "Portfolio Overview",
             "Sectoral Analytics",
             "Market Intelligence",
-            "Health & Wellness",
+            "My Feed",
             "Algorithm Builder",
             "Strategies",
         ]
