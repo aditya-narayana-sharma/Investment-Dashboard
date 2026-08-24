@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
+import { SatyaInfinityLoader } from "./SatyaInfinityLoader";
 import {
   SATYA_DRAFT_STATUS_INTERVAL_MS,
   clearSatyaDraftStatusMessage,
   getSatyaDraftStatusMessage,
+  satyaDraftStatusColorForPhrase,
   satyaDraftStatusPhrase,
   subscribeSatyaDraftStatusMessage,
 } from "./satya-draft-status";
@@ -68,15 +70,18 @@ export function SatyaDraftStatusLine({
     reducedMotion,
     stageMessage: sseMessage,
   });
+  const accent = satyaDraftStatusColorForPhrase(phrase);
   const Tag = as;
 
   return (
     <Tag
       className={["satya-draft-status", className].filter(Boolean).join(" ")}
+      style={{ "--satya-loader-accent": accent, "--satya-accent": accent } as CSSProperties}
       aria-live={live ? "polite" : undefined}
       aria-atomic={live ? "true" : undefined}
       data-reduced-motion={reducedMotion ? "true" : "false"}
     >
+      <SatyaInfinityLoader className="satya-draft-status-loader" reducedMotion={reducedMotion} />
       <span key={phrase} className="satya-draft-status-phrase">
         {phrase}
       </span>

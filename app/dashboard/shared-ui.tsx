@@ -648,7 +648,7 @@ export function DailyKanbanBoard({ workspace, items: itemsProp }: { workspace: K
   };
   const lanes = [{ key: "today", label: "To do today" }, { key: "monitor", label: "Monitor" }, { key: "done", label: "Completed today" }] as const;
   return <section className="kanban-board canonical-action-board" data-visual="mission-chips">
-    <div className="kanban-summary"><div><Target size={18}/><span><b>Daily action board</b><small>{Math.max(items.length - state.completed.length, 0)} active · {state.completed.length} completed · resets at local midnight</small></span></div><em>{localDateKey()}</em></div>
+    <div className="kanban-summary"><div><Target size={18}/><span><b>Daily action board</b><small>{Math.max(items.length - state.completed.length, 0)} active · {state.completed.length} completed · resets at local midnight</small></span></div><em suppressHydrationWarning>{state.date}</em></div>
     <div className="kanban-lanes">{lanes.map((lane) => {
       const laneItems = items.filter((item) => lane.key === "done" ? state.completed.includes(item.id) : item.lane === lane.key && !state.completed.includes(item.id));
       return <article className={`kanban-lane ${lane.key} ${laneItems.length ? "" : "empty"}`} key={lane.key}><header><b>{lane.label}</b><span>{laneItems.length}</span></header><div>{laneItems.map((item) => {

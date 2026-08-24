@@ -1,0 +1,80 @@
+/* Satya draft/reply status line — rotating process phrases + shimmer.
+   Extracted from satya.css to keep that file under the 1000-line rule.
+   Imported globally (before satya.css) so satya.css's reduced-motion
+   overrides for .satya-draft-status-phrase still win the cascade. */
+
+.satya-draft-status {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.satya-draft-status-phrase {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--ink) 38%,
+    color-mix(in srgb, var(--satya-accent, #7c5fd4) 42%, var(--ink)) 50%,
+    var(--ink) 62%,
+    var(--muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    satya-draft-status-in 0.32s var(--vo-ease, ease),
+    satya-draft-status-shimmer 2.4s var(--vo-ease, ease) infinite;
+}
+
+.satya-send .satya-draft-status,
+.satya-send .satya-draft-status-phrase {
+  color: inherit;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  animation: satya-draft-status-in 0.32s var(--vo-ease, ease);
+}
+
+@keyframes satya-draft-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes satya-draft-status-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -120% 0; }
+}
+
+/* Vertical figure-8 / infinity dot loader (SatyaInfinityLoader).
+   Inline SVG sized in em so it is exactly text height; the dot colour is
+   driven per loading message via --satya-loader-accent on .satya-draft-status. */
+.satya-fig8 {
+  display: inline-block;
+  height: 1.05em;
+  width: auto;
+  aspect-ratio: 17 / 34;
+  flex: 0 0 auto;
+  vertical-align: -0.16em;
+  overflow: visible;
+  color: var(--satya-loader-accent, var(--satya-accent, #3b6bff));
+  transition: color 0.32s ease;
+}
+
+.satya-fig8 circle {
+  fill: currentColor;
+}

@@ -94,8 +94,13 @@ test("workspace navigation does not re-stat Documents or restart the data plane"
   assert.match(dashStart, /applicationSupportDirectory/);
   assert.match(dashStart, /exec \\"\$1\\"/);
 
-  assert.match(entitlements, /com\.apple\.security\.files\.user-selected\.read-write/);
-  assert.match(entitlements, /com\.apple\.security\.files\.bookmarks\.app-scope/);
+  // App Sandbox is OFF, so the sandbox-only file entitlements are omitted (they are
+  // inert without the sandbox); the checkout is persisted via a plain, non-security-scoped
+  // bookmark plus Full Disk Access instead.
+  assert.match(entitlements, /com\.apple\.security\.app-sandbox<\/key>\s*<false\/>/);
+  assert.doesNotMatch(entitlements, /com\.apple\.security\.files\.user-selected\.read-write/);
+  assert.doesNotMatch(entitlements, /com\.apple\.security\.files\.bookmarks\.app-scope/);
+  assert.doesNotMatch(config, /withSecurityScope/);
   assert.match(info, /NSDocumentsFolderUsageDescription/);
   assert.match(info, /Stratji starts the local dashboard from your Git checkout/);
 });

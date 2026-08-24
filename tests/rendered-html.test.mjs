@@ -371,7 +371,10 @@ test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion 
   assert.doesNotMatch(satyaCss, /\.satya-draft-popout-backdrop/);
   assert.match(satyaCss, /overflow-wrap:\s*anywhere/);
   assert.match(satyaCss, /\.satya-turn pre[\s\S]*white-space:\s*pre-wrap/);
-  assert.match(satyaCss, /satya-draft-status-shimmer/);
+  assert.match(
+    await readFile(new URL("../app/dashboard/satya-draft-status.css", import.meta.url), "utf8"),
+    /satya-draft-status-shimmer/,
+  );
   assert.doesNotMatch(satyaRoom, />Drafting…</);
   assert.match(satyaRoom, /SatyaDraftStatusLine/);
   assert.match(satyaRoom, /setSatyaThread/);

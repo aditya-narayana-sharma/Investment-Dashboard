@@ -1,14 +1,27 @@
-/** Process labels only — never a claim that a source was read or a KPI exists. */
+/** Process labels only — never a claim that a source was read or a KPI exists.
+ *  Index 0-2 are pinned by tests/satya-draft-status.test.mjs; keep them first. */
 export const SATYA_DRAFT_STATUS_PHRASES = [
   "Thinking…",
   "Going through Research…",
   "Analyzing KPIs…",
-  "Reading Axis notes…",
-  "Checking earnings prints…",
+  "Loading…",
+  "Sizing it up…",
+  "Fetching…",
+] as const;
+
+/** One accent per phrase (same index order); drives the fig-8 loader + text tint. */
+export const SATYA_DRAFT_STATUS_COLORS = [
+  "#7c5fd4", // Thinking… — violet
+  "#3b6bff", // Going through Research… — blue
+  "#2eb8a0", // Analyzing KPIs… — teal
+  "#e8a317", // Loading… — amber
+  "#35b6c8", // Sizing it up… — cyan
+  "#e2556d", // Fetching… — rose
 ] as const;
 
 export const SATYA_DRAFT_STATUS_INTERVAL_MS = 2500;
 export const SATYA_DRAFT_STATUS_REDUCED = "Thinking…";
+export const SATYA_DRAFT_STATUS_COLOR_REDUCED = SATYA_DRAFT_STATUS_COLORS[0];
 
 export type SatyaDraftStatusStage = "retrieve" | "generate" | "unknown";
 
@@ -94,4 +107,18 @@ export function satyaDraftStatusPhrase(
   const count = SATYA_DRAFT_STATUS_PHRASES.length;
   const index = ((tick % count) + count) % count;
   return SATYA_DRAFT_STATUS_PHRASES[index] ?? SATYA_DRAFT_STATUS_REDUCED;
+}
+
+/** Accent for a phrase string; falls back to the reduced-motion accent. */
+export function satyaDraftStatusColorForPhrase(phrase: string): string {
+  const index = SATYA_DRAFT_STATUS_PHRASES.indexOf(phrase as (typeof SATYA_DRAFT_STATUS_PHRASES)[number]);
+  return SATYA_DRAFT_STATUS_COLORS[index] ?? SATYA_DRAFT_STATUS_COLOR_REDUCED;
+}
+
+/** Accent matching the phrase that satyaDraftStatusPhrase() would show. */
+export function satyaDraftStatusColor(
+  tick: number,
+  options?: { reducedMotion?: boolean; stageMessage?: string },
+): string {
+  return satyaDraftStatusColorForPhrase(satyaDraftStatusPhrase(tick, options));
 }

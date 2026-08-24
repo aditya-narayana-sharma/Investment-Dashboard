@@ -936,59 +936,9 @@ html[data-appearance="sepia"] .satya-briefing {
   50% { transform: translateY(-2px); }
 }
 
-.satya-draft-status {
-  margin: 0;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.satya-draft-status-phrase {
-  display: inline-block;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  background-image: linear-gradient(
-    90deg,
-    var(--muted) 0%,
-    var(--ink) 38%,
-    color-mix(in srgb, var(--satya-accent, #7c5fd4) 42%, var(--ink)) 50%,
-    var(--ink) 62%,
-    var(--muted) 100%
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation:
-    satya-draft-status-in 0.32s var(--vo-ease, ease),
-    satya-draft-status-shimmer 2.4s var(--vo-ease, ease) infinite;
-}
-
-.satya-send .satya-draft-status,
-.satya-send .satya-draft-status-phrase {
-  color: inherit;
-  background: none;
-  -webkit-background-clip: unset;
-  background-clip: unset;
-  animation: satya-draft-status-in 0.32s var(--vo-ease, ease);
-}
-
-@keyframes satya-draft-status-in {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes satya-draft-status-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -120% 0; }
-}
+/* .satya-draft-status* base rules + keyframes live in satya-draft-status.css
+   (extracted to keep this file under the 1000-line rule). The reduced-motion
+   overrides for .satya-draft-status-phrase remain below. */
 
 @keyframes satya-think-tilt {
   0%, 100% { transform: rotate(-4deg); }

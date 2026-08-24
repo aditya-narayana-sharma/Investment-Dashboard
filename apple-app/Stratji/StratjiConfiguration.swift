@@ -252,25 +252,15 @@ enum StratjiConfiguration {
             return nil
         }
         var isStale = false
-        let url: URL
-        do {
-            url = try URL(
-                resolvingBookmarkData: data,
-                options: [.withSecurityScope, .withoutUI],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-        } catch {
-            do {
-                url = try URL(
-                    resolvingBookmarkData: data,
-                    options: [.withoutUI],
-                    relativeTo: nil,
-                    bookmarkDataIsStale: &isStale
-                )
-            } catch {
-                return nil
-            }
+        // Plain (non-security-scoped) bookmark: App Sandbox is OFF, so security-scoped
+        // resolution is unsupported here and the path is reachable via Full Disk Access.
+        guard let url = try? URL(
+            resolvingBookmarkData: data,
+            options: [.withoutUI],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) else {
+            return nil
         }
         if isStale {
             persistBookmarkLocked(for: url)
@@ -296,22 +286,14 @@ enum StratjiConfiguration {
     }
 
     private static func persistBookmarkLocked(for url: URL) {
-        let data: Data
-        do {
-            data = try url.bookmarkData(
-                options: [.withSecurityScope],
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-        } catch {
-            guard let fallback = try? url.bookmarkData(
-                options: [],
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            ) else {
-                return
-            }
-            data = fallback
+        // Plain, non-security-scoped bookmark: security-scoped options are inert while
+        // App Sandbox is OFF; a plain bookmark persists the checkout path fine.
+        guard let data = try? url.bookmarkData(
+            options: [],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) else {
+            return
         }
         UserDefaults.standard.set(data, forKey: repoRootBookmarkDefaultsKey)
     }

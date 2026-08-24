@@ -1,4 +1,5 @@
 /* Visual Overhaul — specialized instruments, motion, and interaction language */
+@import "./dashboard/satya-draft-status.css";
 @import "./dashboard/satya.css";
 
 :root {

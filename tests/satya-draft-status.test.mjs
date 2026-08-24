@@ -40,12 +40,13 @@ test("Satya draft status maps SSE retrieve vs generate and honors reduced motion
 });
 
 test("Satya wait UI and CSS drop frozen Drafting copy and wrap reply text", async () => {
-  const [statusLine, room, presence, popout, css, popoutCss, client, chat] = await Promise.all([
+  const [statusLine, room, presence, popout, css, statusCss, popoutCss, client, chat] = await Promise.all([
     readFile(new URL("../app/dashboard/SatyaDraftStatusLine.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SatyaBriefingRoom.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SatyaDraftPopout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/satya.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/satya-draft-status.css", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/satya-draft-popout.css", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/satya-client.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/satya/chat.ts", import.meta.url), "utf8"),
@@ -62,7 +63,7 @@ test("Satya wait UI and CSS drop frozen Drafting copy and wrap reply text", asyn
   assert.match(client, /publishSatyaDraftStatusMessage/);
   assert.match(chat, /Going through Research…/);
   assert.match(chat, /event: "status", data: \{ message: "Thinking…" \}/);
-  assert.match(css, /satya-draft-status-shimmer/);
+  assert.match(statusCss, /satya-draft-status-shimmer/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]*satya-draft-status-phrase/);
   assert.match(css, /\.satya-turn pre[\s\S]*overflow-wrap:\s*anywhere/);
   assert.match(css, /\.satya-turn pre[\s\S]*white-space:\s*pre-wrap/);

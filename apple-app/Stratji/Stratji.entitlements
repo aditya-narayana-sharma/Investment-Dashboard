@@ -10,9 +10,10 @@
   - Stratji.app is the AppKit + WKWebView shell. The data plane is sibling processes.
   - Full Disk Access may still be required for group-container SQLite until EventKit
     and user-selected folder bookmarks replace those reads.
-  - files.user-selected.read-write + files.bookmarks.app-scope persist the git
-    checkout after the operator Allows Documents or picks the folder once.
-    Stratji caches that path; it must not re-stat Documents on ?view= changes.
+  - The git checkout path is persisted via a plain (non-security-scoped) bookmark
+    plus Full Disk Access; security-scoped file entitlements are omitted because
+    they are inert while App Sandbox is OFF. Stratji caches that path; it must not
+    re-stat Documents on ?view= changes.
   - TCC parent for helpers is the LaunchAgent bash trampoline (not Terminal.app).
     Production should make Stratji.app the parent so Info.plist usage strings are
     what the user sees.
@@ -42,10 +43,6 @@
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
 	<key>com.apple.security.personal-information.reminders</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
 </dict>
 </plist>
