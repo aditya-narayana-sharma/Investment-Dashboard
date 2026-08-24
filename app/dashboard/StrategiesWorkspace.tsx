@@ -20,12 +20,14 @@ import {
 import type { StrategyTreeV1 } from "../strategy/graph-types";
 import { CollapsibleSection, DailyKanbanBoard, dashboardSectionNumberFromNavId, expandDashboardSection } from "./shared-ui";
 import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
+import { satyaSuggestionsForWorkspace } from "./satya-suggestions";
 import { useSatyaTaskContext } from "./satya-workspace";
 import { ReadOnlyTree } from "./strategies/ReadOnlyTree";
 import { LibraryLab } from "./strategies/LibraryLab";
 import "./strategies/strategies-workspace.css";
 import type { StrategiesSection } from "./types";
 import { isLocationView, parseStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
+import { buildStrategiesDailyActions } from "./workspace-daily-actions";
 
 const STRATEGIES_SECTIONS = [
   { id: "y1", label: "Action Board" },
@@ -321,11 +323,17 @@ export function StrategiesWorkspace() {
     };
   }, []);
 
+  const strategiesActions = useMemo(
+    () => buildStrategiesDailyActions({ libraryCount: COMPOSER_STRATEGIES.length }),
+    [],
+  );
+  const satyaCatalog = satyaSuggestionsForWorkspace("strategies", { section: activeSection });
   useSatyaTaskContext("strategies", {
     task: "strategy",
-    hint: "Machine-drafted notes on the public library. Missing KPIs stay —. Open Algorithm Canvas to edit trees.",
+    hint: satyaCatalog.hint ?? "Strategies library / Y-2 compare language only. Satya will not reconstruct Composer trees.",
     context: `${COMPOSER_STRATEGIES.length} NSE ETF trees as-of ${COMPOSER_RESEARCH_AS_OF}. Mine: ${mine.map((item) => item.name).join(", ") || "none"}. Top cards: ${sorted.slice(0, 8).map((card) => card.name).join("; ")}.`,
-    placeholder: "e.g. Compare quality vs momentum sleeves and what to verify on the canvas",
+    placeholder: satyaCatalog.placeholder ?? "e.g. What Axis Research notes speak to quality versus momentum library themes?",
+    suggestions: satyaCatalog.suggestions,
   });
 
   return (
@@ -336,7 +344,7 @@ export function StrategiesWorkspace() {
 
       <div id="strategies-y1" className="workspace-section action-board-workspace-section" hidden={activeSection !== "y1"}>
         <CollapsibleSection number={strategiesSectionNumber("y1")} title="Action Board" note="Clickable daily actions for the public strategy library" defaultOpen={activeSection === "y1"}>
-          <DailyKanbanBoard workspace="strategies"/>
+          <DailyKanbanBoard workspace="strategies" items={strategiesActions}/>
         </CollapsibleSection>
       </div>
 

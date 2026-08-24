@@ -77,5 +77,5 @@ test("Algorithm Canvas action board is DailyKanbanBoard, not a compact builder b
     console.log("SOFT (waiting on shell sibling): DailyKanbanBoard workspace=\"builder\"");
     return;
   }
-  assert.match(workspace.text, /<DailyKanbanBoard workspace="builder"\s*\/>/);
+  assert.match(workspace.text, /<DailyKanbanBoard workspace="builder" items=\{builderActions\}\s*\/>/);
 });

@@ -58,6 +58,10 @@ test("satya is an LLM assist task with a retrieval-only system prompt", () => {
   assert.match(prompt, /composite score/);
   assert.match(prompt, /scenario update/);
   assert.match(prompt, /500\+ words/);
+  assert.match(prompt, /Write a story grounded in this query's context/);
+  assert.match(prompt, /Do not force a robotic WHAT\/WHY\/HOW heading template/);
+  assert.match(prompt, /never fill with model knowledge/);
+  assert.match(prompt, /unpublished or not in this evidence/);
   assert.doesNotMatch(prompt, /Prefer short factual bullets over narrative/);
   assert.doesNotMatch(prompt, /Interrogate LLM/);
 });
@@ -77,14 +81,16 @@ test("satya written prompt forbids one-line-only answers and requires passage-gr
     passages,
     voice: false,
   });
-  assert.match(written, /long-form structured sections/i);
+  assert.match(written, /tell a story grounded only in this query's retrieved evidence/i);
+  assert.match(written, /long-form/i);
   assert.match(written, /multiple paragraphs/i);
   assert.match(written, /verbatim/);
   assert.match(written, /500\+ words/);
   assert.match(written, /composite score/i);
   assert.match(written, /scenario update/i);
-  assert.match(written, /REQUIRED HEADING/);
-  assert.match(written, /3–4 or more substantiated bullets/);
+  assert.match(written, /EVIDENCE INVENTORY/);
+  assert.match(written, /unpublished or not in this evidence/);
+  assert.match(written, /Do not force a WHAT \/ WHY \/ HOW heading list/);
   assert.match(written, /Do not stop after three bullets for the whole answer/);
   assert.doesNotMatch(written, /keep it brief/i);
   assert.doesNotMatch(written, /keep it concise \(4–8 sentences\)/);
@@ -97,7 +103,30 @@ test("satya written prompt forbids one-line-only answers and requires passage-gr
     voice: true,
   });
   assert.match(spoken, /not a one-liner/);
+  assert.match(spoken, /short story/);
   assert.doesNotMatch(spoken, /keep it concise \(4–8 sentences\)/);
+});
+
+test("podcast-theme prompts stay narrative and refuse unpublished peer KPI comparisons", () => {
+  const written = buildSatyaUserPrompt({
+    question: "What were the main overnight podcast themes?",
+    passages: [{
+      family: "podcasts",
+      title: "Overnight markets",
+      date: "2026-08-19T03:00:00Z",
+      sender: "Podcasts",
+      excerpt: "Description of overnight markets. Not a transcript.",
+      pdfUrl: null,
+    }],
+    voice: false,
+  });
+  assert.match(written, /tell a story grounded only in this query's retrieved evidence/i);
+  assert.match(written, /Do not force a WHAT \/ WHY \/ HOW heading list when the question is a podcast theme/);
+  assert.match(written, /unpublished or not in this evidence/);
+  assert.match(written, /never invent or use model knowledge/);
+  assert.match(written, /## Podcasts/);
+  assert.doesNotMatch(written, /write every heading listed here/i);
+  assert.doesNotMatch(written, /REQUIRED HEADINGS — write every heading/);
 });
 
 test("satya prompts reject three-bullet dumps, one-liners, and keep-it-brief instructions", () => {
@@ -118,9 +147,10 @@ test("satya prompts reject three-bullet dumps, one-liners, and keep-it-brief ins
   const combined = `${system}\n${written}`;
   assert.match(system, /never a one-line reply/i);
   assert.match(system, /never a three-line bullet dump/i);
-  assert.match(system, /3–4 or more substantiated bullets/);
+  assert.match(system, /Write a story grounded in this query's context/);
+  assert.match(system, /Do not force a robotic WHAT\/WHY\/HOW heading template/);
   assert.match(system, /Do not stop after three bullets for the whole answer/);
-  assert.match(written, /REQUIRED HEADINGS/);
+  assert.match(written, /EVIDENCE INVENTORY/);
   assert.match(written, /## Axis Research/);
   assert.doesNotMatch(combined, /keep it brief/i);
   assert.doesNotMatch(combined, /keep it concise \(4–8 sentences\)/);
@@ -277,7 +307,7 @@ test("satya workspace slots pick one assistant context per view", () => {
   assert.equal(resolveSatyaWorkspaceSlot("intelligence", "?section=m3"), "intelligence-m3");
   assert.equal(resolveSatyaWorkspaceSlot("builder", "?section=canvas"), "builder");
   assert.equal(resolveSatyaWorkspaceSlot("strategies", "?section=y2"), "strategies");
-  assert.equal(resolveSatyaWorkspaceSlot("health", ""), "satya");
+  assert.equal(resolveSatyaWorkspaceSlot("health", ""), "health");
 });
 
 test("workspace hint tokens drop numbers so they cannot become invented figures", () => {
@@ -486,8 +516,8 @@ test("packSatyaPassages keeps category coverage under the documented input cap",
     passages: packed,
   });
   assert.ok(packedSatyaEvidenceChars(packed) <= SATYA_PROMPT_INPUT_CHAR_CAP);
-  assert.match(prompt, /REQUIRED HEADING/);
-  assert.match(prompt, /3–4 or more substantiated bullets/);
+  assert.match(prompt, /EVIDENCE INVENTORY/);
+  assert.match(prompt, /tell a story grounded only in this query's retrieved evidence/);
   assert.match(prompt, /Do not stop after three bullets for the whole answer/);
   assert.doesNotMatch(prompt, /keep it brief/i);
   assert.ok(!prompt.includes("NII ₹320 bn. Maintain Buy. No new CMP is stated here. ".repeat(18)));
@@ -503,7 +533,7 @@ test("Satya LLM errors are operator-safe and do not look like a research answer"
   assert.match(message, /on-device LLM unavailable/i);
   assert.match(message, /cloud LLM skipped/i);
   assert.doesNotMatch(message, /HTTP 401|authentication_error|model_not_found|context_length_exceeded/i);
-  assert.doesNotMatch(message, /REQUIRED HEADING|machine-drafted bullet|NII/i);
+  assert.doesNotMatch(message, /EVIDENCE INVENTORY|REQUIRED HEADING|machine-drafted bullet|NII/i);
   assert.doesNotMatch(message, /Refresh iCloud|refresh mail/i);
 
   const root = await mkdtemp(join(tmpdir(), "satya-llm-error-"));
@@ -785,8 +815,16 @@ test("satya routes and speech bridge keep the documented contracts", async () =>
   assert.match(chat, /satyaGenerationBudget/);
   assert.match(chat, /satyaEvidenceOutline/);
   assert.match(chat, /maxTokens/);
-  assert.match(chat, /long-form structured sections/);
+  assert.match(chat, /tell a story grounded only in this query's retrieved evidence/);
   assert.match(chat, /Do not clip a written answer to a handful of sentences/);
+  assert.match(chat, /EVIDENCE INVENTORY/);
+  assert.match(client, /onSatyaThreadNotify/);
+  assert.match(
+    await readFile(new URL("../app/dashboard/satya-draft-popout.ts", import.meta.url), "utf8"),
+    /openSatyaDraftPopout|hasNativeSatyaDraftPopout/,
+  );
+  assert.match(browser, /StratjiSatyaDraftBridge/);
+  assert.match(browser, /satyaDraft/);
   assert.doesNotMatch(chat, /keep it concise \(4–8 sentences\)/);
   assert.doesNotMatch(chat, /short factual paragraphs or bullets/);
   assert.match(chat, /refusal: "no_match"/);

@@ -5,6 +5,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -24,6 +25,7 @@ import { useLicenseSnapshot } from "../license-snapshot";
 import { CollapsibleSection, DailyKanbanBoard, nativeChromeHidesSection, revealDashboardSection } from "./shared-ui";
 import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
 import { isLocationView } from "./workspace-routing";
+import { buildSectorDailyActions } from "./workspace-daily-actions";
 
 const SectoralAnalytics = lazy(() => import("./SectoralAnalytics"));
 type SectorAnalyticsPage = import("./SectoralAnalytics").SectorAnalyticsPage;
@@ -202,6 +204,16 @@ function SectorWorkspaceShell({
     };
   }, []);
 
+  const sectorActions = useMemo(
+    () => buildSectorDailyActions({
+      sectorMarket,
+      sectorMarketById,
+      benchmarks,
+      loading: sectorMarketsLoading,
+    }),
+    [benchmarks, sectorMarket, sectorMarketById, sectorMarketsLoading],
+  );
+
   const selectPage = useCallback((section: SectorWorkspaceSection, page: SectorSectionPage) => {
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
@@ -215,7 +227,7 @@ function SectorWorkspaceShell({
   return <div className="sector-workspace-shell sector-full-workspace" data-focus-section={focusedSection ?? undefined}>
     <div id="sector-s1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(focusedSection, "s1")}>
       <CollapsibleSection number="S-1" title="Sectoral action board" note="Clickable daily sector research priorities and monitoring actions" defaultOpen={focusedSection === "s1"}>
-        <DailyKanbanBoard workspace="sectors"/>
+        <DailyKanbanBoard workspace="sectors" items={sectorActions}/>
       </CollapsibleSection>
     </div>
 

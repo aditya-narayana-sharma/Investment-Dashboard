@@ -18,7 +18,7 @@ test("primary canvas is a vertical tree with Add a Block kinds and no wires", as
   assert.match(workspace, /SymphonyEditor/);
   assert.doesNotMatch(workspace, /<AlgorithmBuilder/);
   assert.match(workspace, /defaultOpen/);
-  assert.match(workspace, /<DailyKanbanBoard workspace="builder"\s*\/>/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="builder" items=\{builderActions\}\s*\/>/);
   assert.doesNotMatch(workspace, /sector-dimmed|selectedSectorId|Earnings/);
   assert.match(editor, /data-canvas-mode="tree"/);
   assert.match(editor, /Advanced graph/);
@@ -117,7 +117,11 @@ test("primary canvas is a vertical tree with Add a Block kinds and no wires", as
   assert.doesNotMatch(css, /\.algorithm-builder \.builder-zones \{[^}]*grid-template-columns:\s*240px/);
   assert.match(css, /\.symphony-tree \{[\s\S]*width:\s*100%/);
   assert.match(css, /\.algorithm-builder\.symphony-editor \.symphony-tree\.builder-canvas \{[\s\S]*grid-column:\s*1\s*\/\s*-1/);
-  assert.match(css, /\.algorithm-builder\.symphony-editor \.symphony-top \{[\s\S]*max-height:\s*min\(42dvh,\s*440px\)/);
+  assert.match(css, /\.algorithm-builder\.symphony-editor \.symphony-top \{[\s\S]*max-height:\s*min\(22dvh,\s*196px\)/);
+  assert.match(editor, /symphony-details-fields/);
+  assert.match(editor, /rows=\{2\}/);
+  assert.match(editor, /symphony-kpi-drawer/);
+  assert.match(editor, /BACKTEST_OVERVIEW_HINT|title=\{BACKTEST_OVERVIEW_HINT\}/);
   assert.match(css, /kpi-registry-grid \{[\s\S]*grid-template-columns: repeat\(8/);
   assert.match(css, /\.symphony-selected \{[\s\S]*grid-auto-rows:\s*min-content/);
   assert.match(css, /html\[data-appearance="sepia"\] \.symphony-block[\s\S]*color:\s*var\(--ink\)/);

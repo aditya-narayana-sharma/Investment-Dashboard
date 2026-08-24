@@ -339,21 +339,22 @@ function TreeChildren({
 }) {
   const menuKey = `${parentId ?? "root"}:${slot}`;
   return (
-    <div className="symphony-children" data-orientation="vertical">
+    <div className="symphony-children" data-orientation="vertical" data-stem="l">
       {nodes.map((child) => (
-        <TreeBlockView
-          key={child.id}
-          node={child}
-          selectedId={selectedId}
-          disabled={disabled}
-          openMenuKey={openMenuKey}
-          live={live}
-          onSelect={onSelect}
-          onChange={onChange}
-          onAdd={onAdd}
-          onDelete={onDelete}
-          onToggleMenu={onToggleMenu}
-        />
+        <div key={child.id} className="symphony-stem">
+          <TreeBlockView
+            node={child}
+            selectedId={selectedId}
+            disabled={disabled}
+            openMenuKey={openMenuKey}
+            live={live}
+            onSelect={onSelect}
+            onChange={onChange}
+            onAdd={onAdd}
+            onDelete={onDelete}
+            onToggleMenu={onToggleMenu}
+          />
+        </div>
       ))}
       <AddBlockButton
         disabled={disabled}
@@ -392,9 +393,9 @@ function WeightBranches({
 }) {
   const menuKey = `${parent.id}:children`;
   return (
-    <div className="symphony-children symphony-weight-children" data-stem-count={parent.children.length} data-orientation="vertical">
+    <div className="symphony-children symphony-weight-children" data-stem-count={parent.children.length} data-orientation="vertical" data-stem="l">
       {parent.children.map((child: WeightChild) => (
-        <div key={child.node.id} className="symphony-branch">
+        <div key={child.node.id} className="symphony-branch symphony-stem">
           {parent.params.method === "specified" && (
             <label className="symphony-percent">
               <input
@@ -459,10 +460,23 @@ function TreeBlockView({
   const selected = selectedId === node.id;
   const tone = blockTone(node.kind);
   const liveNode = live?.nodes[node.id];
+  const leaf = node.kind === "asset";
+
+  const deleteButton = selected && onDelete ? (
+    <button
+      type="button"
+      className="builder-delete"
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDelete(node.id);
+      }}
+    >Delete</button>
+  ) : null;
 
   const header = (
-    <header className="symphony-block-head">
-      <span>{kindTitle(node.kind)}</span>
+    <header className="symphony-block-head symphony-chip">
+      {node.kind !== "if_else" && node.kind !== "asset" && <span>{kindTitle(node.kind)}</span>}
       {node.kind === "weight" && (
         <select
           value={node.params.method}
@@ -495,6 +509,44 @@ function TreeBlockView({
           <option value="or">Any (OR)</option>
         </select>
       )}
+      {node.kind === "group" && (
+        <input
+          className="symphony-group-name"
+          value={node.label ?? ""}
+          disabled={disabled}
+          placeholder="Group name"
+          aria-label="Group name"
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onChange({ ...node, label: event.target.value })}
+        />
+      )}
+      {node.kind === "if_else" && (
+        <p className="symphony-if-sentence">
+          IF {operandText(node.params.left)} {comparatorWord(node.params.op)} {operandText(node.params.right)}
+        </p>
+      )}
+      {node.kind === "filter" && (
+        <div className="builder-asset-chips" role="group" aria-label="Filter asset classes" onClick={(event) => event.stopPropagation()}>
+          {ASSET_CLASSES.map((item: AssetClass) => {
+            const active = node.params.assetClasses.includes(item);
+            return (
+              <button
+                key={item}
+                type="button"
+                className={active ? "active" : ""}
+                disabled={disabled}
+                onClick={() => {
+                  const assetClasses = active
+                    ? node.params.assetClasses.filter((entry) => entry !== item)
+                    : [...node.params.assetClasses, item];
+                  onChange({ ...node, params: { ...node.params, assetClasses } });
+                }}
+              >{item}</button>
+            );
+          })}
+        </div>
+      )}
+      {node.kind !== "asset" && deleteButton}
     </header>
   );
 
@@ -511,17 +563,20 @@ function TreeBlockView({
         : null;
       body = (
         <div className="symphony-fields" onClick={(event) => event.stopPropagation()}>
-          <AssetInstrumentPicker
-            symbol={node.params.symbol}
-            label={node.label}
-            disabled={disabled}
-            live={live}
-            onChange={(next) => onChange({
-              ...node,
-              label: next.name || "Asset",
-              params: { symbol: next.symbol },
-            })}
-          />
+          <div className="symphony-chip">
+            <AssetInstrumentPicker
+              symbol={node.params.symbol}
+              label={node.label}
+              disabled={disabled}
+              live={live}
+              onChange={(next) => onChange({
+                ...node,
+                label: next.name || "Asset",
+                params: { symbol: next.symbol },
+              })}
+            />
+            {deleteButton}
+          </div>
           {liveNode?.instrument && (
             <p className="symphony-live-badge" data-status={live?.kiteStatus ?? "unavailable"}>
               {formatLiveNumber(liveNode.instrument.lastPrice) !== "—" ? `last ${formatLiveNumber(liveNode.instrument.lastPrice)}` : live?.kiteStatus ?? "unavailable"}
@@ -539,31 +594,20 @@ function TreeBlockView({
     }
     case "group":
       body = (
-        <>
-          <input
-            className="symphony-group-name"
-            value={node.label ?? ""}
-            disabled={disabled}
-            placeholder="Group name"
-            aria-label="Group name"
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onChange({ ...node, label: event.target.value })}
-          />
-          <TreeChildren
-            nodes={node.children}
-            parentId={node.id}
-            slot="children"
-            selectedId={selectedId}
-            disabled={disabled}
-            openMenuKey={openMenuKey}
-            live={live}
-            onSelect={onSelect}
-            onChange={onChange}
-            onAdd={onAdd}
-            onDelete={onDelete}
-            onToggleMenu={onToggleMenu}
-          />
-        </>
+        <TreeChildren
+          nodes={node.children}
+          parentId={node.id}
+          slot="children"
+          selectedId={selectedId}
+          disabled={disabled}
+          openMenuKey={openMenuKey}
+          live={live}
+          onSelect={onSelect}
+          onChange={onChange}
+          onAdd={onAdd}
+          onDelete={onDelete}
+          onToggleMenu={onToggleMenu}
+        />
       );
       break;
     case "weight":
@@ -591,9 +635,6 @@ function TreeBlockView({
     case "if_else":
       body = (
         <>
-          <p className="symphony-if-sentence">
-            IF {operandText(node.params.left)} {comparatorWord(node.params.op)} {operandText(node.params.right)}
-          </p>
           {liveNode && (
             <p className="symphony-live-badge" data-status={liveNode.passed === null ? "unavailable" : live?.kiteStatus ?? "unavailable"}>
               {liveNode.passed === true ? "Condition passes" : liveNode.passed === false ? "Condition fails" : "Condition unavailable"}
@@ -602,34 +643,36 @@ function TreeBlockView({
               {liveNode.left?.asOf ? ` · as-of ${liveNode.left.asOf}` : ""}
             </p>
           )}
-          <div className="symphony-if-operands" onClick={(event) => event.stopPropagation()}>
-            <OperandPicker
-              operand={node.params.left}
-              disabled={disabled}
-              allowNumber={false}
-              ariaLabel="If left operand"
-              live={live}
-              onChange={(left) => onChange({ ...node, params: { ...node.params, left } })}
-            />
-            <select
-              value={node.params.op}
-              disabled={disabled}
-              aria-label="If operator"
-              onChange={(event) => onChange({ ...node, params: { ...node.params, op: event.target.value as ComparatorOp } })}
-            >
-              {COMPARATOR_OPS.map((op) => (
-                <option key={op} value={op}>{op}</option>
-              ))}
-            </select>
-            <OperandPicker
-              operand={node.params.right}
-              disabled={disabled}
-              allowNumber
-              ariaLabel="If right operand"
-              live={live}
-              onChange={(right) => onChange({ ...node, params: { ...node.params, right } })}
-            />
-          </div>
+          {selected && (
+            <div className="symphony-if-operands" onClick={(event) => event.stopPropagation()}>
+              <OperandPicker
+                operand={node.params.left}
+                disabled={disabled}
+                allowNumber={false}
+                ariaLabel="If left operand"
+                live={live}
+                onChange={(left) => onChange({ ...node, params: { ...node.params, left } })}
+              />
+              <select
+                value={node.params.op}
+                disabled={disabled}
+                aria-label="If operator"
+                onChange={(event) => onChange({ ...node, params: { ...node.params, op: event.target.value as ComparatorOp } })}
+              >
+                {COMPARATOR_OPS.map((op) => (
+                  <option key={op} value={op}>{op}</option>
+                ))}
+              </select>
+              <OperandPicker
+                operand={node.params.right}
+                disabled={disabled}
+                allowNumber
+                ariaLabel="If right operand"
+                live={live}
+                onChange={(right) => onChange({ ...node, params: { ...node.params, right } })}
+              />
+            </div>
+          )}
           <div className="symphony-if-wells" data-orientation="vertical">
             <section className="symphony-well" aria-label="Then">
               <h4>THEN</h4>
@@ -689,41 +732,20 @@ function TreeBlockView({
       break;
     case "filter":
       body = (
-        <>
-          <div className="builder-asset-chips" role="group" aria-label="Filter asset classes" onClick={(event) => event.stopPropagation()}>
-            {ASSET_CLASSES.map((item: AssetClass) => {
-              const active = node.params.assetClasses.includes(item);
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  className={active ? "active" : ""}
-                  disabled={disabled}
-                  onClick={() => {
-                    const assetClasses = active
-                      ? node.params.assetClasses.filter((entry) => entry !== item)
-                      : [...node.params.assetClasses, item];
-                    onChange({ ...node, params: { ...node.params, assetClasses } });
-                  }}
-                >{item}</button>
-              );
-            })}
-          </div>
-          <TreeChildren
-            nodes={node.children}
-            parentId={node.id}
-            slot="children"
-            selectedId={selectedId}
-            disabled={disabled}
-            openMenuKey={openMenuKey}
-            live={live}
-            onSelect={onSelect}
-            onChange={onChange}
-            onAdd={onAdd}
-            onDelete={onDelete}
-            onToggleMenu={onToggleMenu}
-          />
-        </>
+        <TreeChildren
+          nodes={node.children}
+          parentId={node.id}
+          slot="children"
+          selectedId={selectedId}
+          disabled={disabled}
+          openMenuKey={openMenuKey}
+          live={live}
+          onSelect={onSelect}
+          onChange={onChange}
+          onAdd={onAdd}
+          onDelete={onDelete}
+          onToggleMenu={onToggleMenu}
+        />
       );
       break;
     default: {
@@ -734,7 +756,7 @@ function TreeBlockView({
 
   return (
     <article
-      className={`symphony-block ${tone}${selected ? " selected" : ""}`}
+      className={`symphony-block ${tone}${selected ? " selected" : ""}${leaf ? " is-leaf" : ""}`}
       data-block-kind={node.kind}
       data-node-id={node.id}
       onClick={(event) => {
@@ -742,22 +764,8 @@ function TreeBlockView({
         onSelect(node.id);
       }}
     >
-      {header}
-      {node.kind !== "asset" && node.kind !== "if_else" && node.kind !== "weight" && (
-        <b className="symphony-block-label">{node.label ?? kindTitle(node.kind)}</b>
-      )}
+      {node.kind !== "asset" && header}
       {body}
-      {selected && onDelete && (
-        <button
-          type="button"
-          className="builder-delete"
-          disabled={disabled}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete(node.id);
-          }}
-        >Delete</button>
-      )}
     </article>
   );
 }
@@ -791,6 +799,7 @@ export function TreeCanvas({
       data-testid="algorithm-tree-workarea"
       data-canvas-mode="tree"
       data-tree-orientation="vertical"
+      data-tree-style="composer"
       onClick={() => {
         onSelect(null);
         setOpenMenuKey(null);

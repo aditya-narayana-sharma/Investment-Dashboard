@@ -29,6 +29,7 @@ export const INTELLIGENCE_SOURCE_CANDIDATES = [
   app("dashboard/IntelligenceEarnings.tsx"),
   app("dashboard/intelligence-daily-actions.ts"),
   app("dashboard/SatyaBriefingRoom.tsx"),
+  app("dashboard/satya-suggestions.ts"),
   app("dashboard/satya-client.ts"),
   app("dashboard/satya-citation-icons.tsx"),
   app("dashboard/digest-newsletter-groups.ts"),

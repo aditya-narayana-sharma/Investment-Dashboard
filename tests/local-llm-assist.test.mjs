@@ -334,7 +334,8 @@ test("satya assist prompt stays on retrieved passages only", () => {
   assert.match(prompt, /28 named categories/);
   assert.match(prompt, /composite score/);
   assert.match(prompt, /verbatim/);
-  assert.match(prompt, /3–4 or more substantiated bullets/);
+  assert.match(prompt, /Write a story grounded in this query's context/);
+  assert.match(prompt, /Do not force a robotic WHAT\/WHY\/HOW heading template/);
   assert.match(prompt, /Do not stop after three bullets for the whole answer/);
   assert.doesNotMatch(prompt, /keep it brief/i);
   assert.doesNotMatch(prompt, /Prefer short factual bullets over narrative/);

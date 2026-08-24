@@ -8,6 +8,8 @@ export type StrategiesSection = "y1" | "y2";
 export type SectorRankingView = "market" | "fundamentals";
 export type KanbanWorkspace = WorkspaceKey;
 
+export type KanbanSourceKind = "smart" | "source";
+
 export type KanbanItem = {
   id: string;
   title: string;
@@ -16,6 +18,9 @@ export type KanbanItem = {
   strategicAdvantage: string;
   lane: "today" | "monitor";
   tone: "green" | "amber" | "red" | "blue";
+  /** Card-chrome label. AI/LLM/Satya-minted cards use `Smart Actions`. */
+  sourceLabel?: string;
+  sourceKind?: KanbanSourceKind;
 };
 
 export type DonutLabelProps = {

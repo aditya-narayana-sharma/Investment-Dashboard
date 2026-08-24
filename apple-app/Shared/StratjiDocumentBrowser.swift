@@ -28,6 +28,8 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
         load(baseURL: baseURL, destination: workspace.defaultDestination, force: force)
     }
 
+    /// Native chrome `?view=` change. Reuses the hydrated document; must not start
+    /// Flask or touch the Documents checkout.
     func load(baseURL: URL, destination: DashboardDestination, force: Bool = false) {
         showingIntegrations = false
         let target = destination.clickTarget
@@ -118,9 +120,12 @@ final class StratjiDocumentBrowser: NSObject, ObservableObject {
         configuration.userContentController.addUserScript(makeBootstrapScript())
         let satyaSpeech = StratjiSatyaSpeechBridge()
         configuration.userContentController.add(satyaSpeech, name: StratjiSatyaSpeechBridge.messageName)
+        let satyaDraft = StratjiSatyaDraftBridge()
+        configuration.userContentController.add(satyaDraft, name: StratjiSatyaDraftBridge.messageName)
         configuration.applicationNameForUserAgent = "Stratji/1"
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 1100, height: 800), configuration: configuration)
         satyaSpeech.webView = view
+        satyaDraft.webView = view
         view.navigationDelegate = self
         view.uiDelegate = self
         view.allowsBackForwardNavigationGestures = true

@@ -18,7 +18,6 @@ import { STRATJI_NAVIGATE_EVENT } from "./stratji-navigate";
 import type { WorkspaceKey } from "./types";
 import {
   completeSatyaWorkspaceTask,
-  currentSatyaTurn,
   SATYA_SOURCE_CHIPS,
   DEFAULT_SATYA_FAMILIES,
   deleteSatyaSession,
@@ -57,8 +56,11 @@ import {
   type SatyaThreadState,
   type SatyaThreadTurn,
 } from "./satya-client";
-import { axisCategoryAskPrompt, defaultSatyaSuggestions } from "./satya-suggestions";
+import { currentSatyaTurn, openSatyaDraftPopout, syncSatyaDraftPopout } from "./satya-draft-popout";
+import { axisCategoryAskPrompt, isSatyaCorpusSuggestionPrompt, satyaSuggestionsForWorkspace } from "./satya-suggestions";
 import { SatyaCitationIcons } from "./satya-citation-icons";
+import { SatyaDraftPopout } from "./SatyaDraftPopout";
+import { SatyaDraftStatusLine } from "./SatyaDraftStatusLine";
 import { WaveformStrip } from "./visual-components";
 
 export type { SatyaCitation, SatyaPresenceState, SatyaSourceFamily, SatyaStatusPayload } from "./satya-client";
@@ -265,10 +267,12 @@ function SatyaThreadLog({
   turns,
   empty,
   label,
+  drafting = false,
 }: {
   turns: SatyaThreadTurn[];
   empty: string;
   label: string;
+  drafting?: boolean;
 }) {
   if (turns.length === 0) {
     return <p className="satya-transcript-empty">{empty}</p>;
@@ -281,7 +285,11 @@ function SatyaThreadLog({
           {turn.text ? (
             <pre data-labeled={turn.role === "assistant" ? "machine-drafted" : undefined}>{turn.text}</pre>
           ) : (
-            turn.role === "assistant" ? <p className="satya-transcript-empty">Drafting…</p> : null
+            turn.role === "assistant"
+              ? (drafting
+                ? <SatyaDraftStatusLine active />
+                : <p className="satya-transcript-empty">Waiting for Satya.</p>)
+              : null
           )}
           {turn.role === "assistant" ? <SatyaCitationIcons citations={turn.citations} /> : null}
         </article>
@@ -509,7 +517,10 @@ export function SatyaPresence({
     setReply("");
     setCitations([]);
     publishState("thinking");
-    const active = getSatyaTaskContext(resolveSatyaWorkspaceSlot(workspace, window.location.search));
+    const search = window.location.search;
+    const section = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("section") ?? "";
+    const active = getSatyaTaskContext(resolveSatyaWorkspaceSlot(workspace, search));
+    const catalog = satyaSuggestionsForWorkspace(workspace, { section, subject: active?.subject });
     const speakDone = (spoken: string) => {
       if (!satyaShouldSpeak({ voice })) {
         publishState("idle");
@@ -531,7 +542,7 @@ export function SatyaPresence({
     const assistantId = `assistant-${Date.now()}`;
     const assistantTurn: SatyaThreadTurn = { id: assistantId, role: "assistant", text: "", citations: [] };
     setSatyaThread({ sessionId: prior.sessionId, turns: [...prior.turns, userTurn, assistantTurn] });
-    if (active && isDashboardSatyaTask(active.task)) {
+    if (active && isDashboardSatyaTask(active.task) && !isSatyaCorpusSuggestionPrompt(value, catalog)) {
       let appliedTree = false;
       await completeSatyaWorkspaceTask(
         { task: active.task, prompt: value, context: active.context },
@@ -558,6 +569,7 @@ export function SatyaPresence({
       );
       return;
     }
+    openSatyaDraftPopout({ drafting: true });
     let assembled = "";
     const liveFocus = getSatyaFocus();
     await streamSatyaChat(
@@ -608,10 +620,12 @@ export function SatyaPresence({
               turns: latest.turns.map((turn) => (turn.id === assistantId ? { ...turn, text: complete } : turn)),
             }, true);
           }
+          syncSatyaDraftPopout({ drafting: false });
           speakDone(complete);
         },
         onError: (message) => {
           if (message) setReply(message);
+          syncSatyaDraftPopout({ drafting: false });
           publishState("error");
         },
       },
@@ -693,15 +707,17 @@ export function SatyaPresence({
   const speaking = displayState === "speaking";
   const statusText = presenceStateLabel(displayState);
   const workspaceTask = taskContext && isDashboardSatyaTask(taskContext.task) ? taskContext : null;
-  const suggestionChips = workspaceTask
-    ? (workspaceTask.suggestions && workspaceTask.suggestions.length > 0
-      ? workspaceTask.suggestions
-      : defaultSatyaSuggestions(workspaceTask.task))
-    : [];
+  const section = new URLSearchParams(routeSearch.startsWith("?") ? routeSearch.slice(1) : routeSearch).get("section") ?? "";
+  const suggestionCatalog = satyaSuggestionsForWorkspace(workspace, {
+    section,
+    subject: taskContext?.subject,
+  });
+  const suggestionChips = suggestionCatalog.suggestions;
   const chatDisabled = disabled || (variant === "companion" && (companionDisabled || Boolean(taskContext?.disabled)));
   const orbDisabled = variant === "briefing" && chatDisabled;
   const visibleChats = filterSatyaChatItems(chatItems, chatQuery);
-  const composerPlaceholder = workspaceTask?.placeholder
+  const composerPlaceholder = suggestionCatalog.placeholder
+    ?? workspaceTask?.placeholder
     ?? "Ask from the Satya corpus. Numbers stay on Mail, PDFs, podcasts, and verified earnings.";
 
   const mark = (
@@ -792,6 +808,7 @@ export function SatyaPresence({
       data-state={displayState}
       data-open={sheetOpen ? "true" : "false"}
       data-satya-task={workspaceTask?.task ?? "satya"}
+      data-satya-workspace={workspace}
       data-reduced-motion={reducedMotion ? "true" : "false"}
       tabIndex={0}
       onKeyDown={onRootKeyDown}
@@ -803,7 +820,9 @@ export function SatyaPresence({
             <SatyaGlyph state={displayState} reducedMotion={reducedMotion} />
             <div>
               <strong>SATYA</strong>
-              <span className="satya-presence-status">{statusText}</span>
+              {displayState === "thinking" || displayState === "citing"
+                ? <SatyaDraftStatusLine active as="span" className="satya-presence-status" />
+                : <span className="satya-presence-status">{statusText}</span>}
             </div>
             {speaking && !reducedMotion ? <WaveformStrip seed={displayState.length + 11} bars={16} /> : null}
             <button type="button" className="satya-sheet-close" onClick={() => { void cancelAll(); closePopup(); }}>
@@ -813,9 +832,11 @@ export function SatyaPresence({
           <p className="satya-talk-copy">
             {companionDisabled && statusNote
               ? statusNote
-              : workspaceTask
-                ? `${workspaceTask.hint} Machine-drafted, never a source for numbers.`
-                : "Grounded on the Satya corpus. Machine-drafted, never a source for numbers."}
+              : suggestionCatalog.hint
+                ? `${suggestionCatalog.hint} Machine-drafted, never a source for numbers.`
+                : workspaceTask
+                  ? `${workspaceTask.hint} Machine-drafted, never a source for numbers.`
+                  : "Grounded on the Satya corpus. Machine-drafted, never a source for numbers."}
           </p>
           {chatsOpen ? (
             <div className="satya-chats-panel" role="listbox" aria-label="Chats">
@@ -971,13 +992,20 @@ export function SatyaPresence({
                   : []}
                 empty="Ask Satya. Older threads live in Chats."
                 label="Satya chat"
+                drafting={displayState === "thinking" || displayState === "citing"}
               />
             </div>
           )}
           {composer}
-          {suggestionChips.length ? (
-            <div className="satya-suggestion-chips satya-workspace-chips" role="group" aria-label="Smart Suggestions">
+          {suggestionChips.length || suggestionCatalog.note ? (
+            <div
+              className="satya-suggestion-chips satya-workspace-chips"
+              role="group"
+              aria-label="Smart Suggestions"
+              data-satya-workspace={workspace}
+            >
               <em>Smart Suggestions</em>
+              {suggestionCatalog.note ? <p className="satya-suggestion-note">{suggestionCatalog.note}</p> : null}
               {suggestionChips.map((item) => (
                 <button
                   type="button"
@@ -992,8 +1020,7 @@ export function SatyaPresence({
               ))}
             </div>
           ) : null}
-          {!workspaceTask ? (
-            <details className="satya-sources-disclosure">
+          <details className="satya-sources-disclosure">
               <summary>Sources / Categories</summary>
               <div className="satya-source-chips" role="group" aria-label="Satya source families">
                 {SATYA_SOURCE_CHIPS.map((chip) => {
@@ -1048,8 +1075,7 @@ export function SatyaPresence({
                   }}
                 />
               ) : null}
-            </details>
-          ) : null}
+          </details>
           <label className="satya-voice-picker">
             Voice
             <select
@@ -1109,6 +1135,14 @@ export function SatyaPresence({
             >
               Send
             </button>
+            <button
+              type="button"
+              className="satya-open-draft"
+              disabled={!thread.turns.length && !reply}
+              onClick={() => openSatyaDraftPopout({ drafting: displayState === "thinking" || displayState === "citing" })}
+            >
+              Pop out
+            </button>
             <a className="satya-open-briefing" href={briefingHref()}>Open briefing</a>
           </div>
         </div>
@@ -1117,6 +1151,11 @@ export function SatyaPresence({
     </div>
   );
 
-  if (portalHost) return createPortal(companion, portalHost);
-  return companion;
+  const sheet = portalHost ? createPortal(companion, portalHost) : companion;
+  return (
+    <>
+      {sheet}
+      <SatyaDraftPopout />
+    </>
+  );
 }

@@ -363,6 +363,8 @@ final class StratjiSessionModel: ObservableObject {
             ?? DashboardOutline.defaultDestination(forView: workspace.rawValue)
     }
 
+    /// Workspace / section chrome only. Must not start Flask, persist the checkout,
+    /// or `stat` Documents — that retriggers the Files and Folders TCC prompt.
     func select(_ destination: DashboardDestination) {
         let target = destination.clickTarget
         destinationID = target.id
@@ -805,8 +807,7 @@ final class StratjiSessionModel: ObservableObject {
 
     private func pollRefreshProgress() async {
 #if os(macOS)
-        if let repoRoot = StratjiConfiguration.repoRoot,
-           let snapshot = FlaskServiceSupervisor.latestRefreshProgress(repoRoot: repoRoot) {
+        if let snapshot = FlaskServiceSupervisor.latestRefreshProgress() {
             await applyProgress(snapshot)
         }
 #endif

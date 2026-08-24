@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StrategyGraphV2, StrategyTreeV1 } from "../strategy/graph-types";
 import { composerStrategyById } from "../strategy/composer-strategies";
 import { loadStrategyFromLibrary } from "../strategy/persist";
@@ -12,6 +12,7 @@ import { CollapsibleSection, DailyKanbanBoard, dashboardSectionNumberFromNavId, 
 import { listenToStratjiLocation } from "./stratji-navigate";
 import type { BuilderSection } from "./types";
 import { builderSectionNumber, isLocationView, parseBuilderSection } from "./workspace-routing";
+import { buildBuilderDailyActions } from "./workspace-daily-actions";
 
 const BUILDER_SECTIONS = [
   { id: "board", label: "Action Board", prefix: "B1" },
@@ -70,6 +71,8 @@ export function BuilderWorkspace() {
     return stopListening;
   }, []);
 
+  const builderActions = useMemo(() => buildBuilderDailyActions({ tree }), [tree]);
+
   const applyDocument = useCallback((nextTree: StrategyTreeV1, nextGraph: StrategyGraphV2) => {
     setTree(nextTree);
     setGraph(nextGraph);
@@ -84,7 +87,7 @@ export function BuilderWorkspace() {
 
       <div id="builder-board" className="workspace-section action-board-workspace-section" hidden={activeSection !== "board"}>
         <CollapsibleSection number={builderSectionNumber("board")} title="Action Board" note="Clickable daily canvas, validation and export actions" defaultOpen={activeSection === "board"}>
-          <DailyKanbanBoard workspace="builder"/>
+          <DailyKanbanBoard workspace="builder" items={builderActions}/>
         </CollapsibleSection>
       </div>
 

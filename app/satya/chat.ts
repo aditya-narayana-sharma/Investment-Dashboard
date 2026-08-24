@@ -186,7 +186,7 @@ export function formatSatyaEvidence(passages: SatyaRetrievedChunk[]): string {
   let index = 0;
   const blocks: string[] = [];
   for (const [heading, rows] of groups) {
-    blocks.push(`REQUIRED HEADING: ${heading} (${rows.length} passage${rows.length === 1 ? "" : "s"})`);
+    blocks.push(`EVIDENCE GROUP: ${heading} (${rows.length} passage${rows.length === 1 ? "" : "s"})`);
     for (const passage of rows) {
       index += 1;
       blocks.push([
@@ -219,7 +219,7 @@ export function satyaEvidenceOutline(passages: SatyaRetrievedChunk[]): string {
   }
   const rest = order.filter((heading) => !preferred.includes(heading));
   const lines = [
-    "REQUIRED HEADINGS — write every heading listed here. For each heading, write 3–4 or more substantiated bullets or short paragraphs using only the matching passages. Quote numeric KPIs verbatim. Omit any Axis category, newsletter family, podcast, or earnings heading that is not listed — never invent KPIs, CMP, targets, or unpublished earnings fields. Do not stop after three bullets for the whole answer.",
+    "EVIDENCE INVENTORY — these passages are the only allowed sources for numbers. Write a story that answers THIS question. Do not force a WHAT / WHY / HOW heading list when the question is a podcast theme, overnight digest, or other non-earnings ask. When the question is about a company, print, or KPI move, cover in narrative form: what started it, the triggering Mail/Axis PDF/podcast/verified IR/NSE evidence, what caused retrieved Revenue/Sales/other KPI moves, why it is happening, how we can maneuver, what we should do, when an upturn or return is discussed in the passages, and a timeline of dated events from these passages. Compare past prints, sector competitors or ancillaries, and sector performance reports only when those figures appear below. If a comparison is missing, say it is unpublished or not in this evidence — never invent or use model knowledge. Quote numeric KPIs verbatim. Omit any Axis category, newsletter family, podcast, or earnings heading that is not listed. Do not stop after three bullets for the whole answer.",
   ];
   for (const heading of [...preferred, ...rest]) {
     lines.push(headingCountLine(heading, counts.get(heading) ?? 0));
@@ -267,18 +267,20 @@ export function buildSatyaUserPrompt(options: {
     : "Workspace hint: none.";
   const broad = isSatyaBroadSurveyQuery(options.question);
   const voiceLine = options.voice
-    ? "Spoken answer: stay structured and descriptive (not a one-liner). Use short headed sections by family/category. Include retrieved KPIs verbatim. Shorter than written is allowed, but 8–16 spoken sentences is a floor, not a ceiling when the operator asked for more."
+    ? "Spoken answer: stay a short story (not a one-liner). Cover the same substance as written when the question is about a company or print, without forcing heading names. Include retrieved KPIs verbatim. Shorter than written is allowed, but 8–16 spoken sentences is a floor, not a ceiling when the operator asked for more."
     : [
-      "Written answer: long-form structured sections by Axis category and source family.",
-      "Use multiple paragraphs. Do not answer with one line or three short bullets.",
-      "Include every retrieved numeric KPI verbatim. If a figure is missing, say it is unpublished or not in the passages.",
+      "Written answer: tell a story grounded only in this query's retrieved evidence.",
+      "Long-form, complete, and easy to read — not a one-liner, not a three-bullet dump, and not a robotic WHAT/WHY/HOW template unless the operator asked for that outline.",
+      "When the question is about a company, print, or KPI move, weave in: what started it, the triggering evidence, what caused retrieved KPI moves, why, how to maneuver, what to do, when an upturn is discussed in the passages, and a timeline of dated events from these passages.",
+      "Earnings KPIs must be compared to past prints, sector competitors or ancillaries, and sector performance reports only when those figures are in the passages; otherwise say the comparison is unpublished or not in this evidence.",
+      "Use multiple paragraphs. Include every retrieved numeric KPI verbatim. If a figure is missing, say it is unpublished or not in the passages.",
       "Honor operator length asks (including 500+ words). Do not clip a written answer to a handful of sentences.",
       "End with a scenario update (what changed / what to watch) grounded only in these passages.",
       "Composite score: only from retrieved numeric KPIs with an explicit formula, labelled machine-drafted; omit the score if the numbers are insufficient.",
     ].join(" ");
   const surveyLine = broad
-    ? "This is a broad survey: cover every selected family and Axis category that appears in REQUIRED HEADINGS. Do not collapse the answer into a handful of bullets."
-    : "Cover every REQUIRED HEADING. Skip families and Axis categories that have no retrieved passage.";
+    ? "This is a broad survey: cover every selected family and Axis category that appears in EVIDENCE INVENTORY. Tell one connected story; do not collapse the answer into a handful of bullets."
+    : "Use every EVIDENCE INVENTORY group that has passages. Skip families and Axis categories that have no retrieved passage.";
   const conversationLine = options.conversation?.trim() ? options.conversation.trim() : "";
   return [
     `Question:\n${options.question}`,
@@ -483,7 +485,7 @@ export async function runSatyaChat(options: {
   }
 
   throwIfAborted(options.signal);
-  options.emit({ event: "status", data: { message: "Retrieving Satya corpus…" } });
+  options.emit({ event: "status", data: { message: "Going through Research…" } });
   const budget = satyaRetrieveBudget(question);
   const passages = retrieveSatyaPassages({
     query: followUpRetrieveQuery(options.request.messages),
@@ -516,7 +518,7 @@ export async function runSatyaChat(options: {
   }
 
   throwIfAborted(options.signal);
-  options.emit({ event: "status", data: { message: "Drafting from retrieved passages…" } });
+  options.emit({ event: "status", data: { message: "Thinking…" } });
   const complete = options.complete ?? streamLocalLlm;
   const generation = satyaGenerationBudget({ question, voice: options.request.voice });
   const packed = packSatyaPassages(passages);

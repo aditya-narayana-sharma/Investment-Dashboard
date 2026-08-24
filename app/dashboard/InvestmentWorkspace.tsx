@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, Responsiv
 import { analystCallTone, groupAnalystRows, type AnalystGroupMode, type AnalystMatrixRow } from "../analyst-matrix-groups";
 import { axisArchiveAudit, type RiskProfile } from "../portfolio-data";
 import type { ContentDigestSnapshot, MailRecommendation } from "../content-types";
+import type { EarningsSnapshot } from "../earnings-live-types";
 import type { KiteSnapshot } from "../live-types";
 import { portfolioReturnTone } from "../portfolio-concentration.mjs";
 import { thesisBullets } from "../thesis-bullets";
@@ -14,6 +15,8 @@ import { AllocationLabel, CollapsibleSection, DailyKanbanBoard, DemoSensitive, H
 import { KiteAlertTicket, type KiteAlertSelection } from "./KiteAlertTicket";
 import { KiteGttTicket, type KiteGttSelection } from "./KiteGttTicket";
 import { KiteOrderTicket, type KiteOrderSelection } from "./KiteOrderTicket";
+import { satyaSuggestionsForWorkspace } from "./satya-suggestions";
+import { buildInvestmentDailyActions } from "./workspace-daily-actions";
 import { useSatyaTaskContext } from "./satya-workspace";
 import { listenToStratjiLocation } from "./stratji-navigate";
 import { isLocationView } from "./workspace-routing";
@@ -47,6 +50,7 @@ function investmentSectionFromUrl(): string {
 
 export type InvestmentWorkspaceProps = {
   snapshot: KiteSnapshot;
+  earningsSnapshot: EarningsSnapshot;
   content: ContentDigestSnapshot;
   view: PortfolioActivityView;
   setView: (view: PortfolioActivityView) => void;
@@ -95,6 +99,7 @@ export type InvestmentWorkspaceProps = {
 
 export function InvestmentWorkspace({
   snapshot,
+  earningsSnapshot,
   content,
   view,
   setView,
@@ -229,17 +234,23 @@ export function InvestmentWorkspace({
     };
   }, []);
 
+  const investmentActions = useMemo(
+    () => buildInvestmentDailyActions({ snapshot, earningsSnapshot }),
+    [snapshot, earningsSnapshot],
+  );
+  const satyaCatalog = satyaSuggestionsForWorkspace("investment", { section: activeSection });
   useSatyaTaskContext("investment", {
     task: "composite",
-    hint: "Does not change composite scores or invent CMP/targets. Missing fields stay missing.",
+    hint: satyaCatalog.hint ?? "Does not change composite scores or invent CMP/targets. Missing fields stay missing.",
     context: `Analyst matrix grouped by ${analystGroupMode}. Groups: ${analystGroups.map((group) => `${group.label} (${group.rows.length})`).join("; ")}.`,
-    placeholder: "e.g. What stands out in Target achieved vs active BUY rows?",
+    placeholder: satyaCatalog.placeholder ?? "e.g. What did Axis Research say about Axis picks versus holdings symbols?",
+    suggestions: satyaCatalog.suggestions,
   });
 
   return <div className="investment-workspace-shell" data-focus-section={activeSection ?? undefined}>
       <div id="investment-i1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(activeSection, "i1")}>
       <CollapsibleSection number="I-1" title="Investment action board" note="Clickable daily actions, numeric advantages and strategic rationale" defaultOpen={activeSection === "i1"}>
-        <DailyKanbanBoard workspace="investment"/>
+        <DailyKanbanBoard workspace="investment" items={investmentActions}/>
       </CollapsibleSection>
       </div>
 

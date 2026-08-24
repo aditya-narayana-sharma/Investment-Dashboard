@@ -1,6 +1,6 @@
 import { buildEarningsSnapshot } from "../../../earnings-verify";
 import { earningsCalendar } from "../../../portfolio-data";
-import { intelligenceEvidenceDateKey } from "../../../dashboard/intelligence-daily-actions";
+import { intelligenceCorpusPreviewDateKeys } from "../../../dashboard/intelligence-daily-actions";
 import { listRecentSatyaCorpusDocuments, loadSatyaCatalog } from "../../../satya/retrieve.ts";
 
 export const runtime = "nodejs";
@@ -20,7 +20,9 @@ function verifiedEarningsCount() {
 export async function GET() {
   const catalog = await loadSatyaCatalog();
   const earningsCount = verifiedEarningsCount();
-  const recent = listRecentSatyaCorpusDocuments(intelligenceEvidenceDateKey());
+  const recent = intelligenceCorpusPreviewDateKeys().flatMap((day) => (
+    listRecentSatyaCorpusDocuments(day)
+  ));
   return Response.json({
     asOf: catalog.asOf,
     families: [

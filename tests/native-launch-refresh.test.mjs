@@ -236,7 +236,7 @@ test("Mac Stratji maps splash progress through named refresh stages instead of a
   assert.match(flask, /_startup\/progress/);
 });
 
-test("Mac Stratji tears down leftover processes on launch and quit, then dash-starts fresh", async () => {
+test("Mac Stratji adopts a live serviceReady stack; leftover teardown is Retry/quit, not every launch", async () => {
   const [supervisor, appDelegate, session, config, install, start, stop] = await Promise.all([
     readFile(new URL("apple-app/Stratji/FlaskServiceSupervisor.swift", root), "utf8"),
     readFile(new URL("apple-app/Stratji/AppDelegate.swift", root), "utf8"),
@@ -254,11 +254,16 @@ test("Mac Stratji tears down leftover processes on launch and quit, then dash-st
   assert.match(appDelegate, /terminateLater/);
   assert.match(supervisor, /func kickoffAtLaunch/);
   assert.match(supervisor, /func stopDataPlane/);
-  assert.match(supervisor, /stopping leftover dashboard processes for a fresh start/);
+  assert.match(supervisor, /isReachable\(\)/);
+  assert.match(supervisor, /gateway already serviceReady; skip stop/);
+  assert.ok(supervisor.indexOf("if await isReachable()") < supervisor.indexOf("stopDataPlane()", supervisor.indexOf("func kickoffAtLaunch")));
+  assert.match(supervisor, /ensureRunning\(recycle:/);
+  assert.match(supervisor, /Retry: recycling dashboard processes for a fresh start/);
   assert.match(supervisor, /waitUntilDashboardPortsFree/);
   assert.match(supervisor, /ports :3000 and :5050 are free/);
   assert.match(supervisor, /isDashStartRunning/);
   assert.match(supervisor, /waiting for leftover :3000\/:5050 listeners to exit/);
+  assert.match(supervisor, /not starting a second stack/);
   assert.match(supervisor, /dash-start still running; waiting for serviceReady/);
   assert.match(supervisor, /return health\.serviceReady/);
   assert.doesNotMatch(supervisor, /\(200 \.\.< 300\)\.contains\(http\.statusCode\)/);

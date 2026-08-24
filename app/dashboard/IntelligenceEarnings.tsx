@@ -8,35 +8,9 @@ import { findEarningsHolidayConflicts } from "../market-calendar";
 import { EarningsMonthCalendar } from "./EarningsMonthCalendar";
 import { earningsReconciliationStats, mergeEarningsCalendarEvents } from "./utils";
 import { useSatyaTaskContext } from "./satya-workspace";
-import type { SatyaSuggestion } from "./satya-suggestions";
+import { EARNINGS_SATYA_SUGGESTIONS, satyaSuggestionsForWorkspace } from "./satya-suggestions";
 
-const EARNINGS_LLM_SUGGESTIONS: SatyaSuggestion[] = [
-  {
-    id: "verified-week",
-    label: "Verified prints this week",
-    prompt: "What did independently verified reported KPIs say this week? Unpublished fields stay blank. Calendar rows stay scheduling evidence only. Do not invent figures.",
-  },
-  {
-    id: "unpublished-blank",
-    label: "Unpublished stay blank",
-    prompt: "Which supplied earnings events are still pending, and which KPI fields are unpublished? Leave those fields blank. Do not invent results.",
-  },
-  {
-    id: "holdings-reported",
-    label: "Holdings with prints",
-    prompt: "Which supplied reported events overlap current holdings? Use only verified KPI values. Never invent prices or unpublished fields.",
-  },
-  {
-    id: "holiday-conflicts",
-    label: "Holiday conflicts",
-    prompt: "Summarize supplied holiday conflicts on earnings dates. Apple Calendar rows are scheduling evidence only, not proof a result was published.",
-  },
-  {
-    id: "pending-upcoming",
-    label: "Pending / upcoming",
-    prompt: "List upcoming or pending supplied events and what is still unpublished. Do not fill KPI values that are blank.",
-  },
-];
+const EARNINGS_LLM_SUGGESTIONS = EARNINGS_SATYA_SUGGESTIONS;
 export function MarketEarningsCalendar({
   content,
   snapshot,
@@ -72,7 +46,8 @@ export function MarketEarningsCalendar({
 
   useSatyaTaskContext("intelligence-m3", {
     task: "summarize",
-    hint: "Uses verified reported KPIs only. Unpublished fields stay blank. Calendar rows stay scheduling evidence.",
+    hint: satyaSuggestionsForWorkspace("intelligence", { section: "m3" }).hint
+      ?? "Uses verified reported KPIs only. Unpublished fields stay blank. Calendar rows stay scheduling evidence.",
     suggestions: EARNINGS_LLM_SUGGESTIONS,
     context: events.slice(0, 12).map((event) => {
       const kpis = event.reported

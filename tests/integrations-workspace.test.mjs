@@ -223,7 +223,7 @@ test("Integrations page is chrome: six workspaces, no DailyKanbanBoard, isolatio
   assert.match(page, /IntegrationsWorkspace/);
   assert.doesNotMatch(page, /integrations-chrome-link/);
   assert.match(page, /DashboardTabs active=\{workspace\}/);
-  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !macOverlayOwnsNav && <DashboardTabs/);
   assert.match(page, /showWorkspaceShell && \(workspace === "investment" \|\| stayMounted\)/);
   assert.doesNotMatch(page, /<DailyKanbanBoard workspace="integrations"/);
 

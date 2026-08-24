@@ -387,6 +387,8 @@ html[data-native-chrome] .satya-companion[data-open="true"],
   box-shadow: var(--brutalist-shadow-lg);
   max-height: min(72vh, 640px);
   overflow: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-popup-head {
@@ -410,6 +412,8 @@ html[data-native-chrome] .satya-companion[data-open="true"],
   overflow: visible;
   clip: auto;
   color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .satya-popup-head .satya-glyph {
@@ -424,6 +428,8 @@ html[data-native-chrome] .satya-companion[data-open="true"],
   max-height: 220px;
   overflow: auto;
   min-height: 72px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-chats-panel {
@@ -611,16 +617,31 @@ html[data-native-chrome] .satya-companion[data-open="true"],
 }
 
 .satya-talk-reply,
-.satya-transcript pre {
+.satya-transcript pre,
+.satya-turn pre {
   margin: 0;
+  max-width: 100%;
+  min-width: 0;
   max-height: 220px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 10px 12px;
   border: 2px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font: 500 14px/1.45 var(--font-mono);
+}
+
+.satya-talk-reply code,
+.satya-transcript pre code,
+.satya-turn pre code,
+.satya-turn code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .satya-talk-actions,
@@ -636,6 +657,7 @@ html[data-native-chrome] .satya-companion[data-open="true"],
 .satya-sheet-close,
 .satya-open-briefing,
 .satya-open-chats,
+.satya-open-draft,
 .satya-source-chip,
 .satya-suggestion-chip,
 .satya-chats,
@@ -808,6 +830,13 @@ html[data-appearance="sepia"] .satya-briefing {
   background: color-mix(in srgb, var(--sender-color) 12%, var(--bg-elevated));
 }
 
+.satya-suggestion-note {
+  flex: 0 0 100%;
+  margin: 0;
+  color: var(--muted);
+  font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
 .satya-suggestion-chips em {
   flex: 0 0 100%;
   margin: 0;
@@ -820,16 +849,22 @@ html[data-appearance="sepia"] .satya-briefing {
   min-height: 160px;
   display: grid;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-thread-log {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-turn {
   display: grid;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-turn strong {
@@ -844,6 +879,8 @@ html[data-appearance="sepia"] .satya-briefing {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .satya-citation-badge,
@@ -899,6 +936,60 @@ html[data-appearance="sepia"] .satya-briefing {
   50% { transform: translateY(-2px); }
 }
 
+.satya-draft-status {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.satya-draft-status-phrase {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--ink) 38%,
+    color-mix(in srgb, var(--satya-accent, #7c5fd4) 42%, var(--ink)) 50%,
+    var(--ink) 62%,
+    var(--muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    satya-draft-status-in 0.32s var(--vo-ease, ease),
+    satya-draft-status-shimmer 2.4s var(--vo-ease, ease) infinite;
+}
+
+.satya-send .satya-draft-status,
+.satya-send .satya-draft-status-phrase {
+  color: inherit;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  animation: satya-draft-status-in 0.32s var(--vo-ease, ease);
+}
+
+@keyframes satya-draft-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes satya-draft-status-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -120% 0; }
+}
+
 @keyframes satya-think-tilt {
   0%, 100% { transform: rotate(-4deg); }
   50% { transform: rotate(5deg); }
@@ -918,8 +1009,18 @@ html[data-appearance="sepia"] .satya-briefing {
   .satya-orb-ring,
   .satya-pet,
   .satya-mouth,
-  .satya-antenna-tip {
+  .satya-antenna-tip,
+  .satya-draft-status-phrase,
+  .satya-send .satya-draft-status-phrase {
     animation: none !important;
+  }
+  .satya-draft-status-phrase,
+  .satya-send .satya-draft-status-phrase {
+    transform: none;
+    color: var(--muted);
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
   }
   .satya-presence-briefing .waveform-strip,
   .satya-orb .waveform-strip,

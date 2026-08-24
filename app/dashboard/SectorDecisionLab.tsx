@@ -32,36 +32,10 @@ import {
 import type { SectorBenchmarkSnapshot, SectorMarketSnapshot } from "../sector-live-types";
 import { TriggerDial } from "./visual-components";
 import { useSatyaTaskContext } from "./satya-workspace";
-import type { SatyaSuggestion } from "./satya-suggestions";
+import { satyaSuggestionsForWorkspace, type SatyaSuggestion } from "./satya-suggestions";
 
 function decisionFrameworkSuggestions(sectorName: string): SatyaSuggestion[] {
-  return [
-    {
-      id: "gate-change",
-      label: "Monitor → allocate",
-      prompt: `What supplied evidence would need to change for ${sectorName} to move from monitor to allocate? Do not replace the rule-based composite or invent index levels.`,
-    },
-    {
-      id: "closest-trigger",
-      label: "Closest macro trigger",
-      prompt: `Which supplied macro trigger is closest to a sizing change for ${sectorName}? Trigger distance is context, not an automatic trade. Missing levels stay unavailable.`,
-    },
-    {
-      id: "vs-benchmarks",
-      label: "Vs selected indices",
-      prompt: `How does ${sectorName} compare to the selected EOD benchmarks using only supplied levels and returns? Delayed series stay delayed.`,
-    },
-    {
-      id: "evidence-watch",
-      label: "Evidence vs watch",
-      prompt: `Restate the supplied ${sectorName} evidence, monitor, and invalidation lines. If a factor is unavailable, say unavailable.`,
-    },
-    {
-      id: "missing-levels",
-      label: "Unavailable levels",
-      prompt: `Which supplied ${sectorName} benchmark or factor values are unavailable, and how should that constrain the commentary? Never invent levels.`,
-    },
-  ];
+  return satyaSuggestionsForWorkspace("sectors", { section: "s3", subject: sectorName }).suggestions;
 }
 
 export type SectorDecisionPage = "benchmarks" | "investability" | "pestel" | "porter" | "macro";
@@ -174,6 +148,7 @@ export function SectorDecisionLab({
     context: satyaContext,
     placeholder: satyaPlaceholder,
     suggestions: decisionFrameworkSuggestions(sector.name),
+    subject: sector.name,
   });
 
   const sectorSelector = <div className="decision-lab-sector-selector" role="tablist" aria-label="Decision Lab sector">

@@ -91,7 +91,7 @@ test("Strategies workspace uses DailyKanbanBoard and compact vertical read-only 
   assert.match(types, /type WorkspaceKey =[\s\S]*"strategies"/);
   assert.match(page, /workspace === "strategies"/);
   assert.match(page, /value === "strategy-library"/);
-  assert.match(workspace, /<DailyKanbanBoard workspace="strategies"\s*\/>/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="strategies" items=\{strategiesActions\}\s*\/>/);
   assert.match(workspace, /\{ id: "y1", label: "Action Board" \}/);
   assert.match(workspace, /\{ id: "y2", label: "Library" \}/);
   assert.match(workspace, /defaultOpen/);
@@ -202,7 +202,7 @@ test("Y-2 library lab compares two trees, books a 60/40 ensemble, and campaigns 
     readFile(new URL("../app/strategy/strategy-api.ts", import.meta.url), "utf8"),
   ]);
   assert.match(workspace, /<LibraryLab catalog=\{catalogPicks\} \/>/);
-  assert.match(workspace, /<DailyKanbanBoard workspace="strategies"\s*\/>/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="strategies" items=\{strategiesActions\}\s*\/>/);
   assert.doesNotMatch(workspace, /view=strategies-book|view=campaign|view=ensemble/);
   assert.match(lab, /data-testid="strategy-compare-open"/);
   assert.match(lab, /data-testid=\{`strategy-\$\{mode\}-dialog`\}/);

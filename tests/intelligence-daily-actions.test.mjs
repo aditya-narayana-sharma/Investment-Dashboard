@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildIntelligenceDailyActions,
   intelligenceEvidenceDateKey,
+  resolveIntelligenceEvidenceDateKey,
 } from "../app/dashboard/intelligence-daily-actions.ts";
 
 const DAY_A = "2026-08-13";
@@ -291,6 +292,65 @@ test("weekend boards reuse last NSE trading day evidence", () => {
   assert.equal(weekend.some((item) => item.id.includes("2026-08-15")), false);
 });
 
+test("a trading day with no new digest reuses the prior NSE session", () => {
+  assert.equal(intelligenceEvidenceDateKey("2026-08-17"), "2026-08-17");
+  assert.equal(resolveIntelligenceEvidenceDateKey({
+    content: dayBContent,
+    earningsSnapshot: dayBEarnings,
+    calendarDate: "2026-08-17",
+  }), DAY_B);
+  const monday = buildIntelligenceDailyActions({
+    content: dayBContent,
+    earningsSnapshot: dayBEarnings,
+    calendarDate: "2026-08-17",
+  });
+  assert.ok(monday.some((item) => item.title.includes("Oberoi")));
+  assert.ok(monday.some((item) => item.id.includes(DAY_B)));
+  assert.equal(monday.some((item) => item.id.includes("2026-08-17")), false);
+});
+
+test("a Monday open includes Saturday and Sunday mail, not only Friday", () => {
+  const friday = "2026-08-21";
+  const sunday = "2026-08-23";
+  const monday = "2026-08-24";
+  const weekendContent = digestSnapshot({
+    date: sunday,
+    newsletters: [
+      mailItem({
+        date: sunday,
+        source: "The Economic Times",
+        title: "A $2tn investment rethink",
+        summary: "Sunday newsletter after Friday's close.",
+        extra: { sourceFamily: "newsletter_other" },
+      }),
+    ],
+    axisResearch: [
+      mailItem({
+        date: friday,
+        title: "Axis Punch - Oberoi Realty Limited",
+        summary: "Friday Punch kept Oberoi after the prior session.",
+        extra: { axisCategory: "axis_punch" },
+      }),
+    ],
+  });
+  assert.equal(resolveIntelligenceEvidenceDateKey({
+    content: weekendContent,
+    earningsSnapshot: earningsSnapshot({ date: monday, status: "verified", events: [] }),
+    calendarDate: monday,
+  }), sunday);
+  const actions = buildIntelligenceDailyActions({
+    content: weekendContent,
+    earningsSnapshot: earningsSnapshot({ date: monday, status: "verified", events: [] }),
+    calendarDate: monday,
+  });
+  const titles = actions.map((item) => item.title).join("\n");
+  assert.match(titles, /The Economic Times/);
+  assert.doesNotMatch(titles, /Oberoi/);
+  assert.ok(actions.some((item) => item.id.includes(sunday)));
+  assert.equal(actions.some((item) => item.id.includes(friday)), false);
+  assert.equal(actions.some((item) => item.id.includes(monday)), false);
+});
+
 test("stale or empty sources label stale and never invent companies", () => {
   const stale = buildIntelligenceDailyActions({
     content: digestSnapshot({ date: DAY_A, status: "stale", axisResearch: dayAContent.axisResearch, newsletters: dayAContent.newsletters, podcasts: dayAContent.podcasts }),
@@ -346,5 +406,59 @@ test("corpus as-of titles mint monitor cards without duplicating digest titles",
       { family: "axis_research", title: "Sector Update: Cement", receivedAt: `${DAY_A}T04:00:00.000Z` },
     ],
   });
-  assert.ok(actions.some((item) => item.title.includes("Sector Update: Cement")));
+  const cement = actions.find((item) => item.title.includes("Sector Update: Cement"));
+  assert.ok(cement);
+  assert.equal(cement.sourceKind, "smart");
+  assert.equal(cement.sourceLabel, "Smart Actions");
+  assert.equal(cement.numericAdvantage, "Smart Actions");
+  assert.equal(cement.lane, "monitor");
+});
+
+test("corpus clones dedupe, drop promo, cap lanes, and stay short", () => {
+  const corpusDocuments = Array.from({ length: 30 }, (_, index) => ({
+    family: "newsletter_other",
+    title: index % 2 === 0 ? "Satya: LLM Engine status" : `Satya: LLM Engine status ${index}`,
+    receivedAt: `${DAY_A}T04:${String(index).padStart(2, "0")}:00.000Z`,
+  }));
+  corpusDocuments.push({
+    family: "newsletter_other",
+    title: "You're invited! Join us for a McKinsey Live virtual event",
+    receivedAt: `${DAY_A}T05:00:00.000Z`,
+  });
+  const actions = buildIntelligenceDailyActions({
+    content: digestSnapshot({ date: DAY_A, status: "live" }),
+    earningsSnapshot: earningsSnapshot({ date: DAY_A, status: "verified", events: [] }),
+    calendarDate: DAY_A,
+    corpusDocuments,
+  });
+  const today = actions.filter((item) => item.lane === "today");
+  const monitor = actions.filter((item) => item.lane === "monitor");
+  assert.ok(today.length <= 5);
+  assert.ok(monitor.length <= 8);
+  assert.ok(actions.length <= 13);
+  assert.ok(actions.every((item) => item.detail.length <= 180));
+  assert.ok(actions.every((item) => item.title.length <= 80));
+  const titles = actions.map((item) => item.title).join("\n");
+  assert.doesNotMatch(titles, /invited|McKinsey Live/i);
+  const smart = actions.filter((item) => item.sourceKind === "smart");
+  assert.ok(smart.length >= 1);
+  assert.ok(smart.length <= 3);
+  assert.ok(smart.every((item) => item.sourceLabel === "Smart Actions"));
+  assert.equal(new Set(smart.map((item) => item.title.replace(/\s+\d+$/, ""))).size, smart.length);
+});
+
+test("source-backed Mail and earnings cards keep Mail/Earnings labels", () => {
+  const actions = buildIntelligenceDailyActions({
+    content: dayAContent,
+    earningsSnapshot: dayAEarnings,
+    calendarDate: DAY_A,
+  });
+  const result = actions.find((item) => item.id.includes("intel-axis-result"));
+  const newsletter = actions.find((item) => item.id.includes("intel-newsletter"));
+  const earnings = actions.find((item) => item.id.includes("intel-earn"));
+  assert.equal(result?.sourceKind, "source");
+  assert.equal(result?.sourceLabel, "Mail");
+  assert.equal(newsletter?.sourceLabel, "Mail");
+  assert.equal(earnings?.sourceLabel, "Earnings");
+  assert.notEqual(result?.numericAdvantage, "Smart Actions");
 });

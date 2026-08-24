@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -26,6 +27,8 @@ import type { HealthCategorySnapshot, HealthLiveSnapshot } from "../health-live-
 import type { ContentDigestSnapshot } from "../content-types";
 import { SectorIntelligenceDigest } from "./IntelligenceDigest";
 import { CollapsibleSection, DailyKanbanBoard, HealthCategoryIcon, HealthMasonryGrid, dashboardSectionNumberFromNavId, expandDashboardSection, nativeChromeHidesSection } from "./shared-ui";
+import { satyaSuggestionsForWorkspace } from "./satya-suggestions";
+import { useSatyaTaskContext } from "./satya-workspace";
 import { listenToStratjiLocation, stratjiPushState, stratjiReplaceState } from "./stratji-navigate";
 import { compactHealthDate, healthTrendTone } from "./utils";
 import {
@@ -38,6 +41,7 @@ import {
   type HealthH3Page,
   type HealthSectionPage,
 } from "./workspace-routing";
+import { buildHealthDailyActions } from "./workspace-daily-actions";
 
 export type HealthWorkspaceSection = "h2" | "h3";
 export type HealthTopSection = "h1" | "h4" | HealthWorkspaceSection;
@@ -354,6 +358,15 @@ export function HealthWorkspace({
     };
   }, []);
 
+  const satyaCatalog = satyaSuggestionsForWorkspace("health", { section: route.section ?? route.focus });
+  useSatyaTaskContext("health", {
+    task: "satya",
+    hint: satyaCatalog.hint ?? "My Feed language only. Satya will not answer biometric KPIs.",
+    context: "",
+    placeholder: satyaCatalog.placeholder,
+    suggestions: satyaCatalog.suggestions,
+  });
+
   useEffect(() => {
     const on = active && route.exclusive;
     document.documentElement.classList.toggle("health-console-active", on);
@@ -444,12 +457,16 @@ export function HealthWorkspace({
   const focusedSection = route.exclusive ? activeTopSection : null;
   const h3Page = parseHealthH3Page(route.page);
   const h3ShowsCategory = route.section === "h3" && h3Page !== "metrics-overview";
+  const healthActions = useMemo(
+    () => buildHealthDailyActions({ healthSnapshot, missingDates }),
+    [healthSnapshot, missingDates],
+  );
 
   return <div className="health-workspace-shell" data-focus-section={focusedSection ?? undefined} ref={shellRef} tabIndex={-1} onKeyDown={onKeyDown}>
     <div id="health-h1" className="workspace-section action-board-workspace-section" hidden={nativeChromeHidesSection(focusedSection, "h1")}>
       <CollapsibleSection number="H-1" title="Health action board" note="Clickable daily source, trend and optimisation actions" defaultOpen={focusedSection === "h1"}>
         <HealthIncognitoGate active={healthIncognito} onShow={showHealth}>
-          <DailyKanbanBoard workspace="health"/>
+          <DailyKanbanBoard workspace="health" items={healthActions}/>
         </HealthIncognitoGate>
       </CollapsibleSection>
     </div>

@@ -143,6 +143,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const nativeOwnsWorkspaceNav = stratjiMacOverlayOwnsWorkspaceNav(
     typeof navigator !== "undefined" ? navigator.userAgent : null,
   );
+  const [macOverlayOwnsNav, setMacOverlayOwnsNav] = useState(false);
   const [macroEventKey, setMacroEventKey] = useState<MacroEventKey>("oilWar");
   const [macroBandKey, setMacroBandKey] = useState<MacroBandKey>("base");
   const [view, setView] = useState<"holdings" | "orders" | "positions" | "gtts" | "tsls" | "alerts">("holdings");
@@ -717,24 +718,28 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   }, [demoMode]);
 
   useEffect(() => {
+    setMacOverlayOwnsNav(
+      stratjiMacOverlayOwnsWorkspaceNav()
+      || document.documentElement.dataset.nativeOwnsSections === "1",
+    );
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("native-chrome-embed", nativeChrome);
     if (nativeChrome) {
       document.documentElement.dataset.nativeChrome = "1";
-      if (nativeOwnsWorkspaceNav) {
+      if (nativeOwnsWorkspaceNav || document.documentElement.dataset.nativeOwnsSections === "1") {
         document.documentElement.dataset.nativeOwnsSections = "1";
         delete document.documentElement.dataset.nativeWebNav;
       } else {
         document.documentElement.dataset.nativeWebNav = "1";
+        delete document.documentElement.dataset.nativeOwnsSections;
       }
     } else {
       delete document.documentElement.dataset.nativeChrome;
       delete document.documentElement.dataset.nativeOwnsSections;
       delete document.documentElement.dataset.nativeWebNav;
     }
-    return () => {
-      document.documentElement.classList.remove("native-chrome-embed");
-      delete document.documentElement.dataset.nativeChrome;
-    };
   }, [nativeChrome, nativeOwnsWorkspaceNav]);
 
   useEffect(() => {
@@ -809,7 +814,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         )}
       </header>
       )}
-      {showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status} hideHealth={demoMode} licenseTier={license.tier}/>}
+      {showWorkspaceShell && !macOverlayOwnsNav && <DashboardTabs active={workspace} onChange={selectWorkspace} kiteLive={isLive} contentLive={content.status === "live"} healthIncognito={healthIncognito} healthStatus={healthSnapshot.status} hideHealth={demoMode} licenseTier={license.tier}/>}
       {showWorkspaceShell && <section className={`live-feed-banner chrome-actions ${snapshot.status}`} aria-label="Dashboard source actions">
         <div className="live-feed-actions">
           {nativeChrome && showPdfLink && <a className="masthead-pdf" href={pdfHref}><FileText size={15}/> {pdfLabel}</a>}
@@ -841,6 +846,7 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       <div className="workspace-mount" hidden={workspace !== "investment"} data-workspace="investment">
       <InvestmentWorkspace
         snapshot={snapshot}
+        earningsSnapshot={earningsSnapshot}
         content={content}
         view={view}
         setView={setView}

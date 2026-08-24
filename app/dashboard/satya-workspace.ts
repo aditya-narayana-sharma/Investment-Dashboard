@@ -14,6 +14,7 @@ export function useSatyaTaskContext(slot: string, payload: SatyaTaskContext) {
       context: payload.context,
       placeholder: payload.placeholder,
       suggestions: payload.suggestions,
+      subject: payload.subject,
       disabled: payload.disabled,
       onApplyTree: payload.onApplyTree,
     });
@@ -24,6 +25,7 @@ export function useSatyaTaskContext(slot: string, payload: SatyaTaskContext) {
     payload.hint,
     payload.context,
     payload.placeholder,
+    payload.subject,
     payload.disabled,
     payload.onApplyTree,
     payload.suggestions,

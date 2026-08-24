@@ -7,6 +7,7 @@ import { useLicenseSnapshot } from "../license-snapshot";
 import type { HealthAveragePeriod, HealthMetric } from "../health-data";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { LiveHolding } from "../live-types";
+import { cardChromeLabel, cardChromeMeta, resolveWorkspaceKanbanItems } from "./daily-action-policy.ts";
 import type { DonutLabelProps, KanbanItem, KanbanWorkspace, WorkspaceKey } from "./types";
 import { listenToStratjiLocation, stratjiPushState } from "./stratji-navigate";
 import {
@@ -374,8 +375,8 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
     active ? parseWorkspaceSection(active, typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("section")) : "i1"
   ));
   const activeIndex = Math.max(0, visibleWorkspaces.findIndex((workspace) => workspace.key === active));
-  const pillIndex = hoverIndex ?? focusIndex ?? activeIndex;
-  const dropletWorkspace = visibleWorkspaces[pillIndex] ?? visibleWorkspaces[activeIndex];
+  const pillIndex = activeIndex;
+  const dropletWorkspace = visibleWorkspaces[activeIndex];
   const selectByIndex = (index: number) => {
     const normalized = (index + visibleWorkspaces.length) % visibleWorkspaces.length;
     const workspace = visibleWorkspaces[normalized];
@@ -423,7 +424,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
       {visibleWorkspaces.map((workspace, index) => {
         const badge = workspaceOrbitalBadge(workspace.key, kiteLive, contentLive, healthIncognito, healthStatus);
         const locked = !tierAllows(resolvedTier, featureForWorkspace(workspace.key));
-        const expanded = dropletWorkspace?.key === workspace.key;
+        const expanded = workspace.key === active;
         const sectionChips = WORKSPACE_SECTIONS[workspace.key];
         const WorkspaceIcon = workspace.icon;
         return <div
@@ -431,6 +432,7 @@ export function DashboardTabs({ active, onChange, kiteLive, contentLive, healthI
           className="workspace-tab-cell"
           data-mode={workspace.key}
           data-expanded={expanded ? "1" : undefined}
+          data-hover={hoverIndex === index || focusIndex === index ? "1" : undefined}
           onMouseEnter={() => setHoverIndex(index)}
           onFocusCapture={() => setFocusIndex(index)}
           onBlurCapture={(event) => {
@@ -638,7 +640,7 @@ export function DailyKanbanBoard({ workspace, items: itemsProp }: { workspace: K
     return () => window.clearTimeout(timer);
   }, [kanbanHydrated, state.date]);
 
-  const items = itemsProp ?? kanbanItems[workspace];
+  const items = resolveWorkspaceKanbanItems(workspace, kanbanItems, itemsProp);
   const toggle = (id: string) => {
     setCompletingId(id);
     window.setTimeout(() => setCompletingId(null), 320);
@@ -651,8 +653,10 @@ export function DailyKanbanBoard({ workspace, items: itemsProp }: { workspace: K
       const laneItems = items.filter((item) => lane.key === "done" ? state.completed.includes(item.id) : item.lane === lane.key && !state.completed.includes(item.id));
       return <article className={`kanban-lane ${lane.key} ${laneItems.length ? "" : "empty"}`} key={lane.key}><header><b>{lane.label}</b><span>{laneItems.length}</span></header><div>{laneItems.map((item) => {
         const completed = state.completed.includes(item.id);
-        const cardLabel = `${completed ? "Mark incomplete" : "Mark complete"}: ${item.title}. ${item.detail} ${item.numericAdvantage}. ${item.strategicAdvantage}`;
-        return <button type="button" className={`kanban-card vo-pop ${item.tone} ${completed ? "completed" : ""}${completingId === item.id ? " completing" : ""}`} aria-label={cardLabel} title={completed ? `${item.detail} · ${item.numericAdvantage} · ${item.strategicAdvantage}` : undefined} onClick={() => toggle(item.id)} key={item.id}><span className="kanban-check">{completed ? <CheckCircle2 size={17}/> : <i/>}</span><strong>{item.title}</strong><p>{item.detail}</p><small><b>{item.numericAdvantage}</b><em>{item.strategicAdvantage}</em></small></button>;
+        const chrome = cardChromeLabel(item);
+        const meta = cardChromeMeta(item);
+        const cardLabel = `${completed ? "Mark incomplete" : "Mark complete"}: ${item.title}. ${item.detail} ${chrome}. ${meta}`;
+        return <button type="button" className={`kanban-card vo-pop ${item.tone} ${completed ? "completed" : ""}${completingId === item.id ? " completing" : ""}`} aria-label={cardLabel} title={completed ? `${item.detail} · ${chrome} · ${meta}` : undefined} onClick={() => toggle(item.id)} key={item.id}><span className="kanban-check">{completed ? <CheckCircle2 size={17}/> : <i/>}</span><strong>{item.title}</strong><p>{item.detail}</p><small><b>{chrome}</b><em>{meta}</em></small></button>;
       })}{!laneItems.length && <p className="kanban-empty">Empty</p>}</div></article>;
     })}</div>
   </section>;

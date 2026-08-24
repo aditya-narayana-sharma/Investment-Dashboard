@@ -8,6 +8,7 @@ import {
 } from "../satya/axis-categories.ts";
 import type { WorkspaceKey } from "./types";
 import type { SatyaSuggestion } from "./satya-suggestions";
+import { clearSatyaDraftStatusMessage, publishSatyaDraftStatusMessage } from "./satya-draft-status.ts";
 
 export const SATYA_SOURCE_CHIPS: Array<{ id: SatyaSourceFamily; label: string }> = [
   { id: "axis_research", label: "Axis Research" },
@@ -285,6 +286,8 @@ export function dispatchSatyaEvent(eventName: string, data: string, handlers: Sa
   switch (kind) {
     case "status": {
       handlers.onStatus?.("thinking");
+      const message = typeof record?.message === "string" ? record.message.trim() : "";
+      if (message) publishSatyaDraftStatusMessage(message);
       return;
     }
     case "token": {
@@ -304,6 +307,7 @@ export function dispatchSatyaEvent(eventName: string, data: string, handlers: Sa
       return;
     }
     case "done": {
+      clearSatyaDraftStatusMessage();
       const finalText = assembled.text;
       if (typeof record?.sessionId === "string" && record.sessionId.trim()) {
         handlers.onSession?.(record.sessionId.trim());
@@ -312,6 +316,7 @@ export function dispatchSatyaEvent(eventName: string, data: string, handlers: Sa
       return;
     }
     case "error": {
+      clearSatyaDraftStatusMessage();
       const message = typeof record?.message === "string"
         ? record.message
         : data || "Satya failed. Mail, Axis PDFs, podcasts, and verified earnings remain the source of truth.";
@@ -457,6 +462,7 @@ export type SatyaTaskContext = {
   context: string;
   placeholder?: string;
   suggestions?: SatyaSuggestion[];
+  subject?: string;
   disabled?: boolean;
   onApplyTree?: (tree: StrategyTreeV1) => void;
 };
@@ -494,7 +500,7 @@ export function resolveSatyaWorkspaceSlot(workspace: WorkspaceKey, search = ""):
     case "strategies":
       return "strategies";
     case "health":
-      return "satya";
+      return "health";
     default: {
       const _exhaustive: never = workspace;
       return _exhaustive;
@@ -709,6 +715,7 @@ let satyaChatsOpen = false;
 const satyaChatsListeners = new Set<() => void>();
 let satyaThread: SatyaThreadState = { sessionId: null, turns: [] };
 const satyaThreadListeners = new Set<() => void>();
+let satyaThreadChanged: (() => void) | null = null;
 
 function notifySatyaPopup() {
   for (const listener of satyaPopupListeners) listener();
@@ -766,6 +773,10 @@ export function getSatyaThread(): SatyaThreadState {
   return satyaThread;
 }
 
+export function onSatyaThreadNotify(listener: () => void) {
+  satyaThreadChanged = listener;
+}
+
 export function setSatyaThread(next: SatyaThreadState, persist = false) {
   satyaThread = {
     sessionId: next.sessionId,
@@ -773,6 +784,7 @@ export function setSatyaThread(next: SatyaThreadState, persist = false) {
   };
   if (persist) persistLocalSatyaSessions(next);
   for (const listener of satyaThreadListeners) listener();
+  satyaThreadChanged?.();
 }
 
 export function subscribeSatyaThread(listener: () => void) {
@@ -780,17 +792,6 @@ export function subscribeSatyaThread(listener: () => void) {
   return () => {
     satyaThreadListeners.delete(listener);
   };
-}
-
-export function currentSatyaTurn(turns: SatyaThreadTurn[]): SatyaThreadTurn[] {
-  let lastUser = -1;
-  for (let index = turns.length - 1; index >= 0; index -= 1) {
-    if (turns[index]?.role === "user") {
-      lastUser = index;
-      break;
-    }
-  }
-  return lastUser < 0 ? [] : turns.slice(lastUser);
 }
 
 export function satyaThreadTitle(turns: SatyaThreadTurn[]): string {

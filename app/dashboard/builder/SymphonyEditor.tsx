@@ -30,6 +30,7 @@ import { createSeedTree } from "../../strategy/seed-tree";
 import { validateStrategyGraph } from "../../strategy/validate";
 import { STRATEGIES_LIVE_PATH } from "../../strategy/persist";
 import type { TreeLivePreview } from "../../strategy/tree-live";
+import { satyaSuggestionsForWorkspace } from "../satya-suggestions";
 import { useSatyaTaskContext } from "../satya-workspace";
 import { AlgorithmBuilder } from "./AlgorithmBuilder";
 import { BuilderLibraryActions } from "./BuilderLibraryActions";
@@ -69,6 +70,9 @@ const TREE_SHORTCUTS = [
   { keys: "Esc", action: "Deselect or close help" },
   { keys: "?", action: "Toggle tutorial" },
 ] as const;
+
+const BACKTEST_OVERVIEW_HINT =
+  "Results pane for this tree. Run backtest walks historical OHLCV and sets ran=true only after a real engine pass. No curve until then.";
 
 export type SymphonyEditorProps = {
   initialTree?: StrategyTreeV1;
@@ -227,11 +231,13 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
     applyDocument({ tree: next, graph: compileTreeToGraph(next) });
   }, [publish]);
 
+  const satyaCatalog = satyaSuggestionsForWorkspace("builder");
   useSatyaTaskContext("builder", {
     task: "builder",
-    hint: "Draft a StrategyTreeV1 from a prompt. Invalid JSON is rejected and the canvas stays as-is.",
+    hint: satyaCatalog.hint ?? "Canvas language only. Smart Suggestions stay research-only. Typed prompts can still draft a StrategyTreeV1 for the editor.",
     context: `Current tree name: ${tree.name}. Interval: ${tree.interval}. Description: ${tree.description ?? ""}.`,
-    placeholder: "e.g. Core-satellite with HDFCBANK quality sleeve and a RELIANCE trend gate",
+    placeholder: satyaCatalog.placeholder ?? "e.g. What did Axis Research say about RELIANCE, TCS, or HDFCBANK?",
+    suggestions: satyaCatalog.suggestions,
     disabled: readOnly,
     onApplyTree: applyDraftedTree,
   });
@@ -371,66 +377,76 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
         <div className="symphony-top">
           <aside className="symphony-details" aria-label="Strategy details">
             <h3>Details</h3>
-            <label>
-              Name
-              <input
-                value={tree.name}
-                disabled={readOnly}
-                onChange={(event) => commit({ ...tree, name: event.target.value })}
-              />
-            </label>
-            <label>
-              Description
-              <textarea
-                value={tree.description ?? ""}
-                disabled={readOnly}
-                onChange={(event) => commit({ ...tree, description: event.target.value })}
-              />
-            </label>
-            <label>
-              Frequency
-              <select
-                value={tree.interval}
-                disabled={readOnly}
-                onChange={(event) => commit({ ...tree, interval: event.target.value as CandleInterval })}
-              >
-                {INTERVALS.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <div className="symphony-selected">
-              {selected ? (
-                <>
-                  <h4>Selected · {selected.kind.replaceAll("_", " ")}</h4>
-                  <p>{selected.label ?? selected.id}</p>
-                  <button type="button" className="builder-delete" disabled={readOnly} onClick={deleteSelected}>Delete</button>
-                </>
-              ) : (
-                <p>Select a block to inspect or delete it.</p>
-              )}
+            <div className="symphony-details-fields">
+              <label>
+                Name
+                <input
+                  value={tree.name}
+                  disabled={readOnly}
+                  onChange={(event) => commit({ ...tree, name: event.target.value })}
+                />
+              </label>
+              <label>
+                Frequency
+                <select
+                  value={tree.interval}
+                  disabled={readOnly}
+                  onChange={(event) => commit({ ...tree, interval: event.target.value as CandleInterval })}
+                >
+                  {INTERVALS.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="symphony-selected">
+                {selected ? (
+                  <>
+                    <h4>Selected · {selected.kind.replaceAll("_", " ")}</h4>
+                    <p>{selected.label ?? selected.id}</p>
+                    <button type="button" className="builder-delete" disabled={readOnly} onClick={deleteSelected}>Delete</button>
+                  </>
+                ) : (
+                  <p>Select a block to inspect or delete it.</p>
+                )}
+              </div>
+              <label className="symphony-details-description">
+                Description
+                <textarea
+                  rows={2}
+                  value={tree.description ?? ""}
+                  disabled={readOnly}
+                  onChange={(event) => commit({ ...tree, description: event.target.value })}
+                />
+              </label>
             </div>
           </aside>
           <aside className="builder-preview" aria-label="Backtest overview">
-            <h3>Backtest overview</h3>
-            <p>Results pane for this tree. Run backtest walks historical OHLCV and sets ran=true only after a real engine pass. No curve until then.</p>
-            <p className="builder-preview-meta">{tree.name} · {tree.interval}</p>
-            <dl className="symphony-backtest-stats" aria-label="Backtest performance">
-              <div><small>Return</small><b>{run?.ran ? `${run.totalReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
-              <div><small>Ann.</small><b>{run?.ran ? `${run.annualizedReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
-              <div><small>Max DD</small><b>{run?.ran ? `${run.maxDrawdownPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
-            </dl>
-            <button type="button" disabled={running} onClick={() => void runBacktest()}>
-              {running ? "Running" : "Run backtest"}
-            </button>
+            <div className="symphony-backtest-chrome">
+              <div className="symphony-backtest-head">
+                <h3 title={BACKTEST_OVERVIEW_HINT}>Backtest overview</h3>
+                <p className="builder-preview-meta">{tree.name} · {tree.interval}</p>
+              </div>
+              <dl className="symphony-backtest-stats" aria-label="Backtest performance">
+                <div><small>Return</small><b>{run?.ran ? `${run.totalReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+                <div><small>Ann.</small><b>{run?.ran ? `${run.annualizedReturnPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+                <div><small>Max DD</small><b>{run?.ran ? `${run.maxDrawdownPct?.toFixed(2) ?? "—"}%` : "—"}</b></div>
+              </dl>
+              <button type="button" className="symphony-backtest-run" disabled={running} onClick={() => void runBacktest()}>
+                {running ? "Running" : "Run backtest"}
+              </button>
+            </div>
             {run?.ran && run.curve && run.curve.length > 1 ? (
               <EquityCurve curve={run.curve} />
             ) : (
               <p className="symphony-disabled-reason">{run?.message ?? "Not run yet."}</p>
             )}
-            <p className="symphony-live-status" data-status={live?.status ?? "unavailable"}>{liveHint}</p>
+            <p
+              className="symphony-live-status"
+              data-status={live?.status ?? "unavailable"}
+              title={liveHint}
+            >{liveHint}</p>
             {live?.watchlist.status === "unavailable" && live.watchlist.message !== liveHint && (
-              <p className="symphony-live-status" data-status="unavailable">{live.watchlist.message}</p>
+              <p className="symphony-live-status" data-status="unavailable" title={live.watchlist.message}>{live.watchlist.message}</p>
             )}
             {live?.authUrl && (
               <p><a href={live.authUrl} target="_blank" rel="noreferrer">Authenticate Kite</a></p>
@@ -484,23 +500,26 @@ export function SymphonyEditor({ initialTree, onDocumentChange }: SymphonyEditor
                 onClick={() => alert && setBrokerDraft({ kind: "alert", preview: alert })}
               >Create alert</button>
             </div>
-            {orderReason && orderReason !== liveHint && <p className="symphony-disabled-reason">{orderReason}</p>}
+            {orderReason && orderReason !== liveHint && <p className="symphony-disabled-reason" title={orderReason}>{orderReason}</p>}
             {gttReason && gttReason !== liveHint && gttReason !== orderReason && (
-              <p className="symphony-disabled-reason">{gttReason}</p>
+              <p className="symphony-disabled-reason" title={gttReason}>{gttReason}</p>
             )}
             {alertReason && alertReason !== liveHint && alertReason !== orderReason && alertReason !== gttReason && (
-              <p className="symphony-disabled-reason">{alertReason}</p>
+              <p className="symphony-disabled-reason" title={alertReason}>{alertReason}</p>
             )}
-            <KpiRegistryPanel
-              symbol={kpiSymbol}
-              name={kpiName}
-              live={live ?? undefined}
-              disabled={readOnly}
-              onSymbolChange={(next) => {
-                setKpiSymbol(next.symbol.trim().toUpperCase());
-                setKpiName(next.name.trim());
-              }}
-            />
+            <details className="symphony-kpi-drawer">
+              <summary>KPI registry · {KPI_REGISTRY_COUNT}</summary>
+              <KpiRegistryPanel
+                symbol={kpiSymbol}
+                name={kpiName}
+                live={live ?? undefined}
+                disabled={readOnly}
+                onSymbolChange={(next) => {
+                  setKpiSymbol(next.symbol.trim().toUpperCase());
+                  setKpiName(next.name.trim());
+                }}
+              />
+            </details>
           </aside>
         </div>
         <TreeCanvas

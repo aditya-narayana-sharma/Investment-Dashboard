@@ -172,10 +172,18 @@ html[data-native-chrome] .workspace-section .section-heading {
   margin-top: 0;
 }
 
-/* LAST-WINS: Mac overlay is the only toggle. Beat embed display:flex !important. */
+/* LAST-WINS: Mac overlay is the only toggle. Beat embed display:flex !important
+   and the web-nav opt-in (same or higher specificity, later in this file). */
+html[data-native-owns-sections="1"] .workspace-navigation.mode-dial {
+  display:none !important;
+}
 html.native-chrome-embed[data-native-owns-sections="1"] .workspace-navigation,
 html.native-chrome-embed[data-native-owns-sections="1"] .workspace-navigation.mode-dial,
-html[data-native-owns-sections="1"] .workspace-navigation.mode-dial.glass-bar {
+html[data-native-owns-sections="1"] .workspace-navigation.mode-dial.glass-bar,
+html[data-native-owns-sections="1"] .dashboard-app.native-chrome>.workspace-navigation.mode-dial,
+html.native-chrome-embed[data-native-owns-sections="1"] .dashboard-app.native-chrome>.workspace-navigation.mode-dial,
+html[data-native-owns-sections="1"][data-native-web-nav="1"] .workspace-navigation.mode-dial,
+html[data-native-owns-sections="1"][data-native-web-nav="1"] .dashboard-app.native-chrome>.workspace-navigation.mode-dial {
   display:none !important;
   height:0 !important;
   min-height:0 !important;

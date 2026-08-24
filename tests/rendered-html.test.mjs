@@ -354,6 +354,26 @@ test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion 
   assert.match(satyaRoom, /currentSatyaTurn/);
   assert.match(satyaRoom, /Open Chats/);
   assert.match(satyaRoom, /openSatyaChats/);
+  assert.match(satyaRoom, /openSatyaDraftPopout/);
+  assert.match(satyaRoom, /Pop out/);
+  assert.match(satyaPresence, /openSatyaDraftPopout/);
+  assert.match(satyaPresence, /SatyaDraftPopout/);
+  assert.match(satyaPresence, /Pop out/);
+  assert.match(satyaClient, /onSatyaThreadNotify/);
+  assert.match(
+    await readFile(new URL("../app/dashboard/satya-draft-popout.ts", import.meta.url), "utf8"),
+    /openSatyaDraftPopout/,
+  );
+  assert.match(
+    await readFile(new URL("../app/dashboard/satya-draft-popout.css", import.meta.url), "utf8"),
+    /\.satya-draft-popout/,
+  );
+  assert.doesNotMatch(satyaCss, /\.satya-draft-popout-backdrop/);
+  assert.match(satyaCss, /overflow-wrap:\s*anywhere/);
+  assert.match(satyaCss, /\.satya-turn pre[\s\S]*white-space:\s*pre-wrap/);
+  assert.match(satyaCss, /satya-draft-status-shimmer/);
+  assert.doesNotMatch(satyaRoom, />Drafting…</);
+  assert.match(satyaRoom, /SatyaDraftStatusLine/);
   assert.match(satyaRoom, /setSatyaThread/);
   assert.match(satyaRoom, /getSatyaThread/);
   assert.doesNotMatch(satyaRoom, /subscribeSatyaThread/);
@@ -373,6 +393,8 @@ test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion 
   assert.equal((pageSource.match(/<SatyaPresence/g) ?? []).length, 1);
   assert.doesNotMatch(pageSource, /workspace-tab-satya|key: "satya"/);
   assert.match(satyaPresence, /Smart Suggestions/);
+  assert.match(satyaPresence, /satyaSuggestionsForWorkspace/);
+  assert.match(satyaPresence, /data-satya-workspace/);
   assert.match(satyaPresence, /setPrompt\(item\.prompt\)/);
   assert.match(satyaClient, /\/api\/llm\/complete/);
   assert.match(satyaClient, /completeSatyaWorkspaceTask/);
@@ -498,7 +520,7 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   }
   assert.ok(workspace.indexOf('number="S-1"') < workspace.indexOf("number={SECTION_META.s2.number}"));
   assert.ok(workspace.indexOf("number={SECTION_META.s2.number}") < workspace.indexOf("number={SECTION_META.s3.number}"));
-  assert.match(workspace, /<DailyKanbanBoard workspace="sectors"\/>/);
+  assert.match(workspace, /<DailyKanbanBoard workspace="sectors" items=\{sectorActions\}\s*\/>/);
   assert.match(workspace, /<SectoralAnalytics selectedIds=\{selectedSectorIds\}/);
   assert.match(workspace, /benchmarks=\{benchmarks\}/);
   assert.match(analytics, /task: "industry"/);
@@ -522,6 +544,8 @@ test("Sectoral Analytics uses full-width collapsible sections without overview t
   assert.match(workspace, /\{ id: "s1", label: "Action Board" \}/);
   assert.match(workspace, /\{ id: "s2", label: "Industry Analytics" \}/);
   assert.match(workspace, /\{ id: "s3", label: "Decision Framework" \}/);
+  assert.match(sharedUi, /const pillIndex = activeIndex/);
+  assert.doesNotMatch(sharedUi, /hoverIndex \?\? focusIndex \?\? activeIndex/);
   assert.match(sharedUi, /export function WorkspaceSectionNav/);
   assert.match(sharedUi, /role="tablist"/);
   assert.match(sharedUi, /aria-selected=\{selected\}/);
@@ -645,7 +669,7 @@ test("nativeChrome hides web masthead; Macintosh Stratji FOUC owns the combined 
   assert.match(routing, /function nativeChromeFromPageSearch/);
   assert.match(routing, /function detectNativeChrome/);
   assert.match(page, /detectNativeChrome/);
-  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !macOverlayOwnsNav && <DashboardTabs/);
   assert.match(page, /!nativeChrome && \([\s\S]*className="masthead"/);
   assert.doesNotMatch(page, /nativeChrome && <AppearanceToggle/);
   assert.doesNotMatch(page, /HealthIncognitoToggle/);
@@ -656,7 +680,7 @@ test("nativeChrome hides web masthead; Macintosh Stratji FOUC owns the combined 
   assert.doesNotMatch(page, /PulseConstellation/);
   assert.doesNotMatch(page, /LIVE KITE CONNECT DATA/);
   assert.doesNotMatch(page, /!nativeChrome && <PulseConstellation/);
-  assert.match(page, /\{showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
+  assert.match(page, /\{showWorkspaceShell && !macOverlayOwnsNav && <DashboardTabs/);
   assert.doesNotMatch(page, /\{showWorkspaceShell && !nativeChrome && <DashboardTabs/);
   assert.doesNotMatch(page, /!nativeChrome && <DailyKanbanBoard/);
   assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
@@ -731,6 +755,8 @@ test("nativeChrome hides web masthead; Macintosh Stratji FOUC owns the combined 
   assert.match(nativeChromeCssFile, /html\[data-native-web-nav="1"\] \.workspace-navigation\.mode-dial/);
   assert.match(nativeChromeCssFile, /html\[data-native-owns-sections="1"\] \.workspace-navigation\.mode-dial[\s\S]{0,160}display:\s*none !important/);
   assert.match(nativeChromeCssFile, /html\.native-chrome-embed\[data-native-owns-sections="1"\] \.workspace-navigation/);
+  assert.match(nativeChromeCssFile, /html\[data-native-owns-sections="1"\]\[data-native-web-nav="1"\] \.dashboard-app\.native-chrome>\.workspace-navigation\.mode-dial/);
+  assert.match(layout, /delete document\.documentElement\.dataset\.nativeWebNav/);
   assert.match(iosShell, /NavigationSplitView/);
   assert.match(iosShell, /DashboardOutline\.sidebarWidth/);
   assert.match(iosShell, /DashboardOutlineList\(selectedID:/);
@@ -1451,12 +1477,16 @@ test("server-renders the print report and keeps controls interactive", async () 
   assert.match(page, /Investability decision radar/);
   assert.match(page, /Decision gate/);
   assert.match(page, /function DailyKanbanBoard/);
+  assert.match(page, /resolveWorkspaceKanbanItems/);
+  assert.match(page, /Smart Actions/);
   assert.match(page, /className="kanban-board canonical-action-board"/);
-  assert.match(page, /<DailyKanbanBoard workspace="investment"\/>/);
-  assert.match(page, /<DailyKanbanBoard workspace="sectors"\/>/);
+  assert.match(page, /buildInvestmentDailyActions/);
+  assert.match(page, /setMacOverlayOwnsNav/);
+  assert.match(page, /<DailyKanbanBoard workspace="investment" items=\{investmentActions\}\s*\/>/);
+  assert.match(page, /<DailyKanbanBoard workspace="sectors" items=\{sectorActions\}\s*\/>/);
   assert.match(page, /<DailyKanbanBoard workspace="intelligence" items=\{intelligenceActions\}\s*\/>/);
-  assert.match(page, /<DailyKanbanBoard workspace="health"\/>/);
-  assert.match(page, /<DailyKanbanBoard workspace="strategies"\/>/);
+  assert.match(page, /<DailyKanbanBoard workspace="health" items=\{healthActions\}\s*\/>/);
+  assert.match(page, /<DailyKanbanBoard workspace="strategies" items=\{strategiesActions\}\s*\/>/);
   assert.doesNotMatch(page, /<DailyKanbanBoard[^>]+(?:lane|compact)=/);
   assert.doesNotMatch(globalCss, /\.kanban-board\.compact/);
   assert.match(globalCss, /\.canonical-action-board\{height:auto!important/);
@@ -2193,7 +2223,7 @@ test("Algorithm Canvas builder view chrome includes Algorithm Builder, Action Bo
   assert.match(workspace.text, /Action Board|ACTION BOARD/);
   assert.match(workspace.text, /(?:label|title|id):\s*"canvas"|["']Canvas["']|>CANVAS</);
   assert.match(workspace.text, /(?:label|title|id):\s*"json"|["']JSON["']|>JSON</i);
-  assert.match(workspace.text, /<DailyKanbanBoard workspace="builder"\s*\/>/);
+  assert.match(workspace.text, /<DailyKanbanBoard workspace="builder" items=\{builderActions\}\s*\/>/);
 });
 
 test("builder and strategies query strings SSR their workspace chrome", async () => {
@@ -2229,7 +2259,7 @@ test("Integrations is Settings chrome, not a seventh DailyKanbanBoard workspace"
   assert.match(page, /DashboardTabs active=\{workspace\}/);
   assert.match(page, /nativeChrome/);
   assert.match(page, /native-chrome/);
-  assert.match(page, /showWorkspaceShell && !nativeOwnsWorkspaceNav && <DashboardTabs/);
+  assert.match(page, /showWorkspaceShell && !macOverlayOwnsNav && <DashboardTabs/);
   assert.match(page, /isIntegrationsChrome && <IntegrationsWorkspace/);
   assert.match(page, /document\.title = isIntegrationsChrome \? "Settings"/);
   assert.match(page, /if \(isIntegrationsChrome\) return;/);

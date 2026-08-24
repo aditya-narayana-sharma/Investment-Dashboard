@@ -72,6 +72,12 @@ struct StratjiPermissionsOnboardingView: View {
             Text("Mail uses only iCloud → Newsletters and iCloud → Axis Research. Reminders uses Job 🔍 and Earnings. Calendar is scheduling evidence, not published-results proof. Notes is optional and is never a Health source. Speech / Mic is optional Satya push-to-talk on this Mac only.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text("The git checkout lives under Documents. Grant Full Disk Access once for apple-app/build/Stratji.app so workspace changes do not re-ask for that folder.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open Full Disk Access") {
+                FlaskServiceSupervisor.openFullDiskAccess()
+            }
         }
         .padding(16)
     }

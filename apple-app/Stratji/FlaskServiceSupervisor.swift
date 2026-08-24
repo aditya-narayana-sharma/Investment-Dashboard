@@ -67,25 +67,40 @@ enum FlaskServiceSupervisor {
         appendDesktopLog("Stop: dashboard processes are down\n")
     }
 
-    /// Every app launch starts a new data plane. Leftover :3000/:5050 listeners are not reused.
+    /// Adopt a live `serviceReady` stack. Recycle only when health is down, or via Retry.
     static func kickoffAtLaunch() async {
         StratjiConfiguration.persistRepoRoot()
+        if await isReachable() {
+            adoptLiveGatewayWithoutRecycle()
+            appendDesktopLog("Launch: gateway already serviceReady; skip stop\n")
+            return
+        }
         appendDesktopLog("Launch: stopping leftover dashboard processes for a fresh start\n")
         stopDataPlane()
-        await waitUntilDashboardPortsFree()
+        let portsFree = await waitUntilDashboardPortsFree()
+        if !portsFree {
+            appendDesktopLog("Launch: leftover listeners still bound after 20s; Retry / FDA\n")
+            return
+        }
         appendDesktopLog("Launch: running dash-start in background\n")
         runDashStartInBackground()
     }
 
     static func ensureRunning(recycle: Bool = false, onTick: (() -> Void)? = nil) async -> FlaskServiceStatus {
-        StratjiConfiguration.persistRepoRoot()
+        if !FileManager.default.fileExists(atPath: StratjiConfiguration.startCommand.path) {
+            StratjiConfiguration.persistRepoRoot()
+        }
         onTick?()
         if recycle {
             appendDesktopLog("Retry: recycling dashboard processes for a fresh start\n")
             stopDataPlane()
             onTick?()
-            await waitUntilDashboardPortsFree()
-            runDashStartInBackground()
+            let portsFree = await waitUntilDashboardPortsFree()
+            if portsFree {
+                runDashStartInBackground()
+            } else {
+                appendDesktopLog("Retry: leftover listeners still bound after 20s; Retry / FDA\n")
+            }
         } else if await isReachable(), !isStartProcessRunning() {
             adoptLiveGatewayWithoutRecycle()
             onTick?()
@@ -155,7 +170,6 @@ enum FlaskServiceSupervisor {
     ) async -> Bool {
         guard let repoRoot = StratjiConfiguration.repoRoot else { return false }
         let script = repoRoot.appendingPathComponent(StratjiConfiguration.refreshScriptRelativePath)
-        guard FileManager.default.fileExists(atPath: script.path) else { return false }
 
         let logDirectory = StratjiConfiguration.logDirectory
         let logFile = logDirectory.appendingPathComponent("startup-refresh.log")
@@ -166,8 +180,14 @@ enum FlaskServiceSupervisor {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [script.path]
-        process.currentDirectoryURL = repoRoot
+        process.arguments = [
+            "-c",
+            "cd \"$1\" && exec \"$2\"",
+            "refresh",
+            repoRoot.path,
+            script.path,
+        ]
+        process.currentDirectoryURL = StratjiConfiguration.applicationSupportDirectory
         var environment = ProcessInfo.processInfo.environment
         var dashboard = StratjiConfiguration.dashboardURL.absoluteString
         if dashboard.hasSuffix("/") { dashboard.removeLast() }
@@ -184,7 +204,7 @@ enum FlaskServiceSupervisor {
         process.environment = environment
 
         let publishProgress = {
-            if let snapshot = latestRefreshProgress(repoRoot: repoRoot, logFile: logFile) {
+            if let snapshot = latestRefreshProgress(logFile: logFile) {
                 onProgress?(snapshot)
             }
         }
@@ -247,14 +267,12 @@ enum FlaskServiceSupervisor {
         return process.terminationStatus == 0
     }
 
-    static func latestRefreshProgress(repoRoot: URL, logFile: URL? = nil) -> StratjiRefreshProgressSnapshot? {
+    /// Read progress from `StratjiConfiguration.logDirectory` only. Do not `stat`
+    /// the Documents checkout or `artifacts/private` — that retriggers Files and Folders TCC.
+    static func latestRefreshProgress(logFile: URL? = nil) -> StratjiRefreshProgressSnapshot? {
         let logs = StratjiConfiguration.logDirectory
-        let progressFile = repoRoot.appendingPathComponent("artifacts/private/startup-progress.json")
         let logCopy = logs.appendingPathComponent("startup-progress.json")
-        let json = StratjiRefreshProgress.merge(
-            StratjiRefreshProgress.load(from: progressFile),
-            StratjiRefreshProgress.load(from: logCopy)
-        )
+        let json = StratjiRefreshProgress.load(from: logCopy)
         let refreshLog = logFile ?? logs.appendingPathComponent("startup-refresh.log")
         let logUpdated = (try? refreshLog.resourceValues(forKeys: [URLResourceKey.contentModificationDateKey]))?.contentModificationDate ?? Date()
         let parsedLog: StratjiRefreshProgressSnapshot?
@@ -275,6 +293,8 @@ enum FlaskServiceSupervisor {
         let urls = [
             "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_FilesAndFolders",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders",
         ]
         for value in urls {
             if let url = URL(string: value) {
@@ -325,17 +345,17 @@ enum FlaskServiceSupervisor {
         dashStartStarted = true
         launchLock.unlock()
 
-        guard let repoRoot = StratjiConfiguration.repoRoot else {
+        let supportStart = StratjiConfiguration.startCommand
+        let start: URL
+        let workingDirectory: URL
+        if FileManager.default.fileExists(atPath: supportStart.path) {
+            start = supportStart
+            workingDirectory = StratjiConfiguration.applicationSupportDirectory
+        } else if let repoRoot = StratjiConfiguration.repoRoot {
+            start = repoRoot.appendingPathComponent(StratjiConfiguration.startScriptRelativePath)
+            workingDirectory = repoRoot
+        } else {
             appendDesktopLog("dash-start skipped: repo root missing\n")
-            launchLock.lock()
-            dashStartStarted = false
-            launchLock.unlock()
-            return
-        }
-
-        let start = repoRoot.appendingPathComponent(StratjiConfiguration.startScriptRelativePath)
-        guard FileManager.default.fileExists(atPath: start.path) else {
-            appendDesktopLog("dash-start skipped: start-flask-app.sh missing\n")
             launchLock.lock()
             dashStartStarted = false
             launchLock.unlock()
@@ -371,7 +391,7 @@ enum FlaskServiceSupervisor {
             "dash-start",
             start.path,
         ]
-        process.currentDirectoryURL = repoRoot
+        process.currentDirectoryURL = workingDirectory
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = handle
         process.standardError = handle
@@ -401,21 +421,24 @@ enum FlaskServiceSupervisor {
 
     /// After Stratji stop, do not start until Vinext and Flask listeners are gone.
     /// A dying `flask_bound` leftover would otherwise take the Vinext-only path.
-    static func waitUntilDashboardPortsFree() async {
+    /// After 20s, do not dash-start against leftover listeners.
+    @discardableResult
+    static func waitUntilDashboardPortsFree() async -> Bool {
         let ports = [3000, 5050]
         for tick in 0 ..< 80 {
             if ports.allSatisfy({ !isPortListening($0) }) {
                 if tick > 0 {
                     appendDesktopLog("Launch: ports :3000 and :5050 are free\n")
                 }
-                return
+                return true
             }
             if tick == 0 {
                 appendDesktopLog("Launch: waiting for leftover :3000/:5050 listeners to exit\n")
             }
             try? await Task.sleep(nanoseconds: 250_000_000)
         }
-        appendDesktopLog("Launch: leftover listeners still bound after 20s; dash-start will wait\n")
+        appendDesktopLog("Launch: leftover listeners still bound after 20s; not starting a second stack\n")
+        return false
     }
 
     nonisolated private static func isPortListening(_ port: Int) -> Bool {
@@ -438,15 +461,17 @@ enum FlaskServiceSupervisor {
             return
         }
         let stop = repoRoot.appendingPathComponent(StratjiConfiguration.stopScriptRelativePath)
-        guard FileManager.default.fileExists(atPath: stop.path) else {
-            appendDesktopLog("stop skipped: stop-flask-app.sh missing\n")
-            return
-        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [stop.path]
-        process.currentDirectoryURL = repoRoot
+        process.arguments = [
+            "-c",
+            "cd \"$1\" && exec \"$2\"",
+            "stop",
+            repoRoot.path,
+            stop.path,
+        ]
+        process.currentDirectoryURL = StratjiConfiguration.applicationSupportDirectory
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         process.environment = environment

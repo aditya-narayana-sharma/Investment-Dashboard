@@ -5,6 +5,7 @@ enum StratjiConfiguration {
     static let applicationSupportDirectoryName = "Stratji"
     static let repoRootFilename = "repo-root"
     static let repoRootDefaultsKey = "StratjiRepoRoot"
+    static let repoRootBookmarkDefaultsKey = "StratjiRepoRootBookmark"
     static let launchAgentLabel = "com.adityasharma.portfolio-intelligence"
     static let trampolineFilename = "run-service.sh"
     static let startCommandFilename = "start-dashboard.command"
@@ -15,6 +16,10 @@ enum StratjiConfiguration {
     static let setupScriptRelativePath = "scripts/setup-flask-app.sh"
     static let serviceScriptRelativePath = "scripts/run-dashboard-service.sh"
     static let refreshScriptRelativePath = "scripts/refresh-dashboard-data.sh"
+
+    private static let repoRootLock = NSLock()
+    nonisolated(unsafe) private static var cachedRepoRoot: URL?
+    nonisolated(unsafe) private static var checkoutAccessStarted = false
 
     static var dashboardURL: URL {
         let envKeys = ["STRATJI_DASHBOARD_URL", "PORTFOLIO_DESKTOP_URL"]
@@ -41,34 +46,30 @@ enum StratjiConfiguration {
         return components?.url ?? defaultDashboardURL
     }
 
+    /// Checkout path for the Mac data plane.
+    ///
+    /// After the first resolve, the URL is cached for the process lifetime.
+    /// Do not `stat` / `fileExists` Documents on the getter — that retriggers the
+    /// Files and Folders TCC prompt (`NSDocumentsFolderUsageDescription`) on every
+    /// workspace change, refresh poll, and focus return from the dialog.
     static var repoRoot: URL? {
-        if let env = ProcessInfo.processInfo.environment["STRATJI_REPO_ROOT"], !env.isEmpty {
-            return directoryIfValid(URL(fileURLWithPath: env, isDirectory: true))
+        repoRootLock.lock()
+        defer { repoRootLock.unlock() }
+        if let cachedRepoRoot {
+            return cachedRepoRoot
         }
-
-        if let stored = UserDefaults.standard.string(forKey: repoRootDefaultsKey), !stored.isEmpty {
-            if let url = directoryIfValid(URL(fileURLWithPath: stored, isDirectory: true)) {
-                return url
-            }
+        if let bookmarked = resolveBookmarkedRepoRootLocked() {
+            cachedRepoRoot = bookmarked
+            beginPersistentCheckoutAccessLocked(for: bookmarked)
+            return bookmarked
         }
-
-        let supportFile = applicationSupportDirectory.appendingPathComponent(repoRootFilename)
-        if let contents = try? String(contentsOf: supportFile, encoding: .utf8) {
-            let trimmed = contents.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                if let url = directoryIfValid(URL(fileURLWithPath: trimmed, isDirectory: true)) {
-                    return url
-                }
-            }
+        guard let path = declaredRepoRootPath() else {
+            return nil
         }
-
-        if let bundled = Bundle.main.object(forInfoDictionaryKey: "StratjiRepoRoot") as? String,
-           !bundled.isEmpty,
-           bundled != "$(STRATJI_REPO_ROOT)" {
-            return directoryIfValid(URL(fileURLWithPath: bundled, isDirectory: true))
-        }
-
-        return nil
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        cachedRepoRoot = url
+        beginPersistentCheckoutAccessLocked(for: url)
+        return url
     }
 
     static var startFlaskScript: URL? {
@@ -116,11 +117,21 @@ enum StratjiConfiguration {
             .appendingPathComponent("Library/Logs/PortfolioIntelligence", isDirectory: true)
     }
 
+    /// Write Application Support + bookmark once. Safe to call again: same path
+    /// skips a launch-agent rewrite and never re-stats Documents.
     static func persistRepoRoot() {
         guard let repoRoot else { return }
         UserDefaults.standard.set(repoRoot.path, forKey: repoRootDefaultsKey)
         try? FileManager.default.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true)
         let supportFile = applicationSupportDirectory.appendingPathComponent(repoRootFilename)
+        let existing = (try? String(contentsOf: supportFile, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if UserDefaults.standard.data(forKey: repoRootBookmarkDefaultsKey) == nil {
+            persistBookmark(for: repoRoot)
+        }
+        if existing == repoRoot.path, FileManager.default.fileExists(atPath: startCommand.path) {
+            return
+        }
         try? (repoRoot.path + "\n").write(to: supportFile, atomically: true, encoding: .utf8)
         writeLaunchAgent()
     }
@@ -214,22 +225,102 @@ enum StratjiConfiguration {
         try? plist.write(to: launchAgentPlist, atomically: true, encoding: .utf8)
     }
 
-    private static func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    private static func declaredRepoRootPath() -> String? {
+        if let env = ProcessInfo.processInfo.environment["STRATJI_REPO_ROOT"], !env.isEmpty {
+            return env
+        }
+        if let stored = UserDefaults.standard.string(forKey: repoRootDefaultsKey), !stored.isEmpty {
+            return stored
+        }
+        let supportFile = applicationSupportDirectory.appendingPathComponent(repoRootFilename)
+        if let contents = try? String(contentsOf: supportFile, encoding: .utf8) {
+            let trimmed = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        if let bundled = Bundle.main.object(forInfoDictionaryKey: "StratjiRepoRoot") as? String,
+           !bundled.isEmpty,
+           bundled != "$(STRATJI_REPO_ROOT)" {
+            return bundled
+        }
+        return nil
     }
 
-    private static func directoryIfValid(_ url: URL) -> URL? {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+    private static func resolveBookmarkedRepoRootLocked() -> URL? {
+        guard let data = UserDefaults.standard.data(forKey: repoRootBookmarkDefaultsKey) else {
             return nil
+        }
+        var isStale = false
+        let url: URL
+        do {
+            url = try URL(
+                resolvingBookmarkData: data,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+        } catch {
+            do {
+                url = try URL(
+                    resolvingBookmarkData: data,
+                    options: [.withoutUI],
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                )
+            } catch {
+                return nil
+            }
+        }
+        if isStale {
+            persistBookmarkLocked(for: url)
         }
         return url
     }
 
+    private static func beginPersistentCheckoutAccessLocked(for url: URL) {
+        if checkoutAccessStarted {
+            return
+        }
+        _ = url.startAccessingSecurityScopedResource()
+        checkoutAccessStarted = true
+        if UserDefaults.standard.data(forKey: repoRootBookmarkDefaultsKey) == nil {
+            persistBookmarkLocked(for: url)
+        }
+    }
+
+    private static func persistBookmark(for url: URL) {
+        repoRootLock.lock()
+        defer { repoRootLock.unlock() }
+        persistBookmarkLocked(for: url)
+    }
+
+    private static func persistBookmarkLocked(for url: URL) {
+        let data: Data
+        do {
+            data = try url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        } catch {
+            guard let fallback = try? url.bookmarkData(
+                options: [],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ) else {
+                return
+            }
+            data = fallback
+        }
+        UserDefaults.standard.set(data, forKey: repoRootBookmarkDefaultsKey)
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     private static func scriptURL(relativePath: String) -> URL? {
-        guard let repoRoot else { return nil }
-        let url = repoRoot.appendingPathComponent(relativePath)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        repoRoot?.appendingPathComponent(relativePath)
     }
 }

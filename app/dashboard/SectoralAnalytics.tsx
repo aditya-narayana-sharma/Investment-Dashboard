@@ -11,7 +11,7 @@ import { alignSectorImpactRows, lifeCyclePoints, marketStructurePoints, type Imp
 import type { LiveHolding } from "../live-types";
 import type { SectorRankingView } from "./types";
 import { useSatyaTaskContext } from "./satya-workspace";
-import type { SatyaSuggestion } from "./satya-suggestions";
+import { satyaSuggestionsForWorkspace, type SatyaSuggestion } from "./satya-suggestions";
 import { currentIstDateLabel, inr } from "./utils";
 
 const impactGlyph: Record<ImpactSignal, string> = { tailwind: "▲", headwind: "▼", "two-way": "●", na: "—" };
@@ -21,39 +21,7 @@ const axisLabelStyle = { fill: "#9ba6b2", fontSize: 13, fontWeight: 700 };
 export type SectorAnalyticsPage = "pulse" | "companies" | "rankings" | "lifecycle" | "structure" | "mece";
 
 function industryAnalyticsSuggestions(industryName: string | null): SatyaSuggestion[] {
-  const subject = industryName ?? "all industries in the supplied snapshot";
-  return [
-    {
-      id: "vs-nifty",
-      label: "vs Nifty 50",
-      prompt: `How does ${subject} compare with Nifty 50 using only the supplied snapshot and EOD benchmarks? Do not invent index levels. If a level is missing, say unavailable.`,
-    },
-    {
-      id: "breadth",
-      label: "Session breadth",
-      prompt: `Summarize advancers vs decliners and median 1M return for ${subject} from the supplied snapshot only. Missing quotes stay blank.`,
-    },
-    {
-      id: "leaders-laggards",
-      label: "Leaders vs laggards",
-      prompt: `Who are the supplied leaders and laggards for ${subject}? Use only supplied rank values. Do not invent returns or KPIs.`,
-    },
-    {
-      id: "composite-pulse",
-      label: "Composite vs pulse",
-      prompt: `What do the supplied composite score and pulse imply for ${subject}? Do not change scores or invent missing KPIs.`,
-    },
-    {
-      id: "constituents",
-      label: "Constituent mix",
-      prompt: `What does the supplied constituent mix and universe share say about concentration in ${subject}? Missing prices stay blank.`,
-    },
-    {
-      id: "owned-names",
-      label: "Owned names in industry",
-      prompt: `Which supplied constituents are marked owned in ${subject}, and what does the supplied P&L say? Do not invent quantities or prices.`,
-    },
-  ];
+  return satyaSuggestionsForWorkspace("sectors", { section: "s2", subject: industryName ?? undefined }).suggestions;
 }
 
 type CompanyBubblePoint = {
@@ -626,10 +594,11 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
 
   useSatyaTaskContext("sectors-s2", {
     task: "industry",
-    hint: "Uses the selected industry snapshot, rankings, constituents, and EOD benchmarks only — not Mail or Podcasts. Missing KPIs stay blank.",
+    hint: "Uses the selected industry snapshot, rankings, constituents, and EOD benchmarks only — not Mail or Podcasts. Missing KPIs stay blank. Smart Suggestions stay on retrieved sector research.",
     context: interrogateContext,
-    placeholder: selected ? `e.g. How does ${selected.name} compare with Nifty 50 on the supplied snapshot?` : "e.g. What does all-industry breadth say versus Nifty 50?",
+    placeholder: selected ? `e.g. What did Axis Research say about ${selected.name} constituents?` : "e.g. What did Axis Research say about the selected industry's constituents?",
     suggestions: industryAnalyticsSuggestions(selected?.name ?? null),
+    subject: selected?.name,
   });
 
   return <section className={`sector-overview sector-analytics-page-${page}`} data-sector-filter={filterActive ? selectedIds.join(",") : "all"} style={{ "--selected-sector": accent } as CSSProperties}>

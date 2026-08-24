@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AxisResearchCategoryId } from "../content-types";
 import { DEFAULT_RETRIEVE_AXIS_CATEGORY_IDS } from "../satya/axis-categories.ts";
-import { axisCategoryAskPrompt, type SatyaSuggestion } from "./satya-suggestions";
+import { axisCategoryAskPrompt, SATYA_BRIEFING_SUGGESTIONS, type SatyaSuggestion } from "./satya-suggestions";
 import {
-  currentSatyaTurn,
   fetchSatyaSources,
   fetchSatyaStatus,
   getSatyaThread,
@@ -22,50 +21,16 @@ import {
   type SatyaSourceFamily,
   type SatyaThreadTurn,
 } from "./satya-client";
+import { currentSatyaTurn, openSatyaDraftPopout, syncSatyaDraftPopout } from "./satya-draft-popout";
 import { SatyaCitationIcons } from "./satya-citation-icons";
+import { SatyaDraftStatusLine } from "./SatyaDraftStatusLine";
 import { SatyaAxisCategoryChips, SatyaPresence, type SatyaPresenceState } from "./SatyaPresence";
 import { installSatyaSpeech } from "../satya/speech";
 
 export type { SatyaSourceFamily };
 
 
-export const SATYA_BRIEFING_SUGGESTIONS: SatyaSuggestion[] = [
-  {
-    id: "overnight-themes",
-    label: "Overnight newsletter themes",
-    prompt: "What were the main overnight newsletter themes in the retrieved Newsletters? Ignore ads, CTAs, and promotions. Do not invent numbers.",
-  },
-  {
-    id: "axis-vs-holdings",
-    label: "Axis conviction vs holdings",
-    prompt: "How do Axis Research conviction ideas compare with current holdings in the retrieved passages? Do not invent prices, quantities, or unpublished KPIs.",
-  },
-  {
-    id: "podcast-axis-overlap",
-    label: "Podcast vs Axis overlap",
-    prompt: "Where do podcast summaries overlap with Axis Research? Treat transcript-derived items as transcripts and description-only items as descriptions. Do not invent quotes.",
-  },
-  {
-    id: "what-changed",
-    label: "What changed since last digest",
-    prompt: "What changed across Newsletters, Axis Research, and podcast summaries in the retrieved window? If a prior comparison is not in the passages, say so. Do not invent missing items.",
-  },
-  {
-    id: "axis-result-updates",
-    label: "Axis result updates",
-    prompt: "Summarize Axis Research result updates and company notes from the retrieved passages only. Leave unpublished KPIs blank. Never invent figures.",
-  },
-  {
-    id: "verified-prints",
-    label: "Verified earnings prints",
-    prompt: "What did independently verified IR/NSE reported KPIs say? Unpublished fields stay blank. Calendar rows stay scheduling evidence only.",
-  },
-  {
-    id: "cautionary-notes",
-    label: "Cautionary notes across sources",
-    prompt: "Flag risks, downgrades, or cautionary notes across Newsletters, Axis Research, podcasts, and verified earnings. Never invent prices or KPIs.",
-  },
-];
+export { SATYA_BRIEFING_SUGGESTIONS };
 
 export function SatyaBriefingRoom({
   className = "",
@@ -168,6 +133,7 @@ export function SatyaBriefingRoom({
     visitRef.current = { sessionId, turns: visitTurns };
     setCanvasTurns(currentSatyaTurn(visitTurns));
     setSatyaThread({ sessionId, turns: visitTurns });
+    openSatyaDraftPopout({ drafting: true });
     let assembled = "";
     const history = shared.turns
       .filter((turn) => turn.text.trim())
@@ -210,6 +176,7 @@ export function SatyaBriefingRoom({
               turn.id === assistantId ? { ...turn, text: complete } : turn
             )), true);
           }
+          syncSatyaDraftPopout({ drafting: false });
           if (satyaShouldSpeak({ voice })) {
             setState("speaking");
             if (typeof window !== "undefined") {
@@ -225,6 +192,7 @@ export function SatyaBriefingRoom({
         },
         onError: (message) => {
           setError(message);
+          syncSatyaDraftPopout({ drafting: false });
           setState("error");
         },
       },
@@ -331,7 +299,7 @@ export function SatyaBriefingRoom({
           }}
         />
       ) : null}
-      <div className="satya-suggestion-chips" role="group" aria-label="Smart Suggestions">
+      <div className="satya-suggestion-chips" role="group" aria-label="Smart Suggestions" data-satya-workspace="intelligence">
         <em>Smart Suggestions</em>
         {suggestions.map((item) => (
           <button
@@ -353,7 +321,11 @@ export function SatyaBriefingRoom({
           <article key={turn.id} className={`satya-turn satya-turn-${turn.role}`} data-role={turn.role}>
             <strong>{turn.role === "user" ? "You" : "Satya"}</strong>
             {turn.text ? <pre data-labeled={turn.role === "assistant" ? "machine-drafted" : undefined}>{turn.text}</pre> : (
-              turn.role === "assistant" ? <p className="satya-transcript-empty">Drafting…</p> : null
+              turn.role === "assistant"
+                ? (busy
+                  ? <SatyaDraftStatusLine active />
+                  : <p className="satya-transcript-empty">Waiting for Satya.</p>)
+                : null
             )}
             {turn.role === "assistant" ? <SatyaCitationIcons citations={turn.citations} /> : null}
           </article>
@@ -367,7 +339,7 @@ export function SatyaBriefingRoom({
           disabled={disabled || busy || !prompt.trim()}
           onClick={() => void run(prompt, false)}
         >
-          {busy ? "Drafting…" : "Ask Satya"}
+          {busy ? <SatyaDraftStatusLine active as="span" className="" live={false} /> : "Ask Satya"}
         </button>
         <button
           type="button"
@@ -375,6 +347,14 @@ export function SatyaBriefingRoom({
           onClick={() => openSatyaChats()}
         >
           Open Chats
+        </button>
+        <button
+          type="button"
+          className="satya-open-draft"
+          disabled={!visibleTurns.length}
+          onClick={() => openSatyaDraftPopout({ drafting: busy })}
+        >
+          Pop out
         </button>
         <button
           type="button"

@@ -287,7 +287,7 @@ private struct StratjiNativeSettingsForm: View {
                 }
                 .padding(.vertical, 4)
             }
-            Text("Full Disk Access is still required for Calendar / Podcasts / Reminders SQLite group containers and Health ZIP import until those reads are fully EventKit-backed.")
+            Text("Grant Full Disk Access once so macOS stops asking for the Documents checkout, ~/Library/Logs/PortfolioIntelligence, and artifacts/private. Calendar / Podcasts / Reminders group-container SQLite and Health ZIP import also use that grant until those reads are fully EventKit-backed. After a new ad-hoc signature, Allow Documents once or re-enable Full Disk Access for apple-app/build/Stratji.app.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button("Open Full Disk Access") {
