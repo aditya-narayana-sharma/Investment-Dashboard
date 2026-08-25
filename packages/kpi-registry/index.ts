@@ -1,6 +1,6 @@
 import registry from "./definitions/kpis.json";
 
-export const KPI_REGISTRY_COUNT = 128;
+export const KPI_REGISTRY_COUNT = 138;
 
 export type KpiBucketId =
   | "ohlcv"

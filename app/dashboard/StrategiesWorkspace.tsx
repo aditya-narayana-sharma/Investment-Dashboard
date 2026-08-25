@@ -24,6 +24,8 @@ import { satyaSuggestionsForWorkspace } from "./satya-suggestions";
 import { useSatyaTaskContext } from "./satya-workspace";
 import { ReadOnlyTree } from "./strategies/ReadOnlyTree";
 import { LibraryLab } from "./strategies/LibraryLab";
+import { AllocationPlanner, StrategySignalsTable } from "./strategies/AllocationPlanner";
+import { buyCandidates, type StrategySignal } from "../strategy/builtin-signals";
 import "./strategies/strategies-workspace.css";
 import type { StrategiesSection } from "./types";
 import { isLocationView, parseStrategiesSection, strategiesSectionNumber } from "./workspace-routing";
@@ -32,6 +34,7 @@ import { buildStrategiesDailyActions } from "./workspace-daily-actions";
 const STRATEGIES_SECTIONS = [
   { id: "y1", label: "Action Board" },
   { id: "y2", label: "Library" },
+  { id: "y3", label: "Signals" },
 ] as const;
 
 type SavedLibraryItem = { id: string; name: string; tree: StrategyTreeV1 };
@@ -270,6 +273,43 @@ export function StrategiesWorkspace() {
   const [mine, setMine] = useState<SavedLibraryItem[]>([]);
   const [open, setOpen] = useState<OpenStrategy | null>(null);
   const [engineCache, setEngineCache] = useState<LibraryNseStatsCache>(() => bundledLibraryNseStats());
+  const [signalSymbols, setSignalSymbols] = useState("");
+  const [signals, setSignals] = useState<StrategySignal[]>([]);
+  const [signalStatus, setSignalStatus] = useState<{ state: string; message: string }>({ state: "idle", message: "Enter NSE symbols to compute signals." });
+  const [signalsLoading, setSignalsLoading] = useState(false);
+
+  const loadSignals = useCallback(async () => {
+    const symbols = signalSymbols.split(/[\s,]+/).map((value) => value.trim().toUpperCase()).filter(Boolean);
+    if (!symbols.length) {
+      setSignals([]);
+      setSignalStatus({ state: "idle", message: "Enter NSE symbols to compute signals." });
+      return;
+    }
+    setSignalsLoading(true);
+    try {
+      const response = await fetch(`/api/strategies/signals?symbols=${encodeURIComponent(symbols.join(","))}`, { cache: "no-store" });
+      const payload = await response.json() as { status: string; signals: StrategySignal[]; message: string };
+      setSignals(Array.isArray(payload.signals) ? payload.signals : []);
+      setSignalStatus({ state: payload.status, message: payload.message });
+    } catch (error) {
+      // Retain nothing rather than showing a stale or invented signal.
+      setSignals([]);
+      setSignalStatus({ state: "unavailable", message: error instanceof Error ? error.message : "Signal request failed." });
+    } finally {
+      setSignalsLoading(false);
+    }
+  }, [signalSymbols]);
+
+  const candidates = useMemo(() => buyCandidates(signals), [signals]);
+  const priceBySymbol = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const signal of signals) {
+      if (signal.strategy !== "mean_comparison" || !signal.eligible) continue;
+      const fast = signal.metrics.find((metric) => metric.label === "SMA 20")?.value;
+      if (typeof fast === "number") map.set(signal.symbol, fast);
+    }
+    return map;
+  }, [signals]);
   const sorted = useMemo(
     () => sortComposerStrategies(applyLibraryNseStats(COMPOSER_STRATEGIES, engineCache), sortKey),
     [engineCache, sortKey],
@@ -348,8 +388,53 @@ export function StrategiesWorkspace() {
         </CollapsibleSection>
       </div>
 
+      <div id="strategies-y3" className="workspace-section" hidden={activeSection !== "y3"}>
+        <CollapsibleSection
+          number={strategiesSectionNumber("y3")}
+          title="Signals"
+          note="Built-in Bollinger Band Expansion and Mean Comparison (SMA 20 vs SMA 220) · yfinance daily history · signals only, never auto-executed"
+          defaultOpen={activeSection === "y3"}
+        >
+          <form
+            className="strategy-signals-form"
+            onSubmit={(event) => { event.preventDefault(); void loadSignals(); }}
+          >
+            <label>
+              NSE symbols
+              <input
+                value={signalSymbols}
+                onChange={(event) => setSignalSymbols(event.target.value)}
+                placeholder="RELIANCE, ICICIBANK, TCS"
+                aria-label="NSE symbols to compute strategy signals for"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </label>
+            <button type="submit" disabled={signalsLoading}>
+              {signalsLoading ? "Computing…" : "Compute signals"}
+            </button>
+          </form>
+          <p className="strategy-signals-status" data-state={signalStatus.state}>{signalStatus.message}</p>
+
+          <StrategySignalsTable signals={signals}/>
+
+          <h3 className="strategy-planner-heading">Stock selection + allocation</h3>
+          <AllocationPlanner
+            candidates={candidates}
+            priceBySymbol={priceBySymbol}
+            equityMargin={0}
+            marginsKnown={false}
+            onStage={(prefills) => {
+              // Deliberately no direct order call: the reviewed Kite ticket owns
+              // submission and requires typed confirmation.
+              window.dispatchEvent(new CustomEvent("stratji-stage-orders", { detail: prefills }));
+            }}
+          />
+        </CollapsibleSection>
+      </div>
+
       <div id="strategies-y2" className="workspace-section" hidden={activeSection !== "y2"}>
-        <CollapsibleSection number={strategiesSectionNumber("y2")} title="Library" note="NSE ETF adaptations · complete StrategyTreeV1 · Indian market only · live 128-KPI values open on Algorithm Canvas" defaultOpen={activeSection === "y2"}>
+        <CollapsibleSection number={strategiesSectionNumber("y2")} title="Library" note="NSE ETF adaptations · complete StrategyTreeV1 · Indian market only · live 138-KPI values open on Algorithm Canvas" defaultOpen={activeSection === "y2"}>
           {mine.length > 0 && (
             <section className="strategies-mine" aria-label="My library">
               <h3>My library</h3>
@@ -373,7 +458,7 @@ export function StrategiesWorkspace() {
               {" "}KPIs are yfinance NSE tree-backtest results
               {engineCache.asOf ? ` (as-of ${engineCache.asOf})` : ""}
               {engineCache.computedAt ? `, cached ${engineCache.computedAt.slice(0, 10)}` : ""}
-              — not Composer published US OOS. {engineCache.message} Live 128-KPI values are fetched on Algorithm Canvas after Open in Algorithm Canvas.
+              — not Composer published US OOS. {engineCache.message} Live 138-KPI values are fetched on Algorithm Canvas after Open in Algorithm Canvas.
               {" "}Click a card to open the full vertical tree.
             </p>
             <div className="strategies-sort" role="group" aria-label="Sort library">

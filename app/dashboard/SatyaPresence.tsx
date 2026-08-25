@@ -3,18 +3,21 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { createSatyaSpeech, installSatyaSpeech, type SatyaSpeechApi, type SatyaSpeechVoice } from "../satya/speech";
 import { DEFAULT_RETRIEVE_AXIS_CATEGORY_IDS } from "../satya/axis-categories.ts";
 import { STRATJI_NAVIGATE_EVENT } from "./stratji-navigate";
+import { SatyaGlyph, presenceStateLabel } from "./SatyaAvatar";
+import { resolveSpeech } from "./satya-speech-controller";
+import { SatyaAxisCategoryChips } from "./SatyaAxisCategoryChips";
+
+export { presenceStateLabel, SatyaGlyph, SatyaFullBody } from "./SatyaAvatar";
+export { SatyaAxisCategoryChips } from "./SatyaAxisCategoryChips";
 import type { WorkspaceKey } from "./types";
 import {
   completeSatyaWorkspaceTask,
@@ -29,7 +32,6 @@ import {
   getSatyaTaskContext,
   getSatyaThread,
   getSatyaVoiceUri,
-  groupedAxisResearchCategories,
   isDashboardSatyaTask,
   isSatyaChatsOpen,
   isSatyaPopupOpen,
@@ -66,69 +68,6 @@ import { WaveformStrip } from "./visual-components";
 export type { SatyaCitation, SatyaPresenceState, SatyaSourceFamily, SatyaStatusPayload } from "./satya-client";
 export { fetchSatyaSources, fetchSatyaStatus, streamSatyaChat } from "./satya-client";
 
-type SpeechController = {
-  startListening: (onResult: (text: string) => void, onError?: (error: string) => void) => void;
-  stopListening: () => void;
-  speak: (text: string, onEnd?: () => void) => void;
-  cancel: () => void;
-};
-
-function bindSatyaSpeech(api: SatyaSpeechApi): SpeechController {
-  return {
-    startListening(onResult, onError) {
-      api.onPartial = onResult;
-      api.onFinal = onResult;
-      try {
-        api.start();
-      } catch (cause) {
-        onError?.(cause instanceof Error ? cause.message : "Could not start listening.");
-      }
-    },
-    stopListening() {
-      api.stop();
-    },
-    speak(text, onEnd) {
-      api.onSpeechEnd = () => onEnd?.();
-      api.speak(text);
-    },
-    cancel() {
-      api.cancel();
-    },
-  };
-}
-
-let cachedSpeech: SpeechController | null = null;
-
-function resolveSpeech(): SpeechController {
-  if (cachedSpeech) return cachedSpeech;
-  const api = typeof window !== "undefined" ? installSatyaSpeech(window) : createSatyaSpeech();
-  cachedSpeech = bindSatyaSpeech(api);
-  return cachedSpeech;
-}
-
-export function presenceStateLabel(state: SatyaPresenceState): string {
-  switch (state) {
-    case "idle":
-      return "Idle";
-    case "listening":
-      return "Listening";
-    case "thinking":
-      return "Thinking";
-    case "speaking":
-      return "Speaking";
-    case "citing":
-      return "Citing";
-    case "error":
-      return "Error";
-    case "stale":
-      return "Stale";
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
-}
-
 function briefingHref(): string {
   if (typeof window === "undefined") return "/?view=intelligence&section=m2";
   const url = new URL(window.location.href);
@@ -136,131 +75,6 @@ function briefingHref(): string {
   url.searchParams.set("section", "m2");
   url.searchParams.delete("page");
   return `${url.pathname}?${url.searchParams.toString()}`;
-}
-
-function SatyaGlyph({ state, reducedMotion }: { state: SatyaPresenceState; reducedMotion: boolean }) {
-  const reactId = useId();
-  return (
-    <svg
-      className="satya-glyph satya-character"
-      viewBox="0 0 64 64"
-      role="img"
-      aria-hidden="true"
-      data-state={state}
-      data-reduced={reducedMotion ? "true" : "false"}
-    >
-      <title>{`Satya ${presenceStateLabel(state)}`}</title>
-      <g className="satya-pet">
-        <g className="satya-antenna">
-          <line x1="32" y1="11" x2="32" y2="17" />
-          <circle className="satya-antenna-tip" cx="32" cy="8" r="3">
-            {!reducedMotion ? (
-              <animate attributeName="cy" values="8;6;8" dur="2.4s" repeatCount="indefinite" />
-            ) : null}
-          </circle>
-        </g>
-        <ellipse className="satya-ear satya-ear-left" cx="15" cy="30" rx="4.5" ry="6.5" />
-        <ellipse className="satya-ear satya-ear-right" cx="49" cy="30" rx="4.5" ry="6.5" />
-        <ellipse className="satya-head" cx="32" cy="36" rx="18" ry="20" />
-        <path className="satya-shine" d="M22 22c5-5 15-5 20 0" />
-        <g className="satya-glasses">
-          <circle cx="24" cy="36" r="7.2" />
-          <circle cx="40" cy="36" r="7.2" />
-          <line x1="31.2" y1="36" x2="32.8" y2="36" />
-        </g>
-        <g className="satya-eyes">
-          <circle className="satya-eye satya-eye-left" cx="24" cy="36" r="2.1" />
-          <circle className="satya-eye satya-eye-right" cx="40" cy="36" r="2.1" />
-          <rect className="satya-lid satya-lid-left" x="17.5" y="29.5" width="13" height="0" rx="2">
-            {!reducedMotion ? (
-              <animate
-                attributeName="height"
-                values="0;0;13;0"
-                keyTimes="0;0.92;0.96;1"
-                dur="4.2s"
-                repeatCount="indefinite"
-              />
-            ) : null}
-          </rect>
-          <rect className="satya-lid satya-lid-right" x="33.5" y="29.5" width="13" height="0" rx="2">
-            {!reducedMotion ? (
-              <animate
-                attributeName="height"
-                values="0;0;13;0"
-                keyTimes="0;0.92;0.96;1"
-                dur="4.2s"
-                repeatCount="indefinite"
-              />
-            ) : null}
-          </rect>
-        </g>
-        <path className="satya-brow satya-brow-left" d="M18 28h12" />
-        <path className="satya-brow satya-brow-right" d="M34 28h12" />
-        <path className="satya-mouth" d="M26 47q6 5 12 0" data-talking={state === "speaking" ? "true" : "false"} />
-      </g>
-      <desc id={reactId}>Stylized bald cartoon tech-assistant with glasses. Not a likeness of any person.</desc>
-    </svg>
-  );
-}
-
-export function SatyaAxisCategoryChips({
-  selected,
-  onToggle,
-  onAsk,
-  counts,
-  compact = false,
-  disabled = false,
-}: {
-  selected: AxisResearchCategoryId[];
-  onToggle: (id: AxisResearchCategoryId) => void;
-  onAsk?: (id: AxisResearchCategoryId, label: string) => void;
-  counts?: Partial<Record<AxisResearchCategoryId, number>>;
-  compact?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <div className={`satya-axis-chips${compact ? " satya-axis-chips-compact" : ""}`} role="group" aria-label="Axis Research categories">
-      {groupedAxisResearchCategories().map((group) => (
-        <div key={group.id} className="satya-axis-chip-group" role="group" aria-label={group.label}>
-          <em>{group.label}</em>
-          {group.hint ? <p className="satya-webinar-hint">{group.hint}</p> : null}
-          {group.categories.map((category) => {
-            const id = category.id;
-            const count = counts?.[id];
-            const pressed = selected.includes(id);
-            return (
-              <span key={id} className="satya-axis-chip-wrap">
-                <button
-                  type="button"
-                  className="satya-axis-chip"
-                  aria-pressed={pressed}
-                  data-axis-category={id}
-                  disabled={disabled}
-                  style={{ "--axis-chip-accent": `var(${category.colorToken})` } as CSSProperties}
-                  onClick={() => onToggle(id)}
-                >
-                  {category.label}
-                  {typeof count === "number" ? <span>{count}</span> : null}
-                </button>
-                {onAsk ? (
-                  <button
-                    type="button"
-                    className="satya-axis-ask"
-                    disabled={disabled}
-                    data-axis-category={id}
-                    aria-label={`Ask this category: ${category.label}`}
-                    onClick={() => onAsk(id, category.label)}
-                  >
-                    Ask
-                  </button>
-                ) : null}
-              </span>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function SatyaThreadLog({

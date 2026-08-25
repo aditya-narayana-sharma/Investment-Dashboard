@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "count": 128,
+  "count": 138,
   "buckets": {
     "ohlcv": 16,
     "trend": 16,
@@ -203,10 +203,10 @@
     },
     {
       "id": "minus_di_14",
-      "label": "−DI 14",
+      "label": "\u2212DI 14",
       "bucket": "trend",
       "output": "series",
-      "description": "−DI 14 (TREND)"
+      "description": "\u2212DI 14 (TREND)"
     },
     {
       "id": "supertrend_10_3",
@@ -907,6 +907,76 @@
       "bucket": "valuation",
       "output": "series",
       "description": "Sales growth YoY (VALUATION)"
+    },
+    {
+      "id": "sma_220",
+      "label": "SMA 220",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Simple moving average, 220 sessions (long mean for Mean Comparison)"
+    },
+    {
+      "id": "mean_cross_state",
+      "label": "Mean cross state",
+      "bucket": "trend",
+      "output": "series",
+      "description": "SMA 20 vs SMA 220: 1 bullish (fast above slow), -1 bearish"
+    },
+    {
+      "id": "mean_cross_gap_pct",
+      "label": "Mean cross gap %",
+      "bucket": "trend",
+      "output": "series",
+      "description": "(SMA 20 - SMA 220) / SMA 220, per cent"
+    },
+    {
+      "id": "mean_cross_days_since_flip",
+      "label": "Sessions since mean flip",
+      "bucket": "trend",
+      "output": "series",
+      "description": "Sessions since SMA 20 last crossed SMA 220"
+    },
+    {
+      "id": "bb_upper_min_3m",
+      "label": "Bollinger upper minima 3M",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Lowest upper Bollinger band over the trailing 3 months"
+    },
+    {
+      "id": "bb_lower_max_3m",
+      "label": "Bollinger lower maxima 3M",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Highest lower Bollinger band over the trailing 3 months"
+    },
+    {
+      "id": "bb_width_min_3m",
+      "label": "Bollinger spread at max contraction",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Smallest upper-lower price spread over the trailing 3 months"
+    },
+    {
+      "id": "bb_expansion_delta",
+      "label": "Bollinger expansion delta",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Current upper-lower price spread minus the spread at maximum contraction"
+    },
+    {
+      "id": "bb_expansion_pct",
+      "label": "Bollinger expansion %",
+      "bucket": "vol",
+      "output": "series",
+      "description": "Expansion delta as a per cent of the spread at maximum contraction"
+    },
+    {
+      "id": "bb_expansion_state",
+      "label": "Bollinger expansion state",
+      "bucket": "vol",
+      "output": "series",
+      "description": "1 expanding, 0 squeeze, -1 contracting"
     }
   ]
 }

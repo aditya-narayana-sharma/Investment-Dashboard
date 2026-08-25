@@ -243,7 +243,15 @@ test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion 
     readFile(new URL("../app/dashboard/hover-pop.css", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/satya.css", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/SatyaBriefingRoom.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
+    // The Satya UI is split across the presence shell, the avatar rig and the
+    // Axis chips (SatyaPresence.tsx is held under the 1000-line rule). These
+    // assertions are about the rendered Satya surface, not one file.
+    Promise.all([
+      readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SatyaAvatar.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SatyaAxisCategoryChips.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/satya-speech-controller.ts", import.meta.url), "utf8"),
+    ]).then((parts) => parts.join("\n")),
     readFile(new URL("../app/dashboard/satya-client.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/satya/speech.ts", import.meta.url), "utf8"),
@@ -441,13 +449,22 @@ test("M-2 Satya briefing is full-width with source-of-truth copy and suggestion 
 });
 
 test("Market Intelligence Satya chips replace digest walls", async () => {
-  const [intelligenceWorkspace, satyaPresence, contentServer, contentTypes, globalCss, pdfRoute] = await Promise.all([
+  const [intelligenceWorkspace, satyaPresence, contentServer, contentTypes, globalCss, pdfRoute, pdfRoots] = await Promise.all([
     readJoined(INTELLIGENCE_SOURCE_CANDIDATES),
-    readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
+    // The Satya UI is split across the presence shell, the avatar rig and the
+    // Axis chips (SatyaPresence.tsx is held under the 1000-line rule). These
+    // assertions are about the rendered Satya surface, not one file.
+    Promise.all([
+      readFile(new URL("../app/dashboard/SatyaPresence.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SatyaAvatar.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/SatyaAxisCategoryChips.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/satya-speech-controller.ts", import.meta.url), "utf8"),
+    ]).then((parts) => parts.join("\n")),
     readFile(new URL("../scripts/content-digest-server.mjs", import.meta.url), "utf8"),
     readFile(new URL("../app/content-types.ts", import.meta.url), "utf8"),
     readJoined(GLOBAL_CSS_CANDIDATES),
     readFile(new URL("../app/api/axis-research/pdf/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/axis-pdf-roots.mjs", import.meta.url), "utf8"),
   ]);
   const satyaChips = `${intelligenceWorkspace}\n${satyaPresence}`;
 
@@ -492,7 +509,16 @@ test("Market Intelligence Satya chips replace digest walls", async () => {
   assert.match(contentServer, /preferApplePodcastsEpisodeUrl\(/);
   assert.match(contentServer, /deduplicatePodcastEpisodes\(/);
   assert.match(pdfRoute, /application\/pdf/);
-  assert.match(pdfRoute, /AXIS_PDF_ARCHIVE_PATH|Downloads\/Axis Research/);
+  // Root resolution moved into the shared resolver so the Satya corpus ingest and
+  // this route agree on where an Axis PDF may come from. The route must delegate
+  // to it rather than re-deriving a path of its own.
+  assert.match(pdfRoute, /findAxisPdf\(/);
+  assert.doesNotMatch(pdfRoute, /readdirSync/, "the route must not walk the filesystem itself");
+  assert.match(pdfRoots, /AXIS_PDF_ARCHIVE_PATH|Downloads\/Axis Research/);
+  // Mail-attachment-only reports must resolve too — serving the curated archive
+  // alone is what made them un-openable from a Satya citation.
+  assert.match(pdfRoots, /AXIS_MAIL_PDF_STORE_PATH/);
+  assert.match(pdfRoots, /axisMailAttachmentRoot/);
   assert.match(globalCss, /\.digest-source-link\s*\{/);
   assert.match(globalCss, /\.digest-source-link\.axis-open-pdf\s*\{/);
   assert.match(globalCss, /min-height:42px/);

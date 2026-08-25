@@ -237,16 +237,16 @@ test("POST /api/strategies/validate uses the client validateStrategyGraph", asyn
   assert.match(api, /validateStrategyGraph\(graph\)/);
 });
 
-test("KPI registry remains exactly 128", async () => {
+test("KPI registry remains exactly 138", async () => {
   const [indexSource, registryJson] = await Promise.all([
     readFile(new URL("../packages/kpi-registry/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../packages/kpi-registry/definitions/kpis.json", import.meta.url), "utf8"),
   ]);
   const registry = JSON.parse(registryJson);
-  assert.match(indexSource, /export const KPI_REGISTRY_COUNT = 128/);
-  assert.equal(registry.count, 128);
-  assert.equal(registry.kpis.length, 128);
-  assert.equal(new Set(registry.kpis.map((kpi) => kpi.id)).size, 128);
+  assert.match(indexSource, /export const KPI_REGISTRY_COUNT = 138/);
+  assert.equal(registry.count, 138);
+  assert.equal(registry.kpis.length, 138);
+  assert.equal(new Set(registry.kpis.map((kpi) => kpi.id)).size, 138);
 });
 
 test("seed graph has a connected RSI chain ready to render", () => {

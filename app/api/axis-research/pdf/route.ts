@@ -1,55 +1,25 @@
-import { createReadStream, existsSync, readdirSync, statSync } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { createReadStream, existsSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
+import { findAxisPdf } from "../../../axis-pdf-roots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function archiveRoot() {
-  return process.env.AXIS_PDF_ARCHIVE_PATH
-    ?? `${process.env.HOME ?? ""}/Downloads/Axis Research`;
-}
-
-function findPdfInArchive(root: string, fileName: string): string | null {
-  const base = basename(fileName);
-  if (!root || !base || !/\.pdf$/i.test(base) || base.includes("..") || base.includes(sep)) return null;
-  const stack = [resolve(root)];
-  const rootResolved = stack[0];
-  while (stack.length) {
-    const current = stack.pop()!;
-    let entries;
-    try {
-      entries = readdirSync(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith(".") || entry.name === "Icon\r") continue;
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (/duplicates|_try/i.test(entry.name)) continue;
-        stack.push(path);
-        continue;
-      }
-      if (entry.isFile() && entry.name.toLowerCase() === base.toLowerCase()) {
-        const resolvedPath = resolve(path);
-        if (resolvedPath === rootResolved || resolvedPath.startsWith(`${rootResolved}${sep}`)) {
-          return resolvedPath;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-/** Serve a previously matched Axis Research PDF from the local archive only. */
+/**
+ * Serve a previously matched Axis Research PDF from the local roots only.
+ *
+ * Resolution spans both the curated archive and the mailbox attachment store
+ * (`axisPdfRoots`); serving only the former left every mail-attachment-only
+ * report un-openable from a Satya citation.
+ */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const file = url.searchParams.get("file") ?? "";
-  const resolved = findPdfInArchive(archiveRoot(), file);
+  const resolved = findAxisPdf(file);
   if (!resolved || !existsSync(resolved)) {
-    return NextResponse.json({ error: "Axis Research PDF was not found in the local archive." }, { status: 404 });
+    return NextResponse.json({ error: "Axis Research PDF was not found in the local archive or the mailbox attachment store." }, { status: 404 });
   }
 
   let size = 0;

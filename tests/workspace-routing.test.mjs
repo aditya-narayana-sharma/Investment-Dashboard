@@ -52,7 +52,8 @@ test("every workspace exposes the full chip family", () => {
   assert.deepEqual(WORKSPACE_SECTIONS.intelligence.map((chip) => chip.label), ["Action Board", "Satya", "Earnings Calendar"]);
   assert.deepEqual(WORKSPACE_SECTIONS.health.map((chip) => chip.label), ["Action Board", "Daily Optimism", "Vital Metrics", "Calendar + Reminders"]);
   assert.deepEqual(WORKSPACE_SECTIONS.builder.map((chip) => chip.label), ["Action Board", "Canvas", "JSON"]);
-  assert.deepEqual(WORKSPACE_SECTIONS.strategies.map((chip) => chip.label), ["Action Board", "Library"]);
+  assert.deepEqual(WORKSPACE_SECTIONS.strategies.map((chip) => chip.label), ["Action Board", "Library", "Signals"]);
+  assert.deepEqual(WORKSPACE_SECTIONS.strategies.map((chip) => chip.prefix), ["Y-1", "Y-2", "Y-3"]);
   assert.deepEqual(WORKSPACE_SECTIONS.investment.map((chip) => chip.prefix), ["I-1", "I-2", "I-3", "I-4"]);
   assert.deepEqual(WORKSPACE_SECTIONS.intelligence.map((chip) => chip.prefix), ["M-1", "M-2", "M-3"]);
 });

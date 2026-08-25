@@ -1,4 +1,23 @@
-# Investment Dashboard
+# Stratji
+
+> **Requirements — read before installing.** Stratji is **macOS-only** and
+> **local-first**. It drives Apple Mail, Reminders, Calendar, Notes, Podcasts and
+> HealthKit through `osascript` and the Apple group-container databases, so it
+> cannot run on Linux or Windows, and several workspaces degrade to an explicit
+> `unavailable` state without those permissions. It also needs a local
+> [kite-mcp-server](https://github.com/zerodha/kite-mcp-server) checkout (cloned
+> beside this repository, or pointed at by `KITE_MCP_PROJECT_DIR`) and Python 3.10+
+> for the Flask gateway.
+>
+> **Licence:** source-available, not open source. Personal use is free; commercial
+> use requires a paid key. See [LICENSE](LICENSE) and
+> [docs/stratji/LICENSE-AND-DISTRIBUTION.md](docs/stratji/LICENSE-AND-DISTRIBUTION.md).
+>
+> **Not investment advice.** Stratji is research tooling. Every order requires
+> your explicit typed confirmation in the Kite ticket; nothing is ever placed
+> automatically.
+>
+> Copy [`.env.example`](.env.example) to `.env` before first run.
 
 Personal, local-first macOS console for a live Zerodha Kite book, sector research, Mail and Podcast intelligence, Apple Health, and Indian-market strategy trees. It is **not** a public SaaS.
 

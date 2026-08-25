@@ -194,13 +194,30 @@ export function mergeKiteSnapshot(current: KiteSnapshot, incoming: KiteSnapshot)
   return current;
 }
 
-/** Keep last-good holdings when a refresh fails; never flash the empty waiting shell. */
+/**
+ * Keep last-good holdings when a refresh fails; never flash the empty waiting shell.
+ *
+ * This is the **transport** failure path — a fetch rejection, timeout, 503 or a
+ * restarted MCP server. It says nothing about the broker session, so it must not
+ * touch `authStatus`.
+ *
+ * Downgrading `authStatus` to `"unknown"` here used to turn a network blip into a
+ * login prompt: `kiteAuthPresentation` reaches its `"cached"` control only while
+ * `authStatus === "authenticated"`, so an erased value fell through to
+ * `{ control: "authenticate", showAuthAction: true }` and rendered a Zerodha login
+ * link over a session whose daily token was still perfectly valid.
+ *
+ * `status: "snapshot"` alone already communicates the honest state — retained
+ * data, refresh failed — and renders as "Kite cached". A genuine authentication
+ * failure arrives as a **server-reported** payload (`status: "auth_required"`, or
+ * `authStatus` `"unauthenticated"` / `"expired"`) and flows through
+ * `mergeKiteSnapshot`, not through this function.
+ */
 export function retainKiteOnFailure(current: KiteSnapshot, message: string): KiteSnapshot {
   if (kiteHasHoldings(current) || current.status === "live" || current.status === "partial" || current.status === "snapshot") {
     return {
       ...current,
       status: "snapshot",
-      authStatus: current.authStatus === "authenticated" || current.authStatus === "partial" ? "unknown" : current.authStatus,
       message,
     };
   }

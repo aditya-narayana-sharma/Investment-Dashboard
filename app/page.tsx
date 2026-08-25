@@ -62,6 +62,7 @@ import { coercePublicLicense, featureForWorkspace, tierAllows, type PublicLicens
 import { useLicenseSnapshot } from "./license-snapshot";
 import { dedupeAxisCallsBySymbol, mergeHoldingTradingCalls } from "./axis-holding-trading-calls";
 import { completeAxisPicks } from "./axis-pick-metrics";
+import { runWithConcurrency, supersedesInFlight, whenIdle } from "./dashboard/refresh-scheduling";
 
 type HomeSearchParams = {
   view?: string | string[];
@@ -112,6 +113,13 @@ function defaultKiteAuthStatus(status: KiteSnapshot["status"]): KiteAuthStatus {
     }
   }
 }
+
+/**
+ * Non-selected sectors refresh two at a time. Every Kite call in the process
+ * shares one promise chain with a 350 ms floor, so a wider fan-out only starves
+ * the portfolio snapshot and trips Zerodha rate limiting.
+ */
+const SECTOR_REFRESH_CONCURRENCY = 2;
 
 function withKiteAuth(data: KiteSnapshot): KiteSnapshot {
   return {
@@ -175,7 +183,8 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
   const { license, setLicense } = useLicenseSnapshot();
   const selectedSectorRef = useRef<string[]>([]);
   const sectorMarketByIdRef = useRef<Record<string, SectorMarketSnapshot>>({});
-  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const refreshInFlightRef = useRef<{ promise: Promise<void>; forceContent: boolean; silent: boolean } | null>(null);
+  const queuedRefreshRef = useRef<Promise<void> | null>(null);
   const startupRefreshCompletedRef = useRef(false);
   const autoRefreshStartedRef = useRef(false);
   const hasUsableSectorMarket = isUsableSectorMarketStatus(sectorMarket.status)
@@ -531,9 +540,9 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
     }
   }, []);
 
-  const refreshAll = useCallback(async (forceContent = false, options?: { silent?: boolean }) => {
-    if (refreshInFlightRef.current) return refreshInFlightRef.current;
-    const silent = options?.silent === true;
+  /** One complete refresh pass. Registered as in-flight synchronously so a
+   *  concurrent caller can decide whether to join it or supersede it. */
+  const runRefreshPass = useCallback((forceContent: boolean, silent: boolean) => {
     const run = (async () => {
       if (!silent) setRefreshing(true);
       // Surface Kite, S-2 yfinance quotes, S-3 benchmarks, and sector news quickly;
@@ -545,11 +554,21 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
       const selectedIds = selectedSectorRef.current;
       const primaryId = selectedIds[selectedIds.length - 1];
       const primarySectorEarly = primaryId ? loadSectorMarket(primaryId) : Promise.resolve();
-      const allSectorsEarly = Promise.allSettled(
-        Object.keys(sectorCompanies)
-          .filter((sectorId) => sectorId !== primaryId)
-          .map((sectorId) => loadSectorMarket(sectorId)),
-      );
+      // RC-3: the selected sector goes first and alone. Every Kite call in the
+      // process shares one promise chain with a 350 ms floor, so firing the
+      // remaining twelve sectors concurrently never made them arrive sooner — it
+      // queued their per-constituent quote and history calls ahead of the
+      // portfolio snapshot until Zerodha rate-limited, costing a 60 s penalty.
+      const allSectorsEarly = (async () => {
+        await primarySectorEarly.catch(() => undefined);
+        await whenIdle();
+        await runWithConcurrency(
+          Object.keys(sectorCompanies)
+            .filter((sectorId) => sectorId !== primaryId)
+            .map((sectorId) => () => loadSectorMarket(sectorId)),
+          SECTOR_REFRESH_CONCURRENCY,
+        );
+      })();
       try {
         try {
           const params = new URLSearchParams({ refresh: String(Date.now()) });
@@ -583,12 +602,43 @@ export default function Home({ searchParams: searchParamsProp }: { searchParams?
         if (!silent) setRefreshing(false);
         setStayMounted(true);
         startupRefreshCompletedRef.current = true;
-        refreshInFlightRef.current = null;
       }
     })();
-    refreshInFlightRef.current = run;
+    const entry = { promise: run, forceContent, silent };
+    refreshInFlightRef.current = entry;
+    const release = () => {
+      if (refreshInFlightRef.current === entry) refreshInFlightRef.current = null;
+    };
+    run.then(release, release);
     return run;
   }, [applyHealthSnapshot, loadBenchmarks, loadContent, loadEarnings, loadHealth, loadKite, loadSectorMarket, loadSectorNews]);
+
+  /**
+   * RC-4: join an in-flight pass only when it is at least as strong as this
+   * request. A forcing or user-visible request must never be answered by a
+   * background non-forcing one — that is what made "Refresh all" a silent no-op
+   * while the native launch's `silent` pass was still running.
+   */
+  const refreshAll = useCallback((forceContent = false, options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    const inFlight = refreshInFlightRef.current;
+    if (!inFlight) return runRefreshPass(forceContent, silent);
+    if (!supersedesInFlight(inFlight, { forceContent, silent })) return inFlight.promise;
+    // At most one queued follow-up: repeated clicks join it rather than stacking.
+    if (queuedRefreshRef.current) return queuedRefreshRef.current;
+    // Reflect the queued user-invoked pass immediately so the button disables
+    // and the spinner is truthful while it waits behind the silent run.
+    if (!silent) setRefreshing(true);
+    const chained = inFlight.promise
+      .then(() => undefined, () => undefined)
+      .then(() => runRefreshPass(forceContent, silent));
+    queuedRefreshRef.current = chained;
+    const release = () => {
+      if (queuedRefreshRef.current === chained) queuedRefreshRef.current = null;
+    };
+    chained.then(release, release);
+    return chained;
+  }, [runRefreshPass]);
 
   const selectWorkspace = useCallback((next: WorkspaceKey, historyMode: "push" | "replace" = "push") => {
     setAppView(next);

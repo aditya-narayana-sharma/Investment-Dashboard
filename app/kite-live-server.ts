@@ -715,10 +715,16 @@ async function retainedSnapshot(base: KiteSnapshot): Promise<KiteSnapshot> {
         tokenExpiresAt: expiresAt,
       };
     } catch {
+      // Both the profile probe and the login-URL mint failed, so the Kite MCP
+      // server itself is unreachable. That is a transport failure, not an
+      // authentication failure: offering "Authenticate Kite" here would render a
+      // login control that provably cannot work, because minting its URL is what
+      // just failed. Carry `base.authStatus` through instead — retained data plus
+      // the last known session truth renders as "Kite cached", and a base that
+      // was already `expired` / `unauthenticated` still surfaces re-auth.
       return {
         ...base,
         status: "snapshot",
-        authStatus: "unknown",
         asOf: `${base.asOf.replace(/ · cached$/, "")} · cached`,
         message: retainedMessage,
         authUrl: undefined,

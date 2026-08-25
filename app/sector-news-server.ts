@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { sectorCatalogIds, type SectorCatalogId } from "./sector-catalog.ts";
 import type {
+  SectorNewsCompositeRow,
   SectorNewsItem,
-  SectorNewsSentiment,
   SectorNewsSnapshot,
   SectorNewsSourceId,
   SectorNewsSourceState,
 } from "./sector-news-types";
+import { SOURCE_WEIGHTS, scoreSentiment, sectorNewsComposite } from "./sector-news-scoring";
 
 type FeedConfig = {
   id: SectorNewsSourceId;
@@ -53,23 +54,7 @@ const FEEDS: FeedConfig[] = [
   },
 ];
 
-const POSITIVE_SENTIMENT = [
-  /\b(?:surge|rally|gain|gains|jump|jumps|soar|beat|beats|upgrade|upgrades|record high|bullish|optimism|outperform)\b/i,
-  /\b(?:strong growth|better.?than.?expected|raises guidance|profit jumps)\b/i,
-];
-const NEGATIVE_SENTIMENT = [
-  /\b(?:fall|falls|drop|drops|slump|slumps|crash|crashes|sell.?off|downgrade|downgrades|bearish|warning|loss|losses)\b/i,
-  /\b(?:miss(?:es)? estimates|cuts guidance|profit falls|weak demand|default)\b/i,
-];
 
-function classifySectorSentiment(value: string): SectorNewsSentiment {
-  const text = String(value ?? "").normalize("NFKC");
-  const positive = POSITIVE_SENTIMENT.reduce((score, matcher) => score + (matcher.test(text) ? 1 : 0), 0);
-  const negative = NEGATIVE_SENTIMENT.reduce((score, matcher) => score + (matcher.test(text) ? 1 : 0), 0);
-  if (positive - negative >= 1) return "Positive";
-  if (negative - positive >= 1) return "Negative";
-  return "Neutral";
-}
 
 const SECTOR_MATCHER_PATTERNS: Record<SectorCatalogId, RegExp> = {
   it: /\b(?:it services|software|infosys|wipro|\btcs\b|hcl tech|tech mahindra|coforge|ltts|it\/tech)\b/i,
@@ -208,9 +193,14 @@ async function fetchFeed(feed: FeedConfig): Promise<{ source: SectorNewsSourceSt
     }
     const parsed = parseItems(xml, feed, PER_SOURCE_ITEM_CEILING).map((item) => {
       const blob = `${item.title} ${item.summary}`;
+      // Score once and carry magnitude + confidence, so the composite never
+      // re-derives them and the label can never disagree with the score.
+      const scored = scoreSentiment(blob);
       return {
         ...item,
-        sentiment: classifySectorSentiment(blob),
+        sentiment: scored.label,
+        sentimentScore: scored.score,
+        sentimentConfidence: scored.confidence,
         sectorIds: matchSectorIds(blob),
       };
     });
@@ -222,6 +212,7 @@ async function fetchFeed(feed: FeedConfig): Promise<{ source: SectorNewsSourceSt
         asOf: asOfLabel(),
         message: `${parsed.length} headlines`,
         itemCount: parsed.length,
+        weight: SOURCE_WEIGHTS[feed.id],
       },
       items: parsed,
     };
@@ -257,6 +248,20 @@ export async function getSectorNewsSnapshot(force = false): Promise<SectorNewsSn
       return bTime - aTime;
     });
 
+  // Per-sector composite: sum(sentiment x confidence x recency x sourceWeight)
+  // over sum(weight). Emitted alongside the items so the UI can show the
+  // decomposition rather than a bare number.
+  const now = Date.now();
+  const composites: SectorNewsCompositeRow[] = sectorCatalogIds.map((sectorId) => {
+    const composite = sectorNewsComposite(sectorId, items, now);
+    return {
+      sectorId: composite.sectorId,
+      score: composite.score,
+      itemCount: composite.itemCount,
+      weightTotal: composite.weightTotal,
+    };
+  });
+
   const liveCount = sources.filter((source) => source.status === "live").length;
   const failed = sources.filter((source) => source.status === "unavailable").map((source) => source.label);
   const status = liveCount === sources.length ? "live" : liveCount > 0 ? "partial" : "unavailable";
@@ -270,6 +275,7 @@ export async function getSectorNewsSnapshot(force = false): Promise<SectorNewsSn
       : `Sector news unavailable (${failed.join(", ") || "all sources failed"}).`,
     sources,
     items,
+    composites,
   };
 
   if (liveCount > 0) {

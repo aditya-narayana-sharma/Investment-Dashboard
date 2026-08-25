@@ -171,25 +171,51 @@ export function frameworkEvidenceItems(event: ScenarioFrameworkEvent, bandKey: M
   }));
 }
 
+/**
+ * Optional precision layer. Keys are `stableItemKey`; a present entry overrides
+ * the regex band verdict for that item, an absent one leaves it untouched. See
+ * `macro-evidence-ranking.ts` for how entries are validated and grounded.
+ */
+export type ScenarioBandOverrides = ReadonlyMap<string, { band: MacroBandKey | null; relevance: number }>;
+
+/** Regex verdict unless a validated override exists for this exact item. */
+export function resolveScenarioBand(
+  item: ScenarioEvidenceItem,
+  eventKey: MacroEventKey,
+  overrides?: ScenarioBandOverrides,
+): MacroBandKey | null {
+  const override = overrides?.get(stableItemKey(item));
+  return override ? override.band : scenarioBandForItem(item, eventKey);
+}
+
 export function assembleScenarioEvidence(
   items: ScenarioEvidenceItem[],
   eventKey: MacroEventKey,
   bandKey: MacroBandKey,
   framework: ScenarioFrameworkEvent,
+  overrides?: ScenarioBandOverrides,
 ): ScenarioEvidenceCard[] {
   const pool = kpiEvidenceItems(items, eventKey);
-  const exclusive: ScenarioEvidenceCard[] = [];
+  const exclusive: Array<{ card: ScenarioEvidenceCard; relevance: number }> = [];
   const leftover: ScenarioEvidenceCard[] = [];
   for (const item of pool) {
-    const band = scenarioBandForItem(item, eventKey);
+    // An item supports at most one band, so cross-band exclusivity holds by
+    // construction for both the regex and the ranked path.
+    const band = resolveScenarioBand(item, eventKey, overrides);
     const card: ScenarioEvidenceCard = {
       ...item,
       kind: cardKind(item),
       rangeSupport: band === bandKey ? "supports-range" : "context",
     };
-    if (band === bandKey) exclusive.push(card);
-    else if (band === null) leftover.push(card);
+    if (band === bandKey) {
+      exclusive.push({ card, relevance: overrides?.get(stableItemKey(item))?.relevance ?? 0 });
+    } else if (band === null) {
+      leftover.push(card);
+    }
   }
+  // Strongest support first when a ranking supplied relevance; otherwise the
+  // pool's existing recency order is preserved (all relevances equal).
+  exclusive.sort((left, right) => right.relevance - left.relevance);
 
   const cards: ScenarioEvidenceCard[] = [];
   const seen = new Set<string>();
@@ -199,7 +225,7 @@ export function assembleScenarioEvidence(
     seen.add(key);
     cards.push(card);
   };
-  exclusive.forEach(take);
+  exclusive.forEach((entry) => take(entry.card));
   leftover.forEach(take);
   if (cards.length < MIN_SCENARIO_EVIDENCE) {
     for (const note of frameworkEvidenceItems(framework, bandKey)) {

@@ -1,0 +1,76 @@
+/*
+ * Stratji motion tokens.
+ *
+ * One place for durations, easings and travel distances so new motion is
+ * composed rather than hand-rolled per component, and so a single
+ * `prefers-reduced-motion` block can retire all of it.
+ *
+ * Rules for anything using these tokens:
+ *   1. Animate `transform` and `opacity` only. Both are compositor properties;
+ *      animating width/height/top/left forces layout on every frame.
+ *   2. Declare `will-change` on the animated element, never on its parent.
+ *   3. Motion must carry meaning — a state change the user needs to notice.
+ *      Decorative movement is noise on a dense research console.
+ */
+
+:root {
+  --motion-instant: 90ms;
+  --motion-fast: 160ms;
+  --motion-base: 240ms;
+  --motion-slow: 420ms;
+
+  /* Standard: enters and exits. Emphasised: state changes worth noticing. */
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --motion-ease-emphasised: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --motion-rise: 6px;
+  --motion-nudge: 2px;
+}
+
+/* Workspace cross-fade on ?view= change. */
+.workspace-panel > .workspace-section:not([hidden]) {
+  animation: motion-enter var(--motion-base) var(--motion-ease-standard) both;
+  will-change: transform, opacity;
+}
+
+/* Freshness pulse: fires when a source changes state, not continuously. */
+.source-freshness-strip i[data-changed="true"] {
+  animation: motion-pulse var(--motion-slow) var(--motion-ease-emphasised);
+  will-change: transform, opacity;
+}
+
+/* A Kanban card moving to Completed Today. */
+.kanban-card[data-completing="true"] {
+  animation: motion-complete var(--motion-base) var(--motion-ease-exit) both;
+  will-change: transform, opacity;
+}
+
+@keyframes motion-enter {
+  from { opacity: 0; transform: translateY(var(--motion-rise)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motion-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  45% { transform: scale(1.35); opacity: 0.75; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes motion-complete {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0.55; transform: translateX(var(--motion-rise)); }
+}
+
+/*
+ * Single off-switch. Every token-driven animation above is halted here, and any
+ * new one must be added to this list in the same commit.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .workspace-panel > .workspace-section:not([hidden]),
+  .source-freshness-strip i[data-changed="true"],
+  .kanban-card[data-completing="true"] {
+    animation: none !important;
+    transform: none !important;
+  }
+}

@@ -78,7 +78,14 @@ valid Health snapshot with a failed extraction.
 
 1. Refresh source-backed files and earnings rows before building when newly reported data exists.
 2. For a Codex-assisted run, use Computer Use to inspect Mail, Reminders, Calendar, Notes, and iPhone Mirroring before claiming those sources are current. A raw web-service restart cannot invoke Codex plugins; it must mark an unrefreshed saved snapshot stale.
-3. Run `npm run lint` and `npm run build`.
+3. Run `npm run lint`, `npm run build`, and `npm test`.
+   `npm test` runs the **complete** suite (`npm run test:node` → all
+   `tests/*.test.mjs` under `--experimental-strip-types` plus the
+   `tests/helpers/register-ts-ext.mjs` resolver hook, then the Python
+   Health import tests). Never run `node --test` on these files without
+   that hook: extensionless TypeScript imports such as
+   `app/strategy/graph-types` fail with `ERR_MODULE_NOT_FOUND`, which
+   looks like broken product code but is only a missing loader.
 4. Start the canonical macOS service with `scripts/run-dashboard-service.sh`.
 5. Inspect `~/Library/Logs/PortfolioIntelligence/startup-refresh.log`.
 6. Verify the Mac URL and Tailscale URL return the full dashboard.
@@ -190,8 +197,8 @@ Implement chrome or native fixes **only after** those three artifacts exist, and
 
 After changing Sectoral Analytics or Market Intelligence behavior:
 
-1. Run `npm run lint`, `npm run build`, and
-   `node --test tests/rendered-html.test.mjs`.
+1. Run `npm run lint`, `npm run build`, and `npm test` (the complete suite —
+   see "Required run sequence" step 3).
 2. Open `?view=sectors`, select a different S-2 industry, and confirm S-2 updates.
 3. Open `?view=intelligence` and confirm Market Intelligence has no
    `.sector-intelligence-filter` or `.sector-dimmed` descendants, shows Satya

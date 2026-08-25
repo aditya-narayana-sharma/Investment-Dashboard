@@ -11,6 +11,7 @@ import "./appearance-themes.css";
 import "./appearance-sepia.css";
 import "./visual-overhaul.css";
 import "./visual-overhaul-instruments.css";
+import "./motion.css";
 import "./visual-overhaul-sepia.css";
 import "./dashboard/hover-pop.css";
 import "./native-chrome.css";

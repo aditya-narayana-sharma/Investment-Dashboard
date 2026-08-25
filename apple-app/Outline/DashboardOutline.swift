@@ -454,6 +454,7 @@ private extension DashboardOutline {
         children: [
             leaf("strategies/y1", "Action Board", view: "strategies", section: "y1", image: "checklist"),
             leaf("strategies/y2", "Library", view: "strategies", section: "y2", image: "books.vertical.fill"),
+            leaf("strategies/y3", "Signals", view: "strategies", section: "y3", image: "waveform.path.ecg"),
         ]
     )
 

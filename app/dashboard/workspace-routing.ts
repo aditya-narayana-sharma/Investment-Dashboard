@@ -60,7 +60,7 @@ export type ChromeView = (typeof CHROME_VIEW_VALUES)[number];
 export type AppView = WorkspaceKey | ChromeView;
 
 export const BUILDER_SECTIONS = ["board", "canvas", "json"] as const;
-export const STRATEGIES_SECTIONS = ["y1", "y2"] as const;
+export const STRATEGIES_SECTIONS = ["y1", "y2", "y3"] as const;
 export const HEALTH_TOP_SECTIONS = ["h1", "h2", "h3", "h4"] as const;
 export const HEALTH_H2_PAGES = ["optimism", "insights", "guidance", "guardrails"] as const;
 export const HEALTH_H3_PAGES = ["metrics-overview", "activity", "sleep", "heart", "respiratory", "mobility", "nutrition"] as const;
@@ -118,6 +118,7 @@ export function isStrategiesSection(value: string | null | undefined): value is 
   switch (value) {
     case "y1":
     case "y2":
+    case "y3":
       return true;
     default:
       return false;
@@ -178,6 +179,9 @@ export function parseStrategiesSection(value: string | null | undefined): Strate
     case "y2":
     case "library":
       return "y2";
+    case "y3":
+    case "signals":
+      return "y3";
     default:
       return "y2";
   }
@@ -267,12 +271,14 @@ export function builderSectionNumber(section: BuilderSection): "B-1" | "B-2" | "
   }
 }
 
-export function strategiesSectionNumber(section: StrategiesSection): "Y-1" | "Y-2" {
+export function strategiesSectionNumber(section: StrategiesSection): "Y-1" | "Y-2" | "Y-3" {
   switch (section) {
     case "y1":
       return "Y-1";
     case "y2":
       return "Y-2";
+    case "y3":
+      return "Y-3";
     default: {
       const _exhaustive: never = section;
       return _exhaustive;
@@ -318,6 +324,7 @@ export const WORKSPACE_SECTIONS: Record<WorkspaceKey, readonly WorkspaceSectionC
   strategies: [
     { id: "y1", label: "Action Board", prefix: "Y-1" },
     { id: "y2", label: "Library", prefix: "Y-2" },
+    { id: "y3", label: "Signals", prefix: "Y-3" },
   ],
 };
 

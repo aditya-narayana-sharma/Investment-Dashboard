@@ -1,7 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KITE_DIR="${KITE_MCP_PROJECT_DIR:-/Users/adityasharma/Documents/GitHub/kite-mcp-server}"
+# Resolve the Kite MCP checkout without hardcoding an operator's home directory.
+# Order: explicit env var, then a sibling of this repository (the documented
+# layout), then fail with setup instructions rather than a confusing ENOENT.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SIBLING_KITE_DIR="$(cd "$REPO_ROOT/.." && pwd)/kite-mcp-server"
+
+# Inside a git worktree, REPO_ROOT is .claude/worktrees/<name>, whose sibling is
+# not the checkout root. Resolve the main working tree and try its sibling too.
+MAIN_SIBLING_KITE_DIR=""
+if GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null)"; then
+  case "$GIT_COMMON_DIR" in
+    /*) ;;
+    *) GIT_COMMON_DIR="$REPO_ROOT/$GIT_COMMON_DIR" ;;
+  esac
+  if MAIN_ROOT="$(cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd)"; then
+    MAIN_SIBLING_KITE_DIR="$(cd "$MAIN_ROOT/.." && pwd)/kite-mcp-server"
+  fi
+fi
+
+KITE_DIR="${KITE_MCP_PROJECT_DIR:-}"
+if [[ -z "$KITE_DIR" && -d "$SIBLING_KITE_DIR" ]]; then
+  KITE_DIR="$SIBLING_KITE_DIR"
+fi
+if [[ -z "$KITE_DIR" && -n "$MAIN_SIBLING_KITE_DIR" && -d "$MAIN_SIBLING_KITE_DIR" ]]; then
+  KITE_DIR="$MAIN_SIBLING_KITE_DIR"
+fi
+if [[ -z "$KITE_DIR" ]]; then
+  cat >&2 <<MSG
+KITE_MCP_PROJECT_DIR is not set and no Kite MCP checkout was found at:
+  $SIBLING_KITE_DIR
+
+Stratji needs a local Zerodha Kite MCP server to serve live portfolio data.
+Clone it beside this repository, or point Stratji at it explicitly:
+
+  export KITE_MCP_PROJECT_DIR="\$HOME/path/to/kite-mcp-server"
+
+See docs/stratji/INSTALL.md and .env.example.
+MSG
+  exit 1
+fi
 KITE_URL="${KITE_MCP_SERVER_URL:-http://127.0.0.1:8080}"
 LOG_DIR="${TMPDIR:-/tmp}/portfolio-live-dashboard"
 BIN="$KITE_DIR/kite-mcp-server"

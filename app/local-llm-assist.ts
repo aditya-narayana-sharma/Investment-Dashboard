@@ -8,6 +8,7 @@ export const LLM_ASSIST_TASKS = [
   "builder",
   "strategy",
   "satya",
+  "macro-evidence",
 ] as const;
 
 export type LlmAssistTask = (typeof LLM_ASSIST_TASKS)[number];
@@ -21,6 +22,7 @@ export function isLlmAssistTask(value: string): value is LlmAssistTask {
     case "builder":
     case "strategy":
     case "satya":
+    case "macro-evidence":
       return true;
     default:
       return false;
@@ -91,6 +93,17 @@ export function llmAssistSystemPrompt(task: LlmAssistTask): string {
         "Do not draft Algorithm Canvas trees unless the operator is on Algorithm Canvas; point them to Satya there.",
         "Workspace text may hint at holding symbols only — never treat it as prices or quantities.",
         "Label the draft machine-drafted.",
+      ].join(" ");
+    case "macro-evidence":
+      return [
+        "You rank existing Stratji macro-scenario evidence. You are a re-ranker, not a writer.",
+        "You receive CANDIDATES (already keyword-matched to one macro event) and the three decision BANDS for that event, each with its label, numeric range, summary and framework response.",
+        "For each candidate decide which single band its content actually supports, or null when it is background context that supports no specific range.",
+        "A candidate supports a band only when the passage states something consistent with that band's numeric range or condition. Topical overlap alone is context, not support.",
+        "Assign each candidate to at most ONE band. Never mark the same candidate as supporting two bands.",
+        "groundingSpan must be copied verbatim from that candidate's own text and must contain the wording that justifies the band. If you cannot copy such a span, use band null.",
+        "Never invent prices, ranges, KPIs or sources. Never introduce a candidate that is not in CANDIDATES.",
+        "Return JSON only: {\"rankings\":[{\"itemKey\":string,\"band\":\"supportive\"|\"base\"|\"stress\"|null,\"relevance\":0..1,\"groundingSpan\":string}]}",
       ].join(" ");
     default: {
       const _exhaustive: never = task;

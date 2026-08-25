@@ -1,5 +1,6 @@
 import kpiRegistry from "../../packages/kpi-registry/definitions/kpis.json" with { type: "json" };
 import type { YfinanceFundamentals } from "./yfinance-kpis";
+import { bollingerExpansion, meanComparison } from "./expansion-indicators";
 
 const kpiDefinitions = kpiRegistry.kpis as Array<{ id: string; label: string; bucket: string }>;
 
@@ -551,6 +552,7 @@ export function computeKpisFromOhlcv(bars: readonly OhlcvBar[], extras: Registry
     put("sma_20", sma(closes, 20));
     put("sma_50", sma(closes, 50));
     put("sma_200", sma(closes, 200));
+    put("sma_220", sma(closes, 220), closes.length < 220 ? LOOKBACK : undefined);
     put("ema_12", ema(closes, 12));
     put("ema_26", ema(closes, 26));
     put("ema_50", ema(closes, 50));
@@ -610,6 +612,31 @@ export function computeKpisFromOhlcv(bars: readonly OhlcvBar[], extras: Registry
     put("bbands_mid_20", mid);
     put("bbands_lower_20", lower);
     put("bbands_width_20", mid && upper !== null && lower !== null && mid !== 0 ? (upper - lower) / mid : null);
+
+    // Bollinger Band Expansion and Mean Comparison.
+    // `bbands_width_20` above is NORMALISED ((upper - lower) / mid); the
+    // expansion KPIs below are ABSOLUTE price spreads, which is what a
+    // contraction-to-breakout comparison needs. They are not interchangeable.
+    const expansion = bollingerExpansion(bars);
+    put("bb_upper_min_3m", expansion.upperMin3m, expansion.reason ?? undefined);
+    put("bb_lower_max_3m", expansion.lowerMax3m, expansion.reason ?? undefined);
+    put("bb_width_min_3m", expansion.widthMin3m, expansion.reason ?? undefined);
+    put("bb_expansion_delta", expansion.expansionDelta, expansion.reason ?? undefined);
+    put(
+      "bb_expansion_pct",
+      expansion.expansionPct,
+      expansion.reason ?? (expansion.widthAtContraction === 0 ? "bands fully collapsed at contraction" : undefined),
+    );
+    put(
+      "bb_expansion_state",
+      expansion.state === "expanding" ? 1 : expansion.state === "squeeze" ? 0 : expansion.state === "contracting" ? -1 : null,
+      expansion.reason ?? undefined,
+    );
+
+    const meanCross = meanComparison(bars);
+    put("mean_cross_state", meanCross.state === "bullish" ? 1 : meanCross.state === "bearish" ? -1 : null, meanCross.reason ?? undefined);
+    put("mean_cross_gap_pct", meanCross.gapPct, meanCross.reason ?? undefined);
+    put("mean_cross_days_since_flip", meanCross.daysSinceFlip, meanCross.reason ?? (meanCross.state ? "no flip in the available history" : undefined));
     const ema20Close = ema(closes, 20);
     const atr20 = last(wilder(trueRanges(bars), 20));
     put("keltner_upper", ema20Close !== null && atr20 !== null ? ema20Close + 2 * atr20 : null);

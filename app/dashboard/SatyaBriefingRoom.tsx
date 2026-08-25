@@ -25,6 +25,8 @@ import { currentSatyaTurn, openSatyaDraftPopout, syncSatyaDraftPopout } from "./
 import { SatyaCitationIcons } from "./satya-citation-icons";
 import { SatyaDraftStatusLine } from "./SatyaDraftStatusLine";
 import { SatyaAxisCategoryChips, SatyaPresence, type SatyaPresenceState } from "./SatyaPresence";
+import { SatyaFullBody } from "./SatyaAvatar";
+import { usePrefersReducedMotion } from "./use-prefers-reduced-motion";
 import { installSatyaSpeech } from "../satya/speech";
 
 export type { SatyaSourceFamily };
@@ -46,6 +48,7 @@ export function SatyaBriefingRoom({
   familyCounts?: Partial<Record<SatyaSourceFamily, number>>;
 }) {
   const [state, setState] = useState<SatyaPresenceState>(stale ? "stale" : "idle");
+  const reducedMotion = usePrefersReducedMotion();
   const [prompt, setPrompt] = useState("");
   const [canvasTurns, setCanvasTurns] = useState<SatyaThreadTurn[]>([]);
   const [error, setError] = useState("");
@@ -225,6 +228,7 @@ export function SatyaBriefingRoom({
   return (
     <section className={["satya-briefing", "satya-m2-canvas", "llm-assist-span", className].filter(Boolean).join(" ")} data-state={presenceState}>
       <header className="satya-briefing-header">
+        <SatyaFullBody state={presenceState} reducedMotion={reducedMotion} className="satya-briefing-avatar" />
         <div>
           <h3>Satya</h3>
           <p>{subtitle}</p>

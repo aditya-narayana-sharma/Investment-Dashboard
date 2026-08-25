@@ -1,0 +1,69 @@
+Stratji Source-Available License
+Version 1.0
+
+Copyright (c) 2026 Aditya Sharma. All rights reserved.
+
+IMPORTANT: This is a source-available license, NOT an open source license.
+It has not been reviewed by a lawyer. Have counsel review it before you
+publish this repository or sell a license under it.
+
+1. DEFINITIONS
+   "Software" means the contents of this repository.
+   "You" means the individual or entity exercising rights under this License.
+   "Personal Use" means use by a single natural person, on machines they own or
+   control, for their own private research and portfolio administration.
+   "Commercial Use" means any use that is not Personal Use, including use by or
+   for a company, fund, adviser, or any use that produces a fee, commission, or
+   other consideration from a third party.
+   "Paid License" means a current, valid Stratji Pro or Ultra license key issued
+   by the copyright holder.
+
+2. GRANT FOR PERSONAL USE
+   You may read, compile, run, and modify the Software for Personal Use, and may
+   create private modifications for Personal Use, free of charge.
+
+3. COMMERCIAL USE REQUIRES A PAID LICENSE
+   Commercial Use requires a Paid License. Tier entitlements are enforced in
+   software and are described at stratji.co.in.
+
+4. REDISTRIBUTION
+   You may not redistribute, sublicense, resell, host as a service, or
+   distribute the Software or a derivative of it, in source or binary form,
+   without prior written permission from the copyright holder. You may publish
+   patches against this repository.
+
+5. BRAND
+   "Stratji" and associated marks and app icons are not licensed. You may not use
+   them to identify a derivative work or to imply endorsement.
+
+6. LICENSE KEYS
+   You may not share, publish, resell, or circumvent license keys or the license
+   verification mechanism. Keys are issued per licensee.
+
+7. THIRD-PARTY COMPONENTS
+   The Software depends on third-party packages distributed under their own
+   licenses. Nothing here alters those licenses. Broker, market-data, and mail
+   integrations are subject to the terms of those providers; You are responsible
+   for holding any account, subscription, or API entitlement they require.
+
+8. NO INVESTMENT ADVICE
+   The Software is research tooling. It is not investment, financial, legal, or
+   tax advice, and it is not a recommendation to buy or sell any security. All
+   trading decisions and their consequences are Yours alone. Order placement
+   requires Your explicit, typed confirmation in the application.
+
+9. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. Market data, research
+   summaries, and machine-drafted text may be inaccurate, delayed, or incomplete.
+
+10. LIMITATION OF LIABILITY
+    IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+    OTHER LIABILITY, INCLUDING TRADING OR INVESTMENT LOSSES, WHETHER IN AN
+    ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+    CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+11. TERMINATION
+    This License terminates automatically if You breach it. On termination You
+    must stop using and destroy Your copies of the Software.

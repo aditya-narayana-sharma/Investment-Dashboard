@@ -96,7 +96,7 @@ test("Strategies workspace uses DailyKanbanBoard and compact vertical read-only 
   assert.match(workspace, /\{ id: "y2", label: "Library" \}/);
   assert.match(workspace, /defaultOpen/);
   assert.match(workspace, /expandDashboardSection\(dashboardSectionNumberFromNavId\(/);
-  assert.match(workspace, /Live 128-KPI values are fetched on Algorithm Canvas/);
+  assert.match(workspace, /Live 138-KPI values are fetched on Algorithm Canvas/);
   assert.match(workspace, /yfinance NSE tree-backtest/);
   assert.match(workspace, /loadLibraryNseStats/);
   assert.match(workspace, /applyLibraryNseStats/);

@@ -6,11 +6,13 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, openSync, readSync, closeSync, statSync } from "node:fs";
+import { existsSync, openSync, readFileSync, readSync, closeSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { classifyAxisCategory } from "../app/satya/axis-categories.mjs";
+import { axisMailAttachmentRoot, axisPdfRoots } from "../app/axis-pdf-roots.mjs";
+import { saveAxisMailAttachments } from "./axis-mail-attachments.mjs";
 import {
   indexAxisPdfArchive,
   mailMessageUrl,
@@ -27,9 +29,8 @@ const REPO_ROOT = join(SCRIPT_DIR, "..");
 const EXTRACTOR = join(SCRIPT_DIR, "extract-axis-pdf-recommendations.py");
 const PYTHON = process.env.PORTFOLIO_FLASK_PYTHON
   ?? join(REPO_ROOT, ".venv-flask", "bin", "python");
-const DEFAULT_ARCHIVE = process.env.AXIS_PDF_ARCHIVE_PATH
-  ?? process.env.AXIS_RESEARCH_DIR
-  ?? join(process.env.HOME ?? "", "Downloads", "Axis Research");
+/** Empty text plus no OCR must be recorded, never indexed as a blank document. */
+const OCR_ENABLED = process.env.SATYA_OCR_ENABLED === "1";
 const EXTRACT_BATCH = 40;
 const EXTRACT_TIMEOUT_MS = 120_000;
 
@@ -150,11 +151,41 @@ async function extractPdfBatch(paths) {
 }
 
 /**
+ * Merge the per-root indexes into one.
+ *
+ * The curated archive is listed first, so when the same report exists both as a
+ * hand-filed copy and as a saved mail attachment the archive path wins by name.
+ * Content-level de-duplication happens separately, by SHA-256, because the same
+ * report frequently arrives under two different attachment names.
+ */
+function indexAxisPdfRoots(roots) {
+  const byName = new Map();
+  const files = [];
+  for (const root of roots) {
+    const index = indexAxisPdfArchive(root);
+    for (const [key, value] of index.byName) {
+      if (!byName.has(key)) byName.set(key, value);
+    }
+    for (const file of index.files ?? []) files.push(file);
+  }
+  return { roots, byName, files };
+}
+
+function sha256Of(path) {
+  try {
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Recursively index Axis Research PDFs into the Satya corpus.
  * @returns {Promise<{ attempted: number, valid: number, indexed: number, unchanged: number, skippedCorrupt: number, skippedEmpty: number, skippedPromo: number, linkedMail: number, liveWebinars: number }>}
  */
 export async function ingestSatyaAxisPdfArchive({
-  archiveRoot = DEFAULT_ARCHIVE,
+  archiveRoot,
+  archiveRoots,
   mailItems = [],
   corpusPath,
   sender = "Axis Direct",
@@ -167,10 +198,21 @@ export async function ingestSatyaAxisPdfArchive({
     skippedCorrupt: 0,
     skippedEmpty: 0,
     skippedPromo: 0,
+    skippedDuplicate: 0,
+    needsOcr: 0,
     linkedMail: 0,
     liveWebinars: 0,
+    roots: [],
+    fromMailbox: 0,
   };
-  const index = indexAxisPdfArchive(archiveRoot);
+  // Callers may still pass a single `archiveRoot`; the default now spans the
+  // curated archive AND the mailbox attachment store, which is what made
+  // mail-attachment-only reports invisible to Satya.
+  const roots = archiveRoots
+    ?? (archiveRoot ? [archiveRoot] : axisPdfRoots());
+  stats.roots = roots;
+  const mailboxRoot = axisMailAttachmentRoot();
+  const index = indexAxisPdfRoots(roots);
   const files = index.files ?? [];
   stats.attempted = files.length;
   if (!files.length) {
@@ -181,11 +223,21 @@ export async function ingestSatyaAxisPdfArchive({
 
   const links = mailLinkMap(mailItems, index);
   const validPaths = [];
+  const seenHashes = new Set();
   for (const path of files) {
     if (!isValidPdfHeader(path)) {
       stats.skippedCorrupt += 1;
       continue;
     }
+    // The same report routinely exists both hand-filed and as a saved
+    // attachment. De-duplicate on content, not on filename.
+    const hash = sha256Of(path);
+    if (hash && seenHashes.has(hash)) {
+      stats.skippedDuplicate += 1;
+      continue;
+    }
+    if (hash) seenHashes.add(hash);
+    if (path.startsWith(mailboxRoot)) stats.fromMailbox += 1;
     validPaths.push(path);
   }
   stats.valid = validPaths.length;
@@ -204,6 +256,10 @@ export async function ingestSatyaAxisPdfArchive({
       }
       const text = String(row.text || "").trim();
       if (text.length < 40 && axisCategory !== "live_webinars") {
+        // A scanned/image-only Axis note has no text layer. Record why it is
+        // absent instead of indexing an empty document that Satya would then
+        // silently fail to cite.
+        if (!OCR_ENABLED) stats.needsOcr += 1;
         stats.skippedEmpty += 1;
         continue;
       }
@@ -251,7 +307,14 @@ function isMain() {
 }
 
 if (isMain()) {
-  ingestSatyaAxisPdfArchive()
+  // Save mailbox attachments first, then index every root. Running the ingest
+  // alone would reproduce the original gap on a machine whose curated archive
+  // is empty.
+  (async () => {
+    const attachments = await saveAxisMailAttachments();
+    const ingest = await ingestSatyaAxisPdfArchive();
+    return { attachments, ingest };
+  })()
     .then((result) => {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     })

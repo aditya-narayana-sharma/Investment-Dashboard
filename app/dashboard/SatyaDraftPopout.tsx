@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { getSatyaThread, subscribeSatyaThread, type SatyaThreadTurn } from "./satya-client";
 import {
@@ -14,6 +14,8 @@ import {
 } from "./satya-draft-popout";
 import { SatyaCitationIcons } from "./satya-citation-icons";
 import { SatyaDraftStatusLine } from "./SatyaDraftStatusLine";
+import { SatyaFullBody } from "./SatyaAvatar";
+import { usePrefersReducedMotion } from "./use-prefers-reduced-motion";
 import "./satya-draft-popout.css";
 
 const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -47,6 +49,16 @@ function DraftTurnLog({ turns, drafting }: { turns: SatyaThreadTurn[]; drafting:
   );
 }
 
+/**
+ * `createPortal` needs a DOM node, which does not exist during SSR. Resolving it
+ * through `useSyncExternalStore` yields `null` on the server and `document.body`
+ * on the client without a synchronous `setState` inside an effect, which React
+ * flags as a cascading render (`react-hooks/set-state-in-effect`).
+ */
+const subscribeNoop = (): (() => void) => () => undefined;
+const clientPortalHost = (): HTMLElement | null => document.body;
+const serverPortalHost = (): HTMLElement | null => null;
+
 /** Web parity for the native Satya NSPanel. Native Stratji.app owns the real window. */
 export function SatyaDraftPopout() {
   const titleId = useId();
@@ -55,10 +67,10 @@ export function SatyaDraftPopout() {
   const [open, setOpen] = useState(() => isSatyaDraftPopoutOpen());
   const [drafting, setDrafting] = useState(() => isSatyaDraftPopoutDrafting());
   const [turns, setTurns] = useState<SatyaThreadTurn[]>(() => currentSatyaTurn(getSatyaThread().turns));
-  const [host, setHost] = useState<HTMLElement | null>(null);
+  const host = useSyncExternalStore(subscribeNoop, clientPortalHost, serverPortalHost);
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    setHost(document.body);
     installSatyaDraftNativeCallbacks(window);
   }, []);
 
@@ -125,6 +137,11 @@ export function SatyaDraftPopout() {
         onKeyDown={onTrap}
       >
         <header className="satya-draft-popout-head">
+          <SatyaFullBody
+            state={drafting ? "thinking" : "idle"}
+            reducedMotion={reducedMotion}
+            className="satya-popout-avatar"
+          />
           <div>
             <strong id={titleId}>SATYA</strong>
             {drafting

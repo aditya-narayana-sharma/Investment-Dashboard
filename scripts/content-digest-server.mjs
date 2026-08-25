@@ -19,6 +19,7 @@ import { classifySatyaFamily } from "./satya-classify.mjs";
 import { ingestSatyaDigestRefresh } from "./satya-ingest.mjs";
 import { recordSatyaIngestError, setSatyaMeta } from "./satya-store.mjs";
 import { ingestSatyaAxisPdfArchive } from "./satya-axis-pdf-ingest.mjs";
+import { saveAxisMailAttachments } from "./axis-mail-attachments.mjs";
 import {
   axisPdfAuditFromSnapshot,
   loadAxisPdfRecommendationSnapshot,
@@ -1585,12 +1586,19 @@ async function refresh() {
   }
   try {
     setSatyaMeta("pdfIngest", "pending");
-    await ingestSatyaAxisPdfArchive({
-      archiveRoot: AXIS_PDF_ARCHIVE_PATH,
+    // Pull PDF attachments out of the exact Axis Research mailbox first. Without
+    // this, a report that only ever arrived as an attachment never reached the
+    // corpus, because the ingest read a hand-curated folder alone.
+    const attachmentLedger = await saveAxisMailAttachments();
+    setSatyaMeta("axisMailAttachments", JSON.stringify(attachmentLedger));
+    // No archiveRoot: the ingest now spans the curated archive AND the mailbox
+    // attachment store, de-duplicated by SHA-256.
+    const pdfStats = await ingestSatyaAxisPdfArchive({
       mailItems: axisResearch.status === "fulfilled"
         ? axisValue.items
         : lastSnapshot?.axisResearch ?? [],
     });
+    setSatyaMeta("pdfIngestStats", JSON.stringify(pdfStats));
     setSatyaMeta("pdfIngest", "ok");
   } catch (error) {
     console.error("[content-digest] Satya Axis PDF ingest failed:", error);

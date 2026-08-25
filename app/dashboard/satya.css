@@ -955,11 +955,143 @@ html[data-appearance="sepia"] .satya-briefing {
   to { transform: scaleY(1); }
 }
 
+
+/* ---------------------------------------------------------------------------
+   Full-body Satya (`SatyaFullBody`).
+
+   The compact head glyph stays exactly as it was for the companion launcher.
+   This is the same face on a body for the surfaces with room: M-2 Briefing Room
+   and the draft pop-out.
+
+   Every animation below is `transform`/`opacity` only, so each state animates on
+   the compositor rather than triggering layout. Each animated group carries a
+   single `will-change`. The reduced-motion block at the end of this file halts
+   all of it.
+   --------------------------------------------------------------------------- */
+
+.satya-fullbody {
+  width: 64px;
+  height: 128px;
+}
+
+.satya-body-root { transform-origin: 32px 116px; }
+
+.satya-torso {
+  fill: var(--satya-skin);
+  stroke: var(--satya-ink);
+  stroke-width: 1.4;
+}
+
+.satya-neck {
+  fill: color-mix(in srgb, var(--satya-skin) 88%, var(--satya-ink));
+  stroke: var(--satya-ink);
+  stroke-width: 1.2;
+}
+
+.satya-collar,
+.satya-arm,
+.satya-leg {
+  fill: none;
+  stroke: var(--satya-ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.satya-hand,
+.satya-foot {
+  fill: color-mix(in srgb, var(--satya-skin) 82%, var(--satya-ink));
+  stroke: var(--satya-ink);
+  stroke-width: 1.2;
+}
+
+.satya-head-group { transform-origin: 32px 56px; }
+.satya-torso-group { transform-origin: 32px 62px; }
+.satya-arm-left, .satya-hand-left { transform-origin: 20px 70px; }
+.satya-arm-right, .satya-hand-right { transform-origin: 44px 70px; }
+
+/* Idle: a slow breath through the torso and a matching head settle. */
+.satya-fullbody[data-state="idle"] .satya-torso-group,
+.satya-fullbody[data-state="citing"] .satya-torso-group {
+  animation: satya-breathe 4.6s var(--vo-ease, ease-in-out) infinite;
+  will-change: transform;
+}
+
+.satya-fullbody[data-state="idle"] .satya-head-group {
+  animation: satya-head-settle 4.6s var(--vo-ease, ease-in-out) infinite;
+  will-change: transform;
+}
+
+/* Listening: lean in, ears forward. */
+.satya-fullbody[data-state="listening"] .satya-body-root {
+  animation: satya-lean-in 2.8s var(--vo-ease, ease-in-out) infinite;
+  will-change: transform;
+}
+
+/* Thinking: reuse the existing tilt vocabulary on the head only. */
+.satya-fullbody[data-state="thinking"] .satya-head-group {
+  animation: satya-think-tilt 1.8s var(--vo-ease, ease) infinite;
+  will-change: transform;
+}
+
+/* Speaking: one arm gestures; the other stays put so it reads as a gesture. */
+.satya-fullbody[data-state="speaking"] .satya-arm-right,
+.satya-fullbody[data-state="speaking"] .satya-hand-right {
+  animation: satya-gesture 1.15s var(--vo-ease, ease-in-out) infinite;
+  will-change: transform;
+}
+
+.satya-fullbody[data-state="speaking"] .satya-torso-group {
+  animation: satya-breathe 2.2s var(--vo-ease, ease-in-out) infinite;
+  will-change: transform;
+}
+
+.satya-fullbody[data-state="error"] .satya-body-root { opacity: 0.8; }
+.satya-fullbody[data-state="stale"] .satya-body-root { opacity: 0.72; }
+
+@keyframes satya-breathe {
+  0%, 100% { transform: scaleY(1) translateY(0); }
+  50% { transform: scaleY(1.035) translateY(-0.6px); }
+}
+
+@keyframes satya-head-settle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-0.9px); }
+}
+
+@keyframes satya-lean-in {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(-2.2deg) translateY(-1.2px); }
+}
+
+@keyframes satya-gesture {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-13deg); }
+  70% { transform: rotate(5deg); }
+}
+
+
+/* Persona placement. The briefing header becomes a two-column row; the pop-out
+   head keeps its single line and gets a smaller figure. */
+.satya-briefing-header { display: flex; align-items: flex-start; gap: 14px; }
+.satya-briefing-avatar { flex: 0 0 auto; width: 52px; height: 104px; }
+.satya-draft-popout-head .satya-popout-avatar { flex: 0 0 auto; width: 26px; height: 52px; }
+
+@media (max-width: 640px) {
+  .satya-briefing-avatar { width: 38px; height: 76px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .satya-orb-ring,
   .satya-pet,
   .satya-mouth,
   .satya-antenna-tip,
+  .satya-body-root,
+  .satya-head-group,
+  .satya-torso-group,
+  .satya-arm-left,
+  .satya-arm-right,
+  .satya-hand-left,
+  .satya-hand-right,
   .satya-draft-status-phrase,
   .satya-send .satya-draft-status-phrase {
     animation: none !important;
