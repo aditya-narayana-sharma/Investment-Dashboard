@@ -64,20 +64,22 @@ const CALENDAR_NOTES_CHARS = 1600;
 const DIGEST_BULLET_MAX = 8;
 const CONTENT_SNAPSHOT_PATH = process.env.CONTENT_SNAPSHOT_PATH ?? fileURLToPath(new URL("../artifacts/private/content-snapshot.json", import.meta.url));
 const CONTENT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const FORCE_REFRESH_BUDGET_MS = 90_000;
+const FORCE_REFRESH_BUDGET_MS = 150_000;
 const NEWSLETTER_DIGEST_LIMIT = 500;
-const MAIL_STAGE_TIMEOUT_MS = 40_000;
+const MAIL_STAGE_TIMEOUT_MS = 75_000;
 const AXIS_STAGE_TIMEOUT_MS = 200_000;
+/** Newsletters JXA already timed out: bound Axis tightly rather than skipping it. */
+const AXIS_DEGRADED_STAGE_TIMEOUT_MS = 60_000;
 const AXIS_LIST_TIMEOUT_MS = 90_000;
 const AXIS_BODY_TIMEOUT_MS = 30_000;
 const AXIS_BODY_BUDGET_MS = 22_000;
 const AXIS_TARGET_TIMEOUT_MS = 25_000;
 const AXIS_TARGET_CAP = 40;
-const NEWSLETTER_LIST_TIMEOUT_MS = 20_000;
+const NEWSLETTER_LIST_TIMEOUT_MS = 45_000;
 const NEWSLETTER_BODY_TIMEOUT_MS = 20_000;
 /** Soft deadline inside osascript so bodies return before Node kills the process. */
 const NEWSLETTER_BODY_BUDGET_MS = 15_000;
-/** Newsletters JXA hang — skip Axis live read (same Mail.app) and keep last snapshots. */
+/** Newsletters JXA timed out — Axis reads the same Mail.app, so degrade its budget. */
 let mailJxaTimedOut = false;
 function istDateKey(daysAgo) {
   return new Date(Date.now() + (5.5 * 60 * 60 * 1000) - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
@@ -991,11 +993,16 @@ function keepAxisDigestItem(message, item) {
   return !isPromotionalMessage(message, item);
 }
 
+/**
+ * Axis Research is a separate mailbox and mints the result-update cards, so a
+ * Newsletters timeout must not skip it outright — that lost both Mail sources at
+ * once and parked every Mail-derived action on Monitor. Still attempt the live
+ * read, but on a degraded budget so a genuinely hung Mail.app cannot eat the
+ * whole forced-refresh window.
+ */
 async function readAxisResearch() {
-  if (mailJxaTimedOut) {
-    throw new Error("iCloud Axis Research skipped after Newsletters osascript timed out; retaining the last validated snapshot.");
-  }
-  return withTimeout(readAxisResearchUnbound(), AXIS_STAGE_TIMEOUT_MS, "iCloud Axis Research");
+  const stageTimeout = mailJxaTimedOut ? AXIS_DEGRADED_STAGE_TIMEOUT_MS : AXIS_STAGE_TIMEOUT_MS;
+  return withTimeout(readAxisResearchUnbound(), stageTimeout, "iCloud Axis Research");
 }
 
 async function readAxisResearchUnbound() {
