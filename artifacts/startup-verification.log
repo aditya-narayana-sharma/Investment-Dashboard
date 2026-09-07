@@ -1,0 +1,19 @@
+Complete dashboard refresh audit
+Started	2026-08-06 00:32:12 IST
+Kite portfolio	OK	HTTP 200 · status=live
+Mail and Podcasts	FAILED	HTTP 200 · status=partial · expected=live
+Earnings calendar	OK	HTTP 200 · status=verified
+HealthKit operational snapshot	FAILED	HTTP 200 · status=stale · dataDate=2026-07-31 · expected=live through operational target 2026-08-05
+Sector: pharma	OK	HTTP 200 · status=live
+Sector: power	OK	HTTP 200 · status=live
+Sector: infrastructure	OK	HTTP 200 · status=live
+Sector: auto	OK	HTTP 200 · status=live
+Sector: telecom	OK	HTTP 200 · status=live
+Sector: banking	OK	HTTP 200 · status=live
+Sector: nbfc	OK	HTTP 200 · status=live
+Sector: fmcg	OK	HTTP 200 · status=live
+Sector: consumer	OK	HTTP 200 · status=live
+Sector: energy	OK	HTTP 200 · status=live
+Sector: defence	OK	HTTP 200 · status=live
+Finished	2026-08-06 00:34:33 IST
+Failures	2

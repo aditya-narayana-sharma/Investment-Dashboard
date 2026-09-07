@@ -1,0 +1,6 @@
+# Project artifact only. Replace /ABSOLUTE/PATH/TO/REPOSITORY before installing manually.
+# Hourly:
+0 * * * * /ABSOLUTE/PATH/TO/REPOSITORY/scripts/refresh-content-digest.sh
+
+# Daily at 07:15 local time (use instead of the hourly line):
+# 15 7 * * * /ABSOLUTE/PATH/TO/REPOSITORY/scripts/refresh-content-digest.sh

@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "claude-plugins-official/hookify": {
+      "enabled": true
+    },
+    "claude-plugins-official/plugin-dev": {
+      "enabled": true
+    }
+  }
+}

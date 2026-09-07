@@ -12,11 +12,15 @@ const importSource = readFileSync(join(root, "scripts/import_apple_health.py"), 
 test("health insights module exposes note parsing and enrichment helpers", () => {
   assert.match(insightsSource, /export function parseHealthDailyNoteStats/);
   assert.match(insightsSource, /export function buildHealthInsights/);
+  assert.match(insightsSource, /export function buildDailyHealthBrief/);
   assert.match(insightsSource, /export function enrichHealthGuidanceActions/);
   assert.match(insightsSource, /export function enrichHealthSources/);
   assert.match(insightsSource, /source: "Livity"/);
   assert.match(insightsSource, /status: "Unavailable"/);
   assert.doesNotMatch(insightsSource, /Health Daily v2/);
+  assert.match(insightsSource, /Recheck the low blood-oxygen reading/);
+  assert.match(insightsSource, /Complete the nutrition diary before interpreting it/);
+  assert.match(insightsSource, /Recover from a high-output movement day/);
 });
 
 test("Health workspace surfaces Insights page and mirroring blocker honestly", () => {
@@ -24,8 +28,11 @@ test("Health workspace surfaces Insights page and mirroring blocker honestly", (
   assert.match(workspaceSource, /Livity \/ iPhone Mirroring unavailable/);
   assert.match(workspaceSource, /enrichHealthGuidanceActions/);
   assert.match(workspaceSource, /parseHealthDailyNoteStats/);
-  assert.match(workspaceSource, /health-source-ledger/);
+  assert.match(workspaceSource, /Daily Optimism/);
+  assert.match(workspaceSource, /TODAY’S HEALTH BRIEF/);
+  assert.doesNotMatch(workspaceSource, /No optimism entry available/);
   assert.doesNotMatch(workspaceSource, /Health Daily v2/);
+  assert.doesNotMatch(workspaceSource, /Health Status/);
 });
 
 test("Apple Health import emits metric-derived actions and unavailable secondary sources", () => {

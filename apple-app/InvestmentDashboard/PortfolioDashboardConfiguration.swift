@@ -34,6 +34,8 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
     case sectors
     case intelligence
     case health
+    case builder
+    case strategies
 
     var id: String { rawValue }
 
@@ -43,6 +45,8 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         case .sectors: "Sectoral"
         case .intelligence: "Market Intel"
         case .health: "Health"
+        case .builder: "Algorithm Canvas"
+        case .strategies: "Strategies"
         }
     }
 
@@ -52,6 +56,8 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         case .sectors: "square.grid.2x2.fill"
         case .intelligence: "newspaper.fill"
         case .health: "heart.text.square.fill"
+        case .builder: "point.3.connected.trianglepath.dotted"
+        case .strategies: "arrow.triangle.branch"
         }
     }
 
@@ -60,7 +66,14 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
             return baseURL
         }
         components.path = "/"
-        components.queryItems = [URLQueryItem(name: "view", value: rawValue)]
+        var queryItems = [URLQueryItem(name: "view", value: rawValue)]
+        if self == .builder {
+            queryItems.append(URLQueryItem(name: "section", value: "canvas"))
+        }
+        if self == .strategies {
+            queryItems.append(URLQueryItem(name: "section", value: "y2"))
+        }
+        components.queryItems = queryItems
         components.fragment = nil
         return components.url ?? baseURL
     }
@@ -73,6 +86,12 @@ enum DashboardWorkspace: String, CaseIterable, Identifiable, Codable {
         }
         if value == "market-intelligence" {
             return .intelligence
+        }
+        if value == "algorithm-canvas" {
+            return .builder
+        }
+        if value == "strategy-library" {
+            return .strategies
         }
         return DashboardWorkspace(rawValue: value)
     }

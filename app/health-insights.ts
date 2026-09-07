@@ -110,6 +110,113 @@ function nutritionIncompleteInsight(categories: HealthCategorySnapshot[], dataDa
   };
 }
 
+function findHealthMetric(categories: HealthCategorySnapshot[], categoryName: string, metricLabel: string) {
+  return categories.find((category) => category.name === categoryName)?.metrics.find((metric) => metric.label === metricLabel);
+}
+
+function firstNumericValue(value: string) {
+  const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function durationHours(value: string) {
+  const hours = value.match(/(\d+(?:\.\d+)?)\s*h(?:r)?/i);
+  const minutes = value.match(/(\d+(?:\.\d+)?)\s*m(?:in)?/i);
+  if (!hours && !minutes) return null;
+  return Number(hours?.[1] ?? 0) + Number(minutes?.[1] ?? 0) / 60;
+}
+
+function metricVsWeekly(metric: HealthMetric) {
+  const weekly = metric.averages?.weekly;
+  return `${metric.value}${weekly ? ` vs ${weekly.value} 7-day average${weekly.delta ? ` (${weekly.delta})` : ""}` : ""}`;
+}
+
+/**
+ * Build a short decision brief from validated aggregates. This intentionally
+ * avoids treating every numerical change as good or bad and never upgrades a
+ * logged nutrition value, range, or wearable estimate into a diagnosis.
+ */
+export function buildDailyHealthBrief(healthSnapshot: HealthLiveSnapshot): HealthActionSnapshot[] {
+  const { categories, dataDate } = healthSnapshot;
+  const brief: HealthActionSnapshot[] = [];
+
+  if (healthSnapshot.missingDates?.length) {
+    brief.push({
+      tone: "red",
+      title: "Refresh the missing Health days first",
+      text: `The operational record is missing ${healthSnapshot.missingDates.map(compactHealthDate).join(", ")}. Do not act on trend comparisons until coverage is complete.`,
+    });
+  }
+
+  const bloodOxygen = findHealthMetric(categories, "Respiratory", "Blood oxygen");
+  const bloodOxygenLow = bloodOxygen ? firstNumericValue(bloodOxygen.value) : null;
+  if (bloodOxygen && bloodOxygenLow != null && bloodOxygenLow < 92) {
+    brief.push({
+      tone: "red",
+      title: "Recheck the low blood-oxygen reading",
+      text: `${compactHealthDate(dataDate)} includes a wearable blood-oxygen range of ${bloodOxygen.value}. Wearable readings can be inaccurate; recheck an unexpected low and seek medical guidance if it repeats or accompanies breathing difficulty, chest pain or worsening symptoms.`,
+    });
+  }
+
+  const cardioFitness = findHealthMetric(categories, "Heart", "Cardio fitness");
+  if (cardioFitness?.tone === "red") {
+    brief.push({
+      tone: "amber",
+      title: "Make cardio fitness the gradual training priority",
+      text: `${compactHealthDate(dataDate)} shows ${metricVsWeekly(cardioFitness)} and remains flagged red in the validated snapshot. Build repeatable moderate aerobic work gradually; use the trend, not one estimate, to judge progress.`,
+    });
+  }
+
+  const timeAsleep = findHealthMetric(categories, "Sleep", "Time asleep");
+  const sleepHours = timeAsleep ? durationHours(timeAsleep.value) : null;
+  if (timeAsleep && sleepHours != null && sleepHours < 7) {
+    brief.push({
+      tone: sleepHours < 6 ? "red" : "amber",
+      title: "Protect tonight’s sleep window",
+      text: `${compactHealthDate(dataDate)} recorded ${metricVsWeekly(timeAsleep)}. That is just under the 7-hour benchmark used for most adults, so favour a consistent wind-down and recovery over adding more load tonight.`,
+    });
+  }
+
+  const dietaryEnergy = findHealthMetric(categories, "Nutrition", "Dietary energy");
+  if (dietaryEnergy) {
+    brief.push({
+      tone: "amber",
+      title: "Complete the nutrition diary before interpreting it",
+      text: `${compactHealthDate(dataDate)} logged ${metricVsWeekly(dietaryEnergy)}. These are recorded entries, not verified total intake; finish meals and portions before treating the difference as a nutrition signal.`,
+    });
+  }
+
+  const steps = findHealthMetric(categories, "Activity", "Steps");
+  const activeEnergy = findHealthMetric(categories, "Activity", "Active energy");
+  if (steps || activeEnergy) {
+    brief.push({
+      tone: "blue",
+      title: "Recover from a high-output movement day",
+      text: `${compactHealthDate(dataDate)} recorded ${steps ? `${metricVsWeekly(steps)} steps` : "elevated movement"}${activeEnergy ? ` and ${metricVsWeekly(activeEnergy)} active energy` : ""}. Bank the activity; prioritise recovery instead of chasing another one-day spike.`,
+    });
+  }
+
+  const restingHeartRate = findHealthMetric(categories, "Heart", "Resting heart rate");
+  const hrv = findHealthMetric(categories, "Heart", "HRV");
+  if (restingHeartRate?.averages?.weekly?.direction === "down" && hrv?.averages?.weekly?.direction === "up") {
+    brief.push({
+      tone: "green",
+      title: "Recovery signals moved in a supportive direction",
+      text: `Resting heart rate was ${metricVsWeekly(restingHeartRate)} and HRV was ${metricVsWeekly(hrv)}. Use the paired movement as encouraging context, not as a diagnosis or a reason to ignore symptoms.`,
+    });
+  }
+
+  if (!brief.length) {
+    brief.push({
+      tone: "blue",
+      title: "Hold the routine and watch the trend",
+      text: `${compactHealthDate(dataDate)} has no validated priority exception. Keep the routine steady and use the 7-day and 30-day views before changing course.`,
+    });
+  }
+
+  return brief.slice(0, 6);
+}
+
 function noteDateGapInsight(
   healthNote: AppleNoteSnapshot | null,
   healthNoteSource: ContentSourceState | null | undefined,
@@ -202,26 +309,8 @@ export function buildHealthInsights(
 
 export function enrichHealthGuidanceActions(
   healthSnapshot: HealthLiveSnapshot,
-  healthNote: AppleNoteSnapshot | null = null,
-  healthNoteSource: ContentSourceState | null = null,
 ): HealthActionSnapshot[] {
-  const derived = buildHealthInsights(healthSnapshot, healthNote, healthNoteSource).map(({ tone, title, text }) => ({ tone, title, text }));
-  const existing = healthSnapshot.actions ?? [];
-  const genericTitles = new Set([
-    "Operational-day coverage",
-    "Partial export-day isolation",
-    "Trend interpretation",
-  ]);
-  const retainedOperational = existing.filter((item) => !genericTitles.has(item.title) || derived.length === 0);
-  const merged = [...derived];
-  for (const item of retainedOperational) {
-    if (!merged.some((candidate) => candidate.title === item.title)) merged.push(item);
-  }
-  for (const item of existing.filter((entry) => genericTitles.has(entry.title))) {
-    if (merged.length >= 8) break;
-    if (!merged.some((candidate) => candidate.title === item.title)) merged.push(item);
-  }
-  return merged.slice(0, 10);
+  return buildDailyHealthBrief(healthSnapshot);
 }
 
 export function enrichHealthSources(healthSnapshot: HealthLiveSnapshot): HealthSourceSnapshot[] {

@@ -1,21 +1,15 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import {
+  BENCHMARK_FACTSHEET_URL,
+  placeholderBenchmarkIndex,
+  SECTOR_BENCHMARK_REGISTRY,
+} from "./sector-benchmark-registry";
 import type { SectorBenchmarkIndex, SectorBenchmarkSnapshot } from "./sector-live-types";
 
 const root = process.cwd();
 const script = path.join(root, "scripts/fetch-sector-benchmarks-yfinance.py");
 const flaskPython = path.join(root, ".venv-flask/bin/python");
-const factsheetUrl = "https://www.niftyindices.com/reports/index-factsheet";
-
-const registry = [
-  { id: "nifty-50", officialName: "NIFTY 50", family: "broad", ticker: "^NSEI" },
-  { id: "nifty-bank", officialName: "NIFTY Bank", family: "sector", ticker: "^NSEBANK" },
-  { id: "nifty-it", officialName: "NIFTY IT", family: "sector", ticker: "^CNXIT" },
-  { id: "nifty-auto", officialName: "NIFTY Auto", family: "sector", ticker: "^CNXAUTO" },
-  { id: "nifty-alpha-50", officialName: "NIFTY Alpha 50", family: "strategy", ticker: "" },
-  { id: "nifty200-alpha-30", officialName: "NIFTY200 Alpha 30", family: "strategy", ticker: "" },
-  { id: "nifty100-low-vol-30", officialName: "NIFTY100 Low Volatility 30", family: "strategy", ticker: "" },
-] as const;
 
 type RawIndex = {
   id: string;
@@ -26,6 +20,9 @@ type RawIndex = {
   maxDrawdown?: number;
   squeezeWidth?: number;
   observedAt?: string;
+  source?: string;
+  sourceUrl?: string;
+  period?: string;
   error?: string;
 };
 
@@ -61,7 +58,7 @@ function runFetcher() {
         reject(error);
       }
     });
-    child.stdin.end(JSON.stringify({ registry }));
+    child.stdin.end(JSON.stringify({ registry: SECTOR_BENCHMARK_REGISTRY }));
   });
 }
 
@@ -71,9 +68,9 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
     const rows = await runFetcher();
     const byId = new Map(rows.map((row) => [row.id, row]));
     const now = new Date().toISOString();
-    const indices: SectorBenchmarkIndex[] = registry.map((item) => {
+    const indices: SectorBenchmarkIndex[] = SECTOR_BENCHMARK_REGISTRY.map((item) => {
       const row = byId.get(item.id);
-      const available = Boolean(row?.level && row.indexedHistory?.length);
+      const available = Boolean(row?.level != null && (row.indexedHistory?.length ?? 0) >= 2);
       return {
         id: item.id,
         officialName: item.officialName,
@@ -84,46 +81,46 @@ export async function getSectorBenchmarkSnapshot(): Promise<SectorBenchmarkSnaps
         volatility: row?.volatility ?? null,
         maxDrawdown: row?.maxDrawdown ?? null,
         squeezeWidth: row?.squeezeWidth ?? null,
-        source: available ? "Yahoo Finance delayed NSE index history" : "NSE Indices canonical definition",
-        sourceUrl: factsheetUrl,
+        source: available ? row?.source ?? "Exact-index delayed EOD history" : "NSE Indices canonical definition",
+        sourceUrl: available ? row?.sourceUrl ?? BENCHMARK_FACTSHEET_URL : BENCHMARK_FACTSHEET_URL,
         observedAt: row?.observedAt ?? now,
-        period: available ? "Up to one year of daily closes" : "Definition configured; exact market series unavailable",
+        period: available ? row?.period ?? "Up to one year of daily closes" : row?.error ?? "Official NSE and exact-index fallback returned insufficient history",
         freshness: available ? "public_delayed" : "unavailable",
       };
     });
-    const available = indices.filter((index) => index.level !== null).length;
+    const availableIndices = SECTOR_BENCHMARK_REGISTRY.filter((item) => {
+      const index = indices.find((candidate) => candidate.id === item.id);
+      return Boolean(index?.level !== null && index.indexedHistory.length >= 2);
+    }).length;
+    const totalIndices = SECTOR_BENCHMARK_REGISTRY.length;
+    const unavailableNames = indices.filter((index) => index.freshness === "unavailable").map((index) => index.officialName);
+    const status: SectorBenchmarkSnapshot["status"] = availableIndices === totalIndices && totalIndices > 0
+      ? "live"
+      : availableIndices > 0
+        ? "partial"
+        : "unavailable";
     const snapshot: SectorBenchmarkSnapshot = {
-      status: available === indices.length ? "live" : available ? "partial" : "unavailable",
+      status,
       asOf: now,
-      message: `${available}/${indices.length} exact index histories available. Strategy indices without an exact public series remain unavailable; ETF proxies are not substituted.`,
+      message: status === "live"
+        ? `${availableIndices}/${totalIndices} official or exact-index daily histories available.`
+        : status === "partial"
+          ? `${availableIndices}/${totalIndices} daily histories available. Insufficient series: ${unavailableNames.join(", ") || "none"}.`
+          : `No benchmark has the minimum two official or exact-index closing observations required for a chart.`,
       indices,
     };
     state.snapshot = snapshot;
     state.expiresAt = Date.now() + 5 * 60_000;
-    if (available) state.lastGood = snapshot;
+    if (availableIndices) state.lastGood = snapshot;
     return snapshot;
   } catch (error) {
     if (state.lastGood) return { ...state.lastGood, status: "cached", message: `Benchmark refresh failed; preserving last validated snapshot. ${String(error)}` };
+    const now = new Date().toISOString();
     return {
       status: "unavailable",
-      asOf: new Date().toISOString(),
+      asOf: now,
       message: `Benchmark history unavailable. ${String(error)}`,
-      indices: registry.map((item) => ({
-        id: item.id,
-        officialName: item.officialName,
-        family: item.family,
-        level: null,
-        returns: { day: null, week: null, month: null, quarter: null, halfYear: null, year: null },
-        indexedHistory: [],
-        volatility: null,
-        maxDrawdown: null,
-        squeezeWidth: null,
-        source: "NSE Indices canonical definition",
-        sourceUrl: factsheetUrl,
-        observedAt: new Date().toISOString(),
-        period: "Unavailable",
-        freshness: "unavailable",
-      })),
+      indices: SECTOR_BENCHMARK_REGISTRY.map((item) => placeholderBenchmarkIndex(item, now)),
     };
   }
 }

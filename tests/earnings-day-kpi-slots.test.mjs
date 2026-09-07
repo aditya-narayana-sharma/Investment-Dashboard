@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { earningsCalendar } from "../app/portfolio-data.ts";
 
@@ -10,16 +11,14 @@ function dayKpiSlots(events) {
       .map((event) => event.kpis[index]?.label?.trim())
       .filter((label) => Boolean(label));
     const unique = [...new Set(labels)];
-    const homogeneous = unique.length === 1;
     return {
       index,
-      header: homogeneous ? unique[0] : `KPI ${index + 1}`,
-      showPerRowLabel: !homogeneous,
+      header: unique.length ? unique.join(" / ") : "Not published",
     };
   });
 }
 
-test("22 Jul mixed Power + Consumer day uses positional KPIs, not first-row labels", () => {
+test("22 Jul mixed Power + Consumer day names every KPI family without first-row assumptions", () => {
   const dayEvents = earningsCalendar.filter((event) => event.date === "22 Jul");
   assert.equal(dayEvents.length, 3);
   assert.deepEqual(
@@ -28,10 +27,14 @@ test("22 Jul mixed Power + Consumer day uses positional KPIs, not first-row labe
   );
 
   const columns = dayKpiSlots(dayEvents);
-  assert.equal(columns.every((column) => column.showPerRowLabel), true);
   assert.deepEqual(
     columns.map((column) => column.header),
-    ["KPI 1", "KPI 2", "KPI 3", "KPI 4"],
+    [
+      "Operational capacity / Reported revenue / Adj. revenue",
+      "Energy sales / Reported EBITDA / Adj. EBITDA",
+      "EBITDA (power supply) / PAT",
+      "Cash profit / Power sales / B2C NOV",
+    ],
   );
 
   for (const event of dayEvents) {
@@ -52,4 +55,23 @@ test("22 Jul mixed Power + Consumer day uses positional KPIs, not first-row labe
   );
   assert.equal(adaniPowerLegacyHits.length, 0);
   assert.equal(eternalLegacyHits.length, 0);
+});
+
+test("13 Aug headers expose the actual company KPI names", () => {
+  const dayEvents = earningsCalendar.filter((event) => event.date === "13 Aug");
+  assert.deepEqual(dayEvents.map((event) => event.symbol), ["IRCTC", "JUBLFOOD", "TMPV"]);
+  assert.deepEqual(
+    dayKpiSlots(dayEvents).map((column) => column.header),
+    [
+      "Revenue / Group revenue",
+      "Profit / Operating EBITDA / Group EBITDA",
+      "Profit before tax / EBITDA margin",
+      "Catering revenue / PAT / PBT before exceptional",
+    ],
+  );
+});
+
+test("earnings rows do not repeat KPI names already carried by headers", () => {
+  const component = readFileSync(new URL("../app/dashboard/EarningsMonthCalendar.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(component, /kpi-row-label/);
 });

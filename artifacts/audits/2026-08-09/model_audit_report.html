@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Investment Dashboard — Comprehensive Audit — 9 Aug 2026</title>
+<style>
+:root{--bg:#0b1020;--panel:#121a2c;--panel2:#172139;--text:#edf3ff;--muted:#aebbd1;--line:#30405e;--blue:#62a8ff;--green:#41d68a;--amber:#ffc857;--red:#ff6b78;--violet:#b68cff}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--blue)}.shell{max-width:1500px;margin:auto;padding:28px}.hero{border:1px solid var(--line);background:linear-gradient(135deg,#172b4f,#17152c);padding:32px;box-shadow:0 14px 45px #0008}.eyebrow{color:var(--blue);font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:40px;line-height:1.05;margin:8px 0}.hero p{color:var(--muted);max-width:1050px}.verdict{display:inline-block;margin-top:10px;padding:9px 13px;border:1px solid var(--red);background:#451924;color:#ffd8dc;font-weight:900;text-transform:uppercase}.kpis{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:10px;margin:18px 0}.kpi{border:1px solid var(--line);background:var(--panel);padding:14px;min-height:92px}.kpi b{display:block;font-size:24px}.kpi span{color:var(--muted);font-size:12px}.toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.toc a{border:1px solid var(--line);background:var(--panel);padding:7px 10px;text-decoration:none}.section{margin:24px 0;border:1px solid var(--line);background:var(--panel);padding:22px}.section h2{margin:0 0 12px;font-size:25px}.section h3{margin:22px 0 10px;color:#dce8ff}.note{border-left:4px solid var(--amber);background:#2c2414;padding:12px 14px;color:#ffe8a8}.danger{border-left-color:var(--red);background:#34161d;color:#ffdce0}.good{border-left-color:var(--green);background:#123124;color:#d8ffe8}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.shot{margin:0;border:1px solid var(--line);background:#080c16;padding:9px}.shot img{display:block;width:100%;height:330px;object-fit:contain;background:#000}.shot figcaption{padding:8px;color:var(--muted)}.table-wrap{overflow:auto;border:1px solid var(--line)}table{width:100%;border-collapse:collapse;min-width:900px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{position:sticky;top:0;background:#1d2b47;color:#dceaff;font-size:12px;text-transform:uppercase}tbody tr:nth-child(even){background:#111a2d}.sev{white-space:nowrap;font-weight:900}.p0{color:#ff91a0}.p1{color:var(--red)}.p2{color:var(--amber)}.p3{color:#9ecbff}.pass{color:var(--green);font-weight:800}.fail{color:var(--red);font-weight:800}.caveat{color:var(--amber);font-weight:800}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.small{font-size:12px;color:var(--muted)}ol.steps li{margin:7px 0}.footer{color:var(--muted);padding:20px 0 50px}@media(max-width:900px){.shell{padding:12px}.hero h1{font-size:31px}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.shot img{height:280px}}
+td{overflow-wrap:anywhere;word-break:normal}
+</style>
+</head>
+<body><main class="shell">
+<header class="hero">
+  <div class="eyebrow">Independent read-only RCA · product design · data validation · model tie-out</div>
+  <h1>Investment Dashboard Comprehensive Audit</h1>
+  <p><strong>Scope:</strong> all reachable commits and refs; all four workspaces; all 14 numbered sections; discovered subpages, charts, APIs, source adapters, calculations, responsive layouts, alignment rules, startup/PDF contracts, accessibility and privacy boundaries. Baseline: <span class="mono">Visual-Overhaul @ 0855923</span>, plus two late-arriving uncommitted Sepia-contrast files recorded separately, Asia/Kolkata, 9 Aug 2026.</p>
+  <div class="verdict">Not ready for portfolio action or “current dashboard” claims</div>
+</header>
+<section class="kpis">
+  <div class="kpi"><b>4 / 4</b><span>workspaces inventoried</span></div>
+  <div class="kpi"><b>14 / 14</b><span>numbered sections mapped</span></div>
+  <div class="kpi"><b>28</b><span>reachable commits/objects audited</span></div>
+  <div class="kpi"><b>104 / 105</b><span>complete Node suite</span></div>
+  <div class="kpi"><b>5 Aug</b><span>Health complete-through vs 8 Aug target</span></div>
+  <div class="kpi"><b>5×</b><span>React hydration error observed</span></div>
+</section>
+<nav class="toc">
+  <a href="#diagnosis">Diagnosis</a><a href="#findings">Priority findings</a><a href="#coverage">Workspace coverage</a><a href="#charts">Charts</a><a href="#pipelines">Data pipelines</a><a href="#layout">Layout & alignment</a><a href="#commits">All commits</a><a href="#validation">Validation</a><a href="#remediation">Remediation</a><a href="#evidence">Evidence & limits</a>
+</nav>
+
+<section class="section" id="diagnosis"><h2>1. Executive diagnosis and permitted use</h2>
+<div class="note danger"><strong>Overall assessment: Needs revision.</strong> The UI is useful for monitoring and triage, but current evidence does not support portfolio-action use, a “fully current” label, or an audited valuation conclusion. Kite is unavailable, Health is stale, Apple-source states are incomplete/cached, market-data state names overstate delayed data, PDF preflight is semantically incomplete, and one layout regression test fails.</div>
+<div class="table-wrap"><table><thead><tr><th>Dimension</th><th>Verdict</th><th>Evidence</th><th>Permitted use</th></tr></thead><tbody>
+<tr><td>Product / UX</td><td class="caveat">Degraded</td><td>Four workspaces render; responsive evidence shows mobile empty-space and density defects; browser console logs React #418 hydration failures.</td><td>Local inspection with caveats; not polished release proof.</td></tr>
+<tr><td>Data freshness</td><td class="fail">Failed</td><td>Saved startup audit: Mail/Podcasts partial and Health stale. Live Health endpoint: complete through 2026-08-05, target 2026-08-08, newest ZIP invalid.</td><td>Historical/monitoring only; never “latest”.</td></tr>
+<tr><td>Calculation integrity</td><td class="caveat">Mixed</td><td>Portfolio fallback totals and several formulas tie mechanically; Health aggregation, sleep dating, return-period comparability and progress-to-target semantics require correction.</td><td>Spot calculations only after source-specific caveats.</td></tr>
+<tr><td>Equity decision readiness</td><td class="fail">Not ready</td><td>No linked forecast-to-valuation/scenario layer, current verified price anchor, source-tied estimate bridge or common-equity downside output.</td><td>Monitoring/triage, not add/trim/exit/hedge decisions.</td></tr>
+<tr><td>Release governance</td><td class="fail">Not canonical</td><td>Product branch and origin/main diverge; no CI, tags or signed releases; duplicate commit chains and contradictory committed audit artifacts.</td><td>Do not treat default branch as verified product release.</td></tr>
+</tbody></table></div>
+</section>
+
+<section class="section" id="findings"><h2>2. Priority findings</h2>
+<div class="table-wrap"><table><thead><tr><th>ID</th><th>Severity</th><th>Finding</th><th>Root cause / evidence</th><th>Impact</th><th>Required verification</th></tr></thead><tbody>
+<tr><td>F-01</td><td class="sev p1">P1</td><td>Health sum metrics can double count overlapping devices/apps.</td><td><span class="mono">scripts/import_apple_health.py:89-91,138-160</span>: record identity includes sourceName, then sums all rows.</td><td>Steps, energy, distance and nutrition can be inflated.</td><td>Overlap fixtures; reconcile multiple dates to HealthKit Statistics.</td></tr>
+<tr><td>F-02</td><td class="sev p1">P1</td><td>Sleep is assigned to start date.</td><td><span class="mono">import_apple_health.py:135-139,224-249</span> groups by <span class="mono">startDate[:10]</span>.</td><td>Cross-midnight sleep can shift to the prior operational day.</td><td>Cross-midnight fixtures and end/wake-day policy test.</td></tr>
+<tr><td>F-03</td><td class="sev p1">P1</td><td>Earnings “verified” is structural, not IR/NSE verification.</td><td><span class="mono">app/earnings-verify.ts:41-99</span> accepts any HTTP URL plus filled KPIs.</td><td>Third-party/incorrect source can populate reported state.</td><td>Source-class allowlist, publication date and KPI-level tie-out.</td></tr>
+<tr><td>F-04</td><td class="sev p1">P1</td><td>Delayed/incomplete yfinance universes can be labelled live.</td><td><span class="mono">sector-live-server.ts:289-316</span>; one priced row is sufficient; prices are daily closes.</td><td>Breadth/rankings can look current while partial.</td><td>Coverage threshold, observation date, public_delayed/partial statuses.</td></tr>
+<tr><td>F-05</td><td class="sev p1">P1</td><td>PDF freshness preflight is semantically incomplete.</td><td><span class="mono">app/report/page.tsx:165-200</span> checks sector HTTP success, not payload status; refresh path uses Mail force=0.</td><td>A “latest” PDF can contain mixed-freshness data.</td><td>HTTP-200/unavailable simulation must block and name source.</td></tr>
+<tr><td>F-06</td><td class="sev p1">P1</td><td>Current dashboard is not current.</td><td>Health through 5 Aug vs target 8 Aug; newest Health ZIP invalid; saved startup audit has two failed rows; Kite unavailable in live UI.</td><td>Portfolio/health decisions may use stale or absent inputs.</td><td>Full startup audit with every required row passing semantic status.</td></tr>
+<tr><td>F-07</td><td class="sev p1">P1</td><td>Private GET routes rely on network boundary, not app authorization.</td><td><span class="mono">flask_gateway.py:387-402</span> returns Health payload; <span class="mono">api/axis-research/pdf/route.ts:46-70</span> serves matched research PDF.</td><td>Any unintended reachable client can access wellness/research content.</td><td>Unauthenticated GET denial tests; authenticated app flow.</td></tr>
+<tr><td>F-08</td><td class="sev p1">P1</td><td>Unavailable S-3 investability inputs are plotted as zero.</td><td><span class="mono">SectorDecisionLab.tsx:164-168</span> converts null score/median to 0.</td><td>“Unavailable” appears as worst score, biasing radar and decision read.</td><td>Keep gaps null; visible unavailable annotation; chart regression test.</td></tr>
+<tr><td>F-09</td><td class="sev p1">P1</td><td>Default/product branch drift.</td><td><span class="mono">Visual-Overhaul...origin/main = 2/2</span>; 91-file product delta; merge-base 5eb666d.</td><td>Default-branch deploy omits current workspaces/APIs/visual changes.</td><td>Canonical merge and signed/tagged verified release.</td></tr>
+<tr><td>F-10</td><td class="sev p1">P1</td><td>Credential-named cookie file remains tracked in history.</td><td><span class="mono">.firecrawl/fii-dii/nse-cookies.txt</span> introduced by 0c71858; content deliberately not inspected.</td><td>Potential session compromise.</td><td>Out-of-band secret review; rotate/revoke; history remediation if needed.</td></tr>
+<tr><td>F-11</td><td class="sev p2">P2</td><td>Risk-selector layout contract fails.</td><td>Complete suite 104/105; expected wrap/visible, CSS retains nowrap/auto/max-height.</td><td>Tabs can scroll/clip and break content-sized alignment.</td><td>Fix CSS and run full Node suite at all target widths.</td></tr>
+<tr><td>F-12</td><td class="sev p2">P2</td><td>React hydration mismatch repeats on workspace navigation.</td><td>Live console recorded five minified React #418 errors.</td><td>SSR/client text mismatch and unstable first paint.</td><td>Development build trace; deterministic server/client dates and labels.</td></tr>
+<tr><td>F-13</td><td class="sev p2">P2</td><td>Health overview violates non-scrolling compact-console intent.</td><td>Expanded H-3 measured 6,504px at mobile; collapsed mobile capture still shows a large blank gap before workspace content.</td><td>High scroll cost and broken compact layout.</td><td>390×844 and landscape geometry assertions with all panels collapsed/open.</td></tr>
+<tr><td>F-14</td><td class="sev p2">P2</td><td>Generated/vendor dump dominates history.</td><td>2,015 tracked .firecrawl paths; 1,987 vendored node_modules; 89.4% of tracked tree.</td><td>Review noise, clone bloat, supply-chain ambiguity.</td><td>Dedicated cleanup and repository-size regression guard.</td></tr>
+<tr><td>F-15</td><td class="sev p2">P2</td><td>Six exact duplicate commit pairs plus redundant stash.</td><td>Patch-identical parallel mobile chains and stash reconstruction.</td><td>Bisect/audit history misleading.</td><td>Document canonical chain; prune obsolete refs only with approval.</td></tr>
+<tr><td>F-16</td><td class="sev p2">P2</td><td>Committed audit evidence is contradictory.</td><td>AUDIT-SUMMARY says production-ready/no warnings while its logs show source failures and build warnings; names absent deliverables.</td><td>Release evidence cannot be trusted.</td><td>Regenerate from commands and fail closed on source status.</td></tr>
+<tr><td>F-17</td><td class="sev p3">P3</td><td>Two uncommitted Sepia-contrast changes appeared after the clean audit baseline.</td><td><span class="mono">app/visual-overhaul.css</span> +101 lines and <span class="mono">tests/rendered-html.test.mjs</span> +6 assertions, both timestamped 07:53:51 IST. They were preserved and not attributed to a commit.</td><td>Final worktree is not clean and the audit baseline differs from handoff state.</td><td>Targeted lint and rendered-HTML tests pass; owner must review and intentionally commit or discard.</td></tr>
+</tbody></table></div>
+</section>
+
+<section class="section" id="coverage"><h2>3. All workspace / section / subsection coverage</h2>
+<div class="table-wrap"><table><thead><tr><th>Workspace</th><th>Section</th><th>Subsections / controls</th><th>Sources</th><th>Live observation</th><th>Assessment</th></tr></thead><tbody>
+<tr><td>Investment</td><td>I-1 Action Board</td><td>To Do Today · Monitor · Completed Today</td><td>Kite, mail/research, local completion state</td><td>Rendered; Kite validation action present; no chart.</td><td class="caveat">Usable with stale-source caveat; completion state is local.</td></tr>
+<tr><td>Investment</td><td>I-2 Portfolio</td><td>Holdings, orders, positions, GTTs, TSLs, allocation, portfolio map</td><td>Kite holdings/positions/orders/GTT/margins/quotes/classifications</td><td>Kite unavailable; 0 charts rendered; explicit empty state.</td><td class="fail">Not assessable for live tie-out.</td></tr>
+<tr><td>Investment</td><td>I-3 Risk</td><td>Risk composition, holding selector/radar, macro scenario lab</td><td>Kite holdings + hardcoded risk/scenario assumptions</td><td>0 live charts due Kite; selector CSS regression confirmed.</td><td class="fail">Needs revision.</td></tr>
+<tr><td>Investment</td><td>I-4 Axis picks</td><td>Call matrix, recommended stocks, recommendation radar</td><td>Axis PDFs/mail, yfinance/Kite preference, hardcoded overrides</td><td>2 chart containers / 3 SVG surfaces rendered.</td><td class="caveat">Mechanically rendered; source precedence and recency unsafe.</td></tr>
+<tr><td>Sectoral</td><td>S-1 Action Board</td><td>Canonical three lanes</td><td>Sector/news/benchmark monitoring actions</td><td>Rendered; no chart.</td><td class="caveat">Layout differs from strict equal-height request by content.</td></tr>
+<tr><td>Sectoral</td><td>S-2 Industry Analytics</td><td>Sector pulse · Companies · Rankings · Life cycle · Market structure · MECE map; industry multi-select</td><td>11 sector universes, yfinance, sector news, static frameworks</td><td>Live page reported 110 priced; data labelled live despite delayed/completeness semantics.</td><td class="fail">Data-state semantics need revision; isolation tests pass.</td></tr>
+<tr><td>Sectoral</td><td>S-3 Benchmarks & Decision Lab</td><td>Benchmarks · Investability · PESTEL · Porter · Macro triggers; local sector selector</td><td>Yahoo delayed benchmarks + qualitative score models</td><td>Benchmark and radar SVGs render; one index unavailable.</td><td class="fail">Null-to-zero radar defect; delayed/live label mismatch.</td></tr>
+<tr><td>Market Intelligence</td><td>M-1 Action Board</td><td>Canonical three lanes</td><td>Mail/calendar/reminder/podcast/earnings actions</td><td>Rendered; no sector-filter descendants.</td><td class="caveat">Source actions depend on incomplete Apple sources.</td></tr>
+<tr><td>Market Intelligence</td><td>M-2 Live Intelligence</td><td>Newsletters · Axis Research · Podcasts; sender/topic collapsibles</td><td>Exact mailboxes and Podcast descriptions/transcripts</td><td>Expanded; 0 charts; current local refresh not proven live.</td><td class="fail">Latest startup says partial; substantive-content tests pass.</td></tr>
+<tr><td>Market Intelligence</td><td>M-3 Earnings Calendar</td><td>Month calendar, event selection, KPI details</td><td>Apple Calendar scheduling + local verified-event model</td><td>No sector dimming/disabled earnings controls.</td><td class="fail">Exclusive location is correct; verification semantics too weak.</td></tr>
+<tr><td>Market Intelligence</td><td>M-4 Calendar + Reminders</td><td>Calendar; Reminders → Completed, Scheduled Important, Work / Job</td><td>Apple Calendar, Reminders</td><td>Expanded inner groups showed 0 entries in this run.</td><td class="caveat">Structure correct; exact-list completeness unproven.</td></tr>
+<tr><td>Health</td><td>H-1 Action Board</td><td>Canonical three lanes</td><td>Health trends/actions</td><td>Collapsed preview rendered.</td><td class="caveat">Must remain incognito-safe; live toggle test passed.</td></tr>
+<tr><td>Health</td><td>H-2 Daily Optimism</td><td>Health note, HealthKit guidance, secondary-source guardrails</td><td>Exact Health Daily note + Health snapshots</td><td>Stale; collapsed mobile card much taller than siblings.</td><td class="fail">Current data stale and alignment uneven.</td></tr>
+<tr><td>Health</td><td>H-3 Vital Metrics</td><td>Weekly/MTD · favourable/context/unfavourable · Activity, Sleep, Heart, Respiratory, Mobility, Nutrition</td><td>Apple Health export + 7D/30D comparisons</td><td>Expanded mobile height 6,504px; explicit missing-date warning; Incognito body/ARIA scan hid values.</td><td class="fail">Data and compact-layout blockers.</td></tr>
+</tbody></table></div>
+<h3>Fresh screenshot evidence</h3><div class="grid2">
+<figure class="shot"><img src="screenshots/01-investment-desktop.png" alt="Investment desktop overview"><figcaption>Step 1 · Investment desktop — <strong>Degraded:</strong> authentication blocker dominates, sections remain reachable.</figcaption></figure>
+<figure class="shot"><img src="screenshots/02-sectors-desktop.png" alt="Sectoral desktop overview"><figcaption>Step 2 · Sectoral desktop — <strong>Degraded:</strong> top-level structure renders; live market semantics remain caveated.</figcaption></figure>
+<figure class="shot"><img src="screenshots/03-intelligence-desktop.png" alt="Market Intelligence desktop overview"><figcaption>Step 3 · Market Intelligence desktop — <strong>Structurally healthy:</strong> M-1–M-4 complete and unfiltered; sources not current.</figcaption></figure>
+<figure class="shot"><img src="screenshots/04-health-desktop.png" alt="Health desktop overview"><figcaption>Step 4 · Health desktop — <strong>Degraded:</strong> stale status and large masthead-to-content cost.</figcaption></figure>
+<figure class="shot"><img src="screenshots/05-investment-mobile.png" alt="Investment mobile overview"><figcaption>Step 5 · Investment mobile — <strong>Needs revision:</strong> dense/cropped first-read experience.</figcaption></figure>
+<figure class="shot"><img src="screenshots/06-sectors-mobile.png" alt="Sectoral mobile overview"><figcaption>Step 6 · Sectoral mobile — <strong>Usable with caveats:</strong> section cards fit, horizontal nav is dense.</figcaption></figure>
+<figure class="shot"><img src="screenshots/07-intelligence-mobile.png" alt="Market Intelligence mobile overview"><figcaption>Step 7 · Market Intelligence mobile — <strong>Usable with caveats:</strong> correct section order but alert/header consumes much of first viewport.</figcaption></figure>
+<figure class="shot"><img src="screenshots/08-health-mobile.png" alt="Health mobile overview with values collapsed"><figcaption>Step 8 · Health mobile — <strong>Needs revision:</strong> large unexplained blank region breaks compact/no-empty-space requirement.</figcaption></figure>
+</div></section>
+
+<section class="section" id="charts"><h2>4. All discovered chart families</h2>
+<div class="table-wrap"><table><thead><tr><th>Chart</th><th>Location</th><th>Data / formula</th><th>Runtime result</th><th>Integrity / accessibility finding</th></tr></thead><tbody>
+<tr><td>Nested allocation donut</td><td>I-2</td><td>Market cap → sector → subsector → holding weights</td><td>Blocked by Kite unavailable.</td><td>Formula tests pass; live total not tied; SVG relies on dense in-chart text.</td></tr>
+<tr><td>Risk composition bars</td><td>I-3</td><td>Six 1–5 qualitative inputs; contribution score/6</td><td>Blocked by Kite state.</td><td>Mechanically consistent but assumptions lack source registry.</td></tr>
+<tr><td>Holding risk radar</td><td>I-3</td><td>Selected holding risk axes vs portfolio</td><td>Blocked by live holdings.</td><td>Selector overflow test fails; SVG keyboard/summary support incomplete.</td></tr>
+<tr><td>Axis recommendation radar</td><td>I-4</td><td>Recommendation risk profiles</td><td>Rendered (part of 2 containers / 3 SVGs).</td><td>Recency-blind hardcoded call precedence can contaminate driver values.</td></tr>
+<tr><td>Sector company scatter/bubble ×2</td><td>S-2 Companies / Rankings</td><td>Price/return/ranking company universe</td><td>Not rendered in unfiltered audit state.</td><td>Requires selected-industry and complete delayed-data coverage; label collision logic exists.</td></tr>
+<tr><td>Benchmark line chart</td><td>S-3 Benchmarks</td><td>Rebased delayed index histories</td><td>Rendered; 1 configured index unavailable.</td><td>Row says delayed while aggregate can say live; missing history/horizon comparability caveat.</td></tr>
+<tr><td>Investability / PESTEL / Porter radar</td><td>S-3</td><td>Qualitative 1–5 score families</td><td>Rendered.</td><td>Null values are coerced to zero; chart can misstate unavailable as worst.</td></tr>
+<tr><td>Macro trigger bars</td><td>S-3 Macro triggers</td><td>Sector-local trigger scores</td><td>Component mapped.</td><td>Assumption-led; no source-to-score ledger or date owner.</td></tr>
+<tr><td>Health spark filaments</td><td>H-3 tiles</td><td>Per-metric daily history</td><td>Rendered only when H-3 expanded; screenshot withheld to avoid private values.</td><td>History source is real per metric, but Health aggregation/window completeness is unreliable.</td></tr>
+<tr><td>Print allocation SVG</td><td>/report</td><td>Same validated portfolio allocation</td><td>Source inspected; final export not run.</td><td>PDF contract can pass HTTP-200/unavailable sectors; must block semantically.</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="pipelines"><h2>5. Data pipeline, calculation and source tie-out ledger</h2>
+<div class="table-wrap"><table><thead><tr><th>Pipeline</th><th>Required posture</th><th>Observed</th><th>Validation</th><th>Result / gap</th></tr></thead><tbody>
+<tr><td>Kite</td><td>Live holdings, positions, orders, GTTs, margins, quotes, P&amp;L, classifications</td><td>Unavailable/authentication required in live UI</td><td>No trading action executed; no raw broker payload inspected.</td><td class="fail">Blocked; current portfolio not tied.</td></tr>
+<tr><td>Mail — Newsletters</td><td>Exact iCloud/Newsletters, live, substantive-only</td><td>Saved aggregate content partial; current exact UI inspection not performed</td><td>Sanitizer and scoping tests pass.</td><td class="caveat">Method protected; currentness unverified.</td></tr>
+<tr><td>Mail — Axis Research</td><td>Exact mailbox, live, primary research provenance</td><td>Saved content partial; local archive present</td><td>PDF matching/scoping tests pass.</td><td class="caveat">Current tie-out and access authorization unresolved.</td></tr>
+<tr><td>Reminders</td><td>Every item in exact Job and Earnings lists</td><td>Runtime M-4 showed 0; broad reader marks source independently</td><td>Partition tests pass.</td><td class="fail">Exact-list existence/completeness not proven.</td></tr>
+<tr><td>Calendar</td><td>All events through D-1; earnings only scheduling evidence</td><td>Saved/cached posture; M-4 0 in this run</td><td>Earnings exclusion and date tests pass.</td><td class="caveat">Current read not independently verified.</td></tr>
+<tr><td>Health note</td><td>Exact Health Daily note; no v2</td><td>Presentation masked correctly in Incognito runtime test</td><td>Parser tests pass.</td><td class="caveat">Current note source freshness not proven.</td></tr>
+<tr><td>Apple Health export</td><td>Live through target 8 Aug; valid newest ZIP</td><td>Through 5 Aug; newest ZIP invalid; fallback retained</td><td>Archive tests pass; live endpoint exposed exact metadata.</td><td class="fail">3-day gap plus aggregation defects.</td></tr>
+<tr><td>Podcasts</td><td>Live eligible descriptions/transcripts; normalized-title dedupe</td><td>Saved Mail/Podcasts aggregate partial; permission state reported by pipeline audit</td><td>Sanitizer/dedupe/transcript-label tests pass.</td><td class="fail">Startup top-level status can mask Podcast failure.</td></tr>
+<tr><td>Earnings</td><td>IR/NSE-first independent verification</td><td>Status can become verified from any HTTP URL + filled KPI</td><td>Structural tests pass.</td><td class="fail">Evidence standard insufficient.</td></tr>
+<tr><td>Sector quotes</td><td>Complete universe with correct delayed/live label</td><td>110 priced in runtime; any priced row yields live</td><td>Quote route test passes.</td><td class="fail">Coverage/date semantics unsafe.</td></tr>
+<tr><td>Sector news</td><td>Current, source-specific, attempted-at visible</td><td>Live runtime list; retained failure lacks attemptedAt</td><td>Static inspection.</td><td class="caveat">Refresh failure age ambiguous.</td></tr>
+<tr><td>NSE benchmarks</td><td>Authoritative/delayed labels and complete configured set</td><td>Yahoo public delayed; NIFTY200 Alpha 30 unavailable</td><td>S-3 rendered.</td><td class="caveat">Aggregate live label inconsistent.</td></tr>
+<tr><td>PDF</td><td>Immediate semantic refresh for Kite, Mail, earnings, all sectors</td><td>Not exported; code checks HTTP success for sectors and force=0 content</td><td>Source inspection only.</td><td class="fail">Contract not met.</td></tr>
+</tbody></table></div>
+<h3>Calculation spot checks</h3><div class="table-wrap"><table><thead><tr><th>Calculation</th><th>Result</th><th>Evidence / caveat</th></tr></thead><tbody>
+<tr><td>Fallback portfolio value</td><td class="pass">Verified mechanically</td><td>Holdings sum ₹14,439; invested ₹13,567.10; P&amp;L ₹871.90; 6.426% rounds to 6.43%.</td></tr>
+<tr><td>Fallback allocations</td><td class="pass">Verified mechanically</td><td>Market-cap and sector values each sum to ₹14,439 / 100%.</td></tr>
+<tr><td>Live holding weights / P&amp;L</td><td class="caveat">Formula verified, live values not verified</td><td>Uses holding value divided by total; broker session unavailable.</td></tr>
+<tr><td>FII 5-session net</td><td class="pass">−₹7,182.08cr</td><td>Recomputed from cited cached cash prints; snapshot is dated, not current.</td></tr>
+<tr><td>DII 5-session net</td><td class="pass">+₹8,637.58cr</td><td>Recomputed; same date caveat.</td></tr>
+<tr><td>Health 7D/30D averages</td><td class="caveat">Mechanically valid, method unsafe</td><td>Averages available days with shifting n; comparison windows can be incomplete; range metrics use midpoint of extremes.</td></tr>
+<tr><td>Axis implied upside</td><td class="pass">Formula verified</td><td>(target/current − 1) × 100; price and target provenance/corporate-action normalization missing.</td></tr>
+<tr><td>“Progress to target”</td><td class="fail">Definition mismatch</td><td>Implementation uses CMP/target even when entry exists; not progress from entry to target.</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="layout"><h2>6. Layout, compactness, alignment and accessibility</h2>
+<div class="table-wrap"><table><thead><tr><th>Surface</th><th>Width/height contract</th><th>Observed</th><th>Finding</th><th>Priority</th></tr></thead><tbody>
+<tr><td>Global masthead</td><td>Compact first-read layer</td><td>Header + Kite blocker consumes most mobile first viewport.</td><td>Move details behind compact status summary on small screens.</td><td class="p2">P2</td></tr>
+<tr><td>Workspace tabs</td><td>Four equal, readable controls</td><td>Mobile uses horizontal overflow; selected far-right workspace leaves partial adjacent cards.</td><td>Valid responsive pattern, but labels truncate and context is noisy.</td><td class="p3">P3</td></tr>
+<tr><td>Section tabs</td><td>Equal-width within workspace</td><td>M-1–M-4 and S-1–S-3 fit; narrow labels wrap inconsistently.</td><td>Use equal-height labels and consistent two-line cap.</td><td class="p3">P3</td></tr>
+<tr><td>Kanban lanes</td><td>Identical three-lane anatomy</td><td>Shared component is canonical; content-sized lanes do not guarantee equal heights.</td><td>User requested equal column boxes; implementation favors content sizing.</td><td class="p2">P2</td></tr>
+<tr><td>I-3 risk selector</td><td>Content-sized, wrap, overflow visible</td><td>Full suite fails: nowrap/auto/max-height remains.</td><td>Confirmed CSS regression.</td><td class="p2">P2</td></tr>
+<tr><td>I-3/I-4 chart columns</td><td>Equal paired boxes</td><td>Fixed/min-height mixtures and content-dependent legends create unequal heights.</td><td>Add shared grid row stretch and bounded internal scroll.</td><td class="p2">P2</td></tr>
+<tr><td>S-3 decision layout</td><td>Chart and explanation columns aligned</td><td>Chart fixed heights; side card count/content varies.</td><td>Equal-width can hold, equal-height is not guaranteed.</td><td class="p2">P2</td></tr>
+<tr><td>M-2 feeds</td><td>No artificial blank columns</td><td>Masonry/content-sized design avoids equal-height stretching.</td><td>Good for empty-space goal; exact visual state blocked by partial source.</td><td class="pass">Pass with caveat</td></tr>
+<tr><td>M-4 groups</td><td>Calendar + Reminder groups compact/aligned</td><td>Runtime 0-entry state; source CSS includes varied max-heights.</td><td>Empty-state geometry needs screenshot regression.</td><td class="p2">P2</td></tr>
+<tr><td>Health H-1–H-3</td><td>Non-scrolling three-panel console</td><td>Collapsed mobile has a large blank region; expanded H-3 measured 6,504px.</td><td>Confirmed contract violation.</td><td class="p1">P1/P2</td></tr>
+<tr><td>Charts accessibility</td><td>Keyboard/AT summaries, not color-only</td><td>Several Recharts SVGs lack explicit textual summaries/roles; tooltips are pointer-centric.</td><td>Screenshot review cannot prove WCAG; keyboard/AT audit still required.</td><td class="p2">P2</td></tr>
+<tr><td>Incognito</td><td>No values in visible/a11y metadata</td><td>Runtime toggle body + title/ARIA scan hid Health dates/values; one generic refresh title retained “HealthKit”.</td><td>Runtime check passes; static freshness pass-through remains a maintainability risk worth testing.</td><td class="caveat">Caveat</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="commits"><h2>7. Complete reachable commit / object audit</h2>
+<p class="small">All locally reachable heads, remote-tracking refs and stash objects were included. Remote facts use locally cached refs; no fetch was performed.</p>
+<div class="table-wrap"><table><thead><tr><th>Object</th><th>Date</th><th>Surface / purpose</th><th>Audit result</th></tr></thead><tbody>
+<tr><td class="mono">3242281</td><td>13 Jul</td><td>Initial dashboard/report/Sites scaffold</td><td>Huge bootstrap; only rendered-HTML test.</td></tr>
+<tr><td class="mono">f5b6f78</td><td>13 Jul</td><td>Dashboard QA/tests</td><td>Focused test commit; execution not recorded.</td></tr>
+<tr><td class="mono">a5ea522</td><td>22 Jul</td><td>111-file live-platform expansion</td><td>Over-broad; 2 test files for many security/data boundaries.</td></tr>
+<tr><td class="mono">40f703e</td><td>22 Jul</td><td>Freshness hardening/workspace split</td><td>Improved tests; still large migration.</td></tr>
+<tr><td class="mono">5cc6adf / 5924c27</td><td>22 Jul</td><td>Kite reuse, donut, recommendations, UI/service</td><td>Exact duplicate patch pair; generated artifacts mixed in.</td></tr>
+<tr><td class="mono">6010f53</td><td>22 Jul</td><td>Stash untracked helper tree</td><td>Not independent product work.</td></tr>
+<tr><td class="mono">fa94852</td><td>22 Jul</td><td>Empty stash index helper</td><td>Same tree as base.</td></tr>
+<tr><td class="mono">efda76f</td><td>22 Jul</td><td>Three-parent stash wrapper</td><td>Redundant reconstruction of committed work.</td></tr>
+<tr><td class="mono">66efa1c / 33ca078</td><td>22 Jul</td><td>Hybrid iPhone shell/HealthKit/pairing</td><td>Exact duplicate patch pair.</td></tr>
+<tr><td class="mono">913b1b0 / 54424bd</td><td>22 Jul</td><td>Sector/mobile contract fix</td><td>Exact duplicate patch pair.</td></tr>
+<tr><td class="mono">c5a08fa / 9678fc9</td><td>22 Jul</td><td>Swift shell portability</td><td>Exact duplicate; no test change.</td></tr>
+<tr><td class="mono">13411f5 / 033f950</td><td>22 Jul</td><td>Native install workflow</td><td>Exact duplicate; runner script but no recorded execution.</td></tr>
+<tr><td class="mono">ba9b9c1 / efdba55</td><td>22 Jul</td><td>Native release/Health security</td><td>Exact duplicate; security-sensitive evidence weak.</td></tr>
+<tr><td class="mono">d47b4cb</td><td>29 Jul</td><td>86-file console overhaul</td><td>Best documented major commit; explicit lint/build/targeted tests.</td></tr>
+<tr><td class="mono">0f29899</td><td>29 Jul</td><td>PR merge of d47b4cb</td><td>Topology marker; no new tree content.</td></tr>
+<tr><td class="mono">0c71858</td><td>29 Jul</td><td>2,004-file Firecrawl dump</td><td>Repository hygiene/security failure; no tests.</td></tr>
+<tr><td class="mono">5eb666d</td><td>29 Jul</td><td>Merge Firecrawl + dashboard overhaul</td><td>Shared base that carries bloat into every line.</td></tr>
+<tr><td class="mono">1d65e39</td><td>6 Aug</td><td>Phase 3, M-1–M-4, Health/freshness, audit artifacts</td><td>Strong test delta; audit artifacts contradict failed source logs.</td></tr>
+<tr><td class="mono">0855923</td><td>7 Aug</td><td>Visual overhaul, 46 files/+7,221</td><td>Current product; two-word message; layout/data regressions present.</td></tr>
+<tr><td class="mono">15de454</td><td>7 Aug</td><td>README rewrite on default fork</td><td>Documentation-only divergence.</td></tr>
+<tr><td class="mono">c1efbeb / c0a8549</td><td>7 Aug</td><td>GitHub MCP README smoke test</td><td>Patch-identical sibling commits; origin/main tip is not product release.</td></tr>
+</tbody></table></div>
+<h3>Ref health</h3><div class="table-wrap"><table><thead><tr><th>Ref</th><th>State</th><th>Risk</th></tr></thead><tbody>
+<tr><td>Visual-Overhaul / origin/Visual-Overhaul</td><td class="pass">Exact at 0855923</td><td>Current local product line; not default branch.</td></tr>
+<tr><td>main</td><td class="caveat">1 ahead / 2 behind origin/main</td><td>Not canonical.</td></tr>
+<tr><td>origin/main</td><td class="fail">Two commits diverged from product line</td><td>Default deploy omits Phase 3 + Visual Overhaul.</td></tr>
+<tr><td>Two local topic branches</td><td class="caveat">Upstream gone</td><td>Obsolete/duplicate checkout risk.</td></tr>
+<tr><td>Tags / CI / signatures</td><td class="fail">None / none / unsigned</td><td>No immutable tested release anchor.</td></tr>
+<tr><td>Working tree at handoff</td><td class="caveat">2 modified source/test files + audit artifacts</td><td>Late Sepia contrast enforcement is uncommitted; audit artifacts are new.</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="validation"><h2>8. Validation and reproduction evidence</h2>
+<div class="table-wrap"><table><thead><tr><th>Check</th><th>Result</th><th>Interpretation</th></tr></thead><tbody>
+<tr><td><span class="mono">npm run lint</span></td><td class="pass">Pass</td><td>Static lint clean.</td></tr>
+<tr><td><span class="mono">npm run build</span></td><td class="pass">Pass with warnings</td><td>Node DEP0205 deprecation; Vinext cannot classify some routes statically.</td></tr>
+<tr><td><span class="mono">npm test</span></td><td class="pass">Pass</td><td>Package-selected 16 rendered + 28 targeted Node + 5 Health tests.</td></tr>
+<tr><td>Complete <span class="mono">tests/*.test.mjs</span></td><td class="fail">104/105</td><td>Risk panel content-sized/wrap contract fails.</td></tr>
+<tr><td>Flask gateway via repository venv</td><td class="pass">8/8</td><td>System Python lacks Flask; correct venv passes.</td></tr>
+<tr><td>RCA scanner</td><td class="pass">317 files</td><td>4 workspaces, 14 numbered sections after manual/static reconciliation, 14 API routes, 4 chart-bearing files.</td></tr>
+<tr><td>Mac URL</td><td class="pass">HTTP 200</td><td>Already-running service; no restart performed.</td></tr>
+<tr><td>Tailscale URL</td><td class="fail">Not verified</td><td>Configured hostname did not resolve from audit environment.</td></tr>
+<tr><td>Live console</td><td class="fail">5 React #418 errors</td><td>Hydration mismatch on navigation/reload states.</td></tr>
+<tr><td>Filter isolation</td><td class="pass">Pass</td><td>Market Intelligence had zero sector-filter/dimmed descendants and zero disabled earnings controls.</td></tr>
+<tr><td>Incognito body/a11y scan</td><td class="pass">Pass in captured state</td><td>No Health dates/values/source metadata in visible body or title/ARIA attributes; screenshot kept collapsed.</td></tr>
+<tr><td>Late Sepia patch</td><td class="pass">Lint + rendered HTML 16/16</td><td>Uncommitted 107-line change validated after discovery; not part of the earlier full-suite baseline.</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="remediation"><h2>9. Prioritized remediation plan</h2>
+<div class="table-wrap"><table><thead><tr><th>Priority</th><th>Action</th><th>Owner surface</th><th>Acceptance test</th></tr></thead><tbody>
+<tr><td>1</td><td>Correct Health overlap dedupe, sleep-day attribution and complete-window comparisons.</td><td>Data / Health</td><td>Multi-device overlap and cross-midnight fixtures; HealthKit reconciliation; no live state with missing target coverage.</td></tr>
+<tr><td>2</td><td>Require server authorization for Health snapshot and Axis PDF GETs.</td><td>Security / gateway</td><td>Unauthenticated direct GET denied; paired/session flow succeeds.</td></tr>
+<tr><td>3</td><td>Replace structural earnings verification with IR/NSE-first source and KPI tie-out.</td><td>Data / earnings</td><td>Wrong-domain URL fails; each KPI carries primary source and publication date.</td></tr>
+<tr><td>4</td><td>Correct sector delayed/live, constituent completeness, aggregation and period labels.</td><td>Market data</td><td>One missing symbol/sector yields partial; requested horizon without full history is non-comparable.</td></tr>
+<tr><td>5</td><td>Enforce semantic PDF refresh and force current Mail/Axis before export.</td><td>Report pipeline</td><td>HTTP-200/unavailable source blocks export with exact failed source.</td></tr>
+<tr><td>6</td><td>Fix risk-selector CSS, Health compact layout, mobile blank gap, equal-height paired panels and hydration mismatch.</td><td>UI / CSS / SSR</td><td>Full Node suite green; 1440 desktop, 390×844 portrait and landscape geometry assertions; zero console errors.</td></tr>
+<tr><td>7</td><td>Establish canonical branch, merge divergence, remove generated/vendor tracking and investigate cookie history.</td><td>Git / release</td><td>One release branch; CI green; signed tag; secret scan clean; repository size guard.</td></tr>
+<tr><td>8</td><td>Add source/as-of/owner registry for every qualitative score and Axis call; remove recency-blind override.</td><td>Research governance</td><td>Newer/older/closed-call conflict tests; every score traceable.</td></tr>
+<tr><td>9</td><td>Add a linked valuation/scenario decision layer or state monitoring-only use prominently.</td><td>Equity model</td><td>Verified spot, estimate bridge, base/up/down, downside mechanism, evidence gaps and action rules—or explicit exclusion.</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="evidence"><h2>10. Evidence limits, caveats and audit steps</h2>
+<ol class="steps">
+<li><strong>Step 1 — Repository baseline:</strong> clean worktree at 0855923; health: degraded due branch divergence. Two uncommitted Sepia files appeared later and are recorded separately.</li>
+<li><strong>Step 2 — Full reachable history:</strong> 28 commit/merge/stash objects mapped; health: degraded due duplicates, bloat and missing release controls.</li>
+<li><strong>Step 3 — Static workspace graph:</strong> all workspaces, numbered sections, subpages, controls and chart families mapped; health: complete inventory, material defects found.</li>
+<li><strong>Step 4 — Desktop capture:</strong> four current workspace overviews captured and inspected; health: structurally present, source-blocked.</li>
+<li><strong>Step 5 — Mobile capture:</strong> four current workspace overviews captured and inspected; health: needs revision for density/blank space.</li>
+<li><strong>Step 6 — Interaction checks:</strong> collapsibles, S-2 isolation, M-3 enabled state and Incognito checked; health: isolation/incognito pass in observed state.</li>
+<li><strong>Step 7 — Pipeline/model tie-out:</strong> sources, calculations and privacy routes inspected without raw private records; health: not decision-ready.</li>
+<li><strong>Step 8 — Verification:</strong> lint, build, package tests, complete Node tests and Flask/Health tests run; health: one Node regression and runtime hydration errors.</li>
+<li><strong>Step 9 — Delivery:</strong> this HTML report rendered locally and visually inspected; health: ready to share as an audit, not as proof the dashboard is current.</li>
+</ol>
+<div class="note"><strong>Evidence limits:</strong> no external source was refreshed, no service was restarted, no trading action was taken, and no raw Kite, Mail, Calendar, Reminder, Note, Podcast or Health record is reproduced here. Apple-app UI inspection and iPhone Mirroring were not performed. The final PDF was not generated because the freshness contract could not pass. The Tailscale URL was not resolvable. No user workbook exists; TypeScript/Python models were audited instead. Screenshot evidence supports visible UX findings but does not establish full WCAG compliance.</div>
+<p class="small">Supporting evidence: <a href="commit-change-map.md">commit change map</a>, <a href="workspace-static-coverage.md">workspace/static coverage</a>, <a href="data-pipeline-tieout.md">data-pipeline tie-out</a>, and <a href="rca-inventory.md">RCA inventory</a> (<a href="rca-inventory.json">JSON</a>). Private payload bodies were excluded.</p>
+</section>
+<footer class="footer">Generated 9 Aug 2026 · Asia/Kolkata · audit artifacts added. Two independently appearing uncommitted Sepia files were preserved without modification by the primary audit.</footer>
+</main></body></html>

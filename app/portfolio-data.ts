@@ -107,22 +107,22 @@ export const axisRecommendations = [
 ];
 
 export const axisArchiveAudit = {
-  filesAttempted: 188,
-  validPdfs: 183,
-  pagesRead: 2479,
+  filesAttempted: 209,
+  validPdfs: 122,
+  pagesRead: 1246,
   duplicateGroups: 1,
   invalidFiles: [
     "Archive/DailyReports/Axis_MorningNote-2026-06-29.pdf",
     "Archive/DailyReports/Axis_MorningNote-2026-06-30.pdf",
-    "Axis_MorningNote-2026-07-01.pdf",
-    "_try_mn.pdf",
-    "_tryx.pdf",
+    "Axis Reports/Axis_MorningNote-2026-07-01.pdf",
   ],
 };
 
 export type EarningsKpi = { label: string; value: string; change: string; tone?: "green" | "amber" | "red" };
 export type EarningsEvent = {
   date: string;
+  /** Authoritative YYYY-MM-DD when supplied by a source calendar. */
+  dateKey?: string;
   day: string;
   symbol: string;
   name: string;
@@ -133,6 +133,17 @@ export type EarningsEvent = {
   kpis: EarningsKpi[];
   summary?: string;
   source?: string;
+  /** Stable Apple Calendar source identifier for scheduling evidence. */
+  calendarEventId?: string;
+  /** Distinguishes results, calls, and board meetings on the same date. */
+  eventKind?: string;
+  /** Scheduling warnings produced by canonical market-holiday overlap checks. */
+  holidayConflicts?: Array<{
+    eventKey: string;
+    date: string;
+    market: "NSE" | "US";
+    holiday: string;
+  }>;
 };
 
 export const earningsAsOf = new Intl.DateTimeFormat("en-IN", {
@@ -140,8 +151,6 @@ export const earningsAsOf = new Intl.DateTimeFormat("en-IN", {
   timeStyle: "short",
   timeZone: "Asia/Kolkata",
 }).format(new Date());
-
-const pendingKpis = (...labels: string[]): EarningsKpi[] => labels.map((label) => ({ label, value: "", change: "" }));
 
 export const earningsCalendar: EarningsEvent[] = [
   { date: "10 Jul", day: "10", symbol: "LTF", name: "L&T Finance", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
@@ -186,7 +195,12 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "PAT", value: "₹7,114 Cr", change: "+23% YoY", tone: "green" },
     { label: "Gross / net NPA", value: "1.28% / 0.39%", change: "GNPA improved YoY", tone: "green" },
   ], summary: "Profit and NII advanced while gross asset quality improved. Net credit cost was 0.63%, providing a useful risk check alongside margin progression.", source: "https://www.moneycontrol.com/news/business/earnings/axis-bank-q1-profit-rises-23-to-rs-7-114-crore-nii-grows-8-asset-quality-improves-13977302.html" },
-  { date: "30 Jul", day: "30", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Pending", portfolio: false, period: "Q1 FY27", reported: false, kpis: pendingKpis("Net interest income", "PAT", "AUM", "Net interest margin"), summary: "Q1 FY27 KPIs remain blank. Exchange-linked coverage places the board meeting to approve unaudited results on 30 Jul 2026, with the analyst call scheduled for 31 Jul — not yet a published result.", source: "https://www.sahi.com/news/irfc-schedules-q1-earnings-call-for-july-31-at-11-am-2880-PE1_COR" },
+  { date: "30 Jul", day: "30", symbol: "IRFC", name: "Indian Railway Finance Corp", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
+    { label: "Net interest income", value: "₹1,970 Cr", change: "+9.8% YoY", tone: "green" },
+    { label: "PAT", value: "₹1,927.21 Cr", change: "+10.4% YoY", tone: "green" },
+    { label: "AUM", value: "₹4.79 Lakh Cr", change: "vs ₹4.85 Lakh Cr QoQ", tone: "amber" },
+    { label: "Net interest margin", value: "1.48%", change: "Annualised", tone: "green" },
+  ], summary: "IRFC reported its highest-ever quarterly total income of ₹8,391.34 crore and PAT of ₹1,927.21 crore while retaining a zero-NPA asset book. AUM moderated sequentially to ₹4.79 lakh crore.", source: "https://irfc.co.in/investors/financial-information" },
   { date: "20 Jul", day: "20", symbol: "ULTRACEMCO", name: "UltraTech Cement", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, kpis: [
     { label: "Sales volume", value: "41.31 Mt", change: "+12.2% YoY", tone: "green" },
     { label: "Revenue", value: "₹24,648 Cr", change: "+15.9% YoY", tone: "green" },
@@ -247,6 +261,97 @@ export const earningsCalendar: EarningsEvent[] = [
     { label: "Gross NPA", value: "1.99%", change: "vs 2.24% YoY", tone: "green" },
     { label: "Net NPA", value: "0.5%", change: "vs 0.6% prior", tone: "green" },
   ], summary: "PAT fell 72% YoY to ₹1,278 crore after absorbing the ~₹5,700 crore out-of-court NMC Health settlement. NII still rose 9.5% YoY to ₹12,524 crore; GNPA improved to 1.99% and NNPA to 0.5%. NIM and credit cost were not cited in the Moneycontrol primary coverage used here, so those slots are omitted rather than fabricated.", source: "https://www.moneycontrol.com/news/business/earnings/bank-of-baroda-q1-net-profit-falls-72-to-rs-1-278-crore-on-nmc-settlement-13982781.html" },
+  { date: "31 Jul", dateKey: "2026-07-31", day: "31", symbol: "ITC", name: "ITC", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", kpis: [
+    { label: "Revenue", value: "₹26,943 Cr", change: "+28% YoY · ops", tone: "green" },
+    { label: "Profit", value: "₹3,579 Cr", change: "−27% YoY · standalone PAT", tone: "red" },
+    { label: "Operating margin", value: "26.7%", change: "EBITDA margin · vs 31.7% YoY", tone: "amber" },
+    { label: "Management guidance", value: "Tax + West Asia", change: "Cigarette tax response · agri disruptions", tone: "amber" },
+  ], summary: "Board approved Q1 FY27 on 31 Jul 2026. Standalone revenue from operations rose 28% YoY to ₹26,943 crore while PAT fell 27% YoY to ₹3,579 crore and EBITDA fell ~28% to ₹4,514 crore (margin 26.7%). FMCG-Others revenue +12% YoY; cigarette tax reclassification and West Asia trade disruptions weighed on profitability.", source: "https://www.moneycontrol.com/news/business/earnings/itc-q1-results-net-profit-falls-27-to-rs-3-579-crore-misses-estimates-13989971.html" },
+  { date: "31 Jul", dateKey: "2026-07-31", day: "31", symbol: "TATAPOWER", name: "Tata Power", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", kpis: [
+    { label: "Revenue", value: "₹18,898 Cr", change: "+8% YoY · consolidated", tone: "green" },
+    { label: "Profit", value: "₹1,401 Cr", change: "+11% YoY · PAT", tone: "green" },
+    { label: "Operating margin", value: "22.5%", change: "EBITDA ₹4,249 Cr · +8% YoY", tone: "green" },
+    { label: "Management guidance", value: "Capex ₹5,375 Cr", change: "Record quarterly deployment · 12 GW renewables", tone: "green" },
+  ], summary: "Company IR (27 Jul 2026; calendar day 31 Jul): consolidated PAT ₹1,401 crore (+11% YoY), revenue ₹18,898 crore (+8% YoY), EBITDA ₹4,249 crore (+8% YoY). Highest-ever quarterly capex ₹5,375 crore; renewables portfolio 12 GW.", source: "https://www.tatapower.com/news-and-media/media-releases/tata-power-reports-q1fy27-pat-of-1401-crore" },
+  // August 2026 — Apple Calendar Earnings; verified IR/NSE rows replace pending placeholders when available.
+  { date: "3 Aug", dateKey: "2026-08-03", day: "03", symbol: "DLF", name: "DLF", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "E3CCF971-912C-4AB1-8AD7-76E9B1F28F96", kpis: [
+    { label: "Revenue", value: "₹1,280 Cr", change: "−53% YoY · ops", tone: "red" },
+    { label: "Profit", value: "₹794 Cr", change: "+4% YoY · PAT", tone: "green" },
+    { label: "Operating margin", value: "11.7%", change: "EBITDA margin · vs 13.4% YoY", tone: "amber" },
+    { label: "Management guidance", value: "Launches deferred", change: "Bookings ₹657 Cr · net cash ₹15,200 Cr", tone: "amber" },
+  ], summary: "Q1 FY27: consolidated PAT ₹794 crore (+4% YoY) while revenue from operations fell ~53% YoY to ₹1,280 crore on lower completions and deferred residential launches. EBITDA margin 11.7%; operating cash flow ₹1,317 crore; net cash ₹15,200 crore.", source: "https://www.moneycontrol.com/news/business/real-estate/dlf-q1fy27-profit-rises-4-to-rs-794-crore-revenue-and-sales-bookings-decline-on-delayed-launches-13992613.html" },
+  { date: "4 Aug", dateKey: "2026-08-04", day: "04", symbol: "BHARTIARTL", name: "Bharti Airtel", state: "Reported · portfolio catalyst", portfolio: true, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "8DFD2CC5-4232-43EF-86B0-DE4A952EE7CA", kpis: [
+    { label: "Revenue", value: "₹58,539 Cr", change: "+18.4% YoY · consolidated", tone: "green" },
+    { label: "Profit", value: "₹8,167 Cr", change: "+37% YoY · net profit", tone: "green" },
+    { label: "Operating margin", value: "57.4%", change: "EBITDA ₹33,599 Cr", tone: "green" },
+    { label: "Management guidance", value: "ARPU ₹264", change: "India + Africa momentum · Africa stake >79%", tone: "green" },
+  ], summary: "Company press release 4 Aug 2026: consolidated revenue ₹58,539 crore (+18.4% YoY), EBITDA ₹33,599 crore (57.4% margin), net profit ~₹8,167 crore (+37% YoY). India mobile ARPU ₹264; global customers 681 million.", source: "https://assets.airtel.in/static-assets/cms/investor/docs/quarterly_results/2026-27/Q1/Press-Release.pdf" },
+  { date: "4 Aug", dateKey: "2026-08-04", day: "04", symbol: "NHPC", name: "NHPC", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "142CFEE5-5D59-447C-B51E-D4E28F88342E", kpis: [
+    { label: "Revenue", value: "₹3,808 Cr", change: "+18.5% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹1,096 Cr", change: "+2.9% YoY · owners’ PAT", tone: "green" },
+    { label: "Operating margin", value: "61.8%", change: "EBITDA ₹2,352 Cr · +30.6% YoY", tone: "green" },
+    { label: "Management guidance", value: "Subansiri + Teesta-V", change: "New capacity · flood plant restored", tone: "green" },
+  ], summary: "Board approved Q1 FY27 on 4 Aug 2026. Consolidated revenue from operations ₹3,808 crore (+18.5% YoY); PAT attributable to owners ₹1,096 crore (+2.9% YoY); EBITDA ₹2,352 crore with 61.8% margin. Subansiri Lower commissioning and Teesta-V restoration supported generation.", source: "https://www.cnbctv18.com/market/earnings/nhpc-q1-profit-rises-marginally-as-higher-power-generation-revenue-lifts-operating-performance-19961783.htm" },
+  { date: "5 Aug", dateKey: "2026-08-05", day: "05", symbol: "CUMMINSIND", name: "Cummins India", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "4936ABD9-2EBA-474A-8DDA-57F570F0CCD0", kpis: [
+    { label: "Revenue", value: "₹3,375 Cr", change: "+18% YoY · standalone sales", tone: "green" },
+    { label: "Profit", value: "₹543 Cr", change: "−8% YoY · standalone PAT", tone: "red" },
+    { label: "Operating margin", value: "21.4%", change: "PBT before exceptional", tone: "amber" },
+    { label: "Management guidance", value: "Domestic +22%", change: "Exports flat · commodity cost headwinds", tone: "amber" },
+  ], summary: "Company release 5 Aug 2026: standalone sales ₹3,375 crore (+18% YoY), domestic ₹2,854 crore (+22% YoY), exports flat at ₹521 crore. PAT ₹543 crore (−8% YoY); PBT before exceptional ₹721 crore (21.4% margin). Commodity inflation weighed on margins.", source: "https://www.cummins.com/en-ame/news/releases/2026/08/05/cummins-india-limited-results-quarter-ended-june-30-2026" },
+  { date: "5 Aug", dateKey: "2026-08-05", day: "05", symbol: "POWERGRID", name: "Power Grid Corporation", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "2A5E492D-3690-4837-A99F-906EBC955113", kpis: [
+    { label: "Revenue", value: "₹11,497 Cr", change: "+2.7% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹3,598 Cr", change: "−0.9% YoY · consolidated PAT", tone: "amber" },
+    { label: "Operating margin", value: "82.9%", change: "EBITDA ₹9,536 Cr · +4.3% YoY", tone: "green" },
+    { label: "Management guidance", value: "Capex focus", change: "Work-in-hand · JBIC Khavda-Nagpur loan", tone: "green" },
+  ], summary: "Q1 FY27 consolidated PAT ₹3,598 crore (−0.9% YoY) with revenue from operations ₹11,497 crore (+2.7% YoY) and EBITDA ₹9,536 crore (+4.3% YoY; ~82.9% margin). Flat bottom line vs resilient operating cash generation.", source: "https://www.etnownews.com/markets/power-grid-corporation-q1-fy27-results-profit-slips-marginally-to-rs-3598-crore-revenue-and-ebitda-improve-article-155316963" },
+  { date: "6 Aug", dateKey: "2026-08-06", day: "06", symbol: "HEROMOTOCO", name: "Hero MotoCorp", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "E5F86D79-DC8E-4AB4-9460-B6DD6E378221", kpis: [
+    { label: "Revenue", value: "₹12,999 Cr", change: "+36% YoY · standalone ops", tone: "green" },
+    { label: "Profit", value: "₹1,454 Cr", change: "+29% YoY · standalone PAT", tone: "green" },
+    { label: "Operating margin", value: "13.3%", change: "EBITDA ₹1,727 Cr", tone: "green" },
+    { label: "Management guidance", value: "16.77 L units", change: "+23% YoY volumes · premium + EV + global", tone: "green" },
+  ], summary: "Board approved Q1 FY27 on 6 Aug 2026. Standalone revenue ₹12,999 crore (+36% YoY), PAT ₹1,454 crore (+29% YoY), EBITDA margin 13.3%. Volumes 16.77 lakh (+23% YoY).", source: "https://economictimes.indiatimes.com/industry/auto/two-wheelers-three-wheelers/hero-motocorp-q1-profit-jumps-29-revenue-surges-36/articleshow/133013044.cms" },
+  { date: "7 Aug", dateKey: "2026-08-07", day: "07", symbol: "SBIN", name: "State Bank of India", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "117725FB-9C14-43CB-86D4-771CA77F704B", kpis: [
+    { label: "PAT", value: "₹21,121 Cr", change: "+10.23% YoY", tone: "green" },
+    { label: "Net interest income", value: "₹46,992 Cr", change: "+14.88% YoY", tone: "green" },
+    { label: "Gross / net NPA", value: "1.47% / 0.38%", change: "Improved 36 / 9 bps YoY", tone: "green" },
+    { label: "Operating profit", value: "₹33,529 Cr", change: "+9.77% YoY", tone: "green" },
+  ], summary: "NSE-filed press release dated 7 Aug 2026: Q1 FY27 PAT ₹21,121 crore (+10.23% YoY), NII ₹46,992 crore (+14.88%), and operating profit ₹33,529 crore (+9.77%). Asset quality improved to 1.47% gross NPA and 0.38% net NPA.", source: "https://nsearchives.nseindia.com/corporate/SBIN_07082026135523_PressRelease.pdf" },
+  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "HAL", name: "Hindustan Aeronautics", state: "Reported · filed 12 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "EDAF3718-92A3-418A-9361-1470105097F0", kpis: [
+    { label: "Revenue", value: "₹5,515.17 Cr", change: "+14.4% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹1,589.66 Cr", change: "+14.9% YoY · consolidated PAT", tone: "green" },
+    { label: "Profit before tax", value: "₹2,134.33 Cr", change: "+15.1% YoY", tone: "green" },
+    { label: "Total income", value: "₹6,415.41 Cr", change: "+15.2% YoY", tone: "green" },
+  ], summary: "The 11 Aug Apple Calendar row is scheduling evidence; HAL filed the result on 12 Aug 2026. Consolidated Q1 FY27 revenue was ₹5,515.17 crore, PAT ₹1,589.66 crore and PBT ₹2,134.33 crore, all up about 14-15% YoY.", source: "https://nsearchives.nseindia.com/corporate/HAL_12082026140538_FR_30062026.pdf" },
+  { date: "11 Aug", dateKey: "2026-08-11", day: "11", symbol: "ONGC", name: "Oil & Natural Gas Corporation", state: "Reported · filed 4 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "FCD46B90-AAB9-4D49-A0CF-2716FA512D7A", kpis: [
+    { label: "Standalone revenue", value: "₹46,460 Cr", change: "+45.2% YoY", tone: "green" },
+    { label: "Standalone PAT", value: "₹17,034 Cr", change: "+112.3% YoY", tone: "green" },
+    { label: "Oil realisation", value: "$99.45/bbl", change: "+50.4% YoY · nomination", tone: "green" },
+    { label: "Western offshore capex", value: ">₹40,000 Cr", change: "Benefits expected from FY28", tone: "green" },
+  ], summary: "The Apple Calendar date is scheduling evidence; ONGC's NSE-filed release was published 4 Aug 2026. Standalone revenue rose 45.2% to ₹46,460 crore and PAT more than doubled to ₹17,034 crore, while management highlighted a ₹40,000-crore-plus Western Offshore programme.", source: "https://nsearchives.nseindia.com/corporate/ONGC_04082026201314_PressreleaseQ1FY27.pdf" },
+  { date: "12 Aug", dateKey: "2026-08-12", day: "12", symbol: "HAL", name: "Hindustan Aeronautics", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "3AEA98D2-226F-403D-8A2E-1B54FA46B2CE", kpis: [
+    { label: "Revenue", value: "₹5,515.17 Cr", change: "+14.4% YoY · consolidated ops", tone: "green" },
+    { label: "Profit", value: "₹1,589.66 Cr", change: "+14.9% YoY · consolidated PAT", tone: "green" },
+    { label: "Profit before tax", value: "₹2,134.33 Cr", change: "+15.1% YoY", tone: "green" },
+    { label: "Total income", value: "₹6,415.41 Cr", change: "+15.2% YoY", tone: "green" },
+  ], summary: "HAL filed Q1 FY27 results with NSE on 12 Aug 2026. Consolidated revenue was ₹5,515.17 crore (+14.4% YoY), PAT ₹1,589.66 crore (+14.9%) and PBT ₹2,134.33 crore (+15.1%).", source: "https://nsearchives.nseindia.com/corporate/HAL_12082026140538_FR_30062026.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "IRCTC", name: "Indian Railway Catering and Tourism", state: "Reported · filed 12 Aug", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "EB672D7D-CE3E-43FA-845C-D0C8045956A1", kpis: [
+    { label: "Revenue", value: "₹1,369.53 Cr", change: "+18.1% YoY · standalone ops", tone: "green" },
+    { label: "Profit", value: "₹329.86 Cr", change: "−1.4% YoY · standalone PAT", tone: "amber" },
+    { label: "Profit before tax", value: "₹441.29 Cr", change: "Broadly flat YoY", tone: "amber" },
+    { label: "Catering revenue", value: "₹732.26 Cr", change: "+33.9% YoY", tone: "green" },
+  ], summary: "IRCTC filed Q1 FY27 results on 12 Aug 2026, one day before the Apple Calendar row. Standalone revenue rose 18.1% to ₹1,369.53 crore, catering revenue rose 33.9%, and PAT eased 1.4% to ₹329.86 crore.", source: "https://nsearchives.nseindia.com/corporate/IRCTC_12082026202956_Results30062026.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "JUBLFOOD", name: "Jubilant FoodWorks", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "365BE3F4-15D9-4BB1-8674-6B7B1123F698", kpis: [
+    { label: "Revenue", value: "₹2,570 Cr", change: "+14.1% YoY · consolidated ops", tone: "green" },
+    { label: "Operating EBITDA", value: "₹504 Cr", change: "+14.2% YoY", tone: "green" },
+    { label: "EBITDA margin", value: "19.6%", change: "Broadly flat YoY", tone: "green" },
+    { label: "PAT", value: "₹100 Cr", change: "+6.0% YoY · total", tone: "green" },
+  ], summary: "NSE-filed shareholder update dated 13 Aug 2026: consolidated revenue grew 14.1% to ₹2,570 crore and operating EBITDA 14.2% to ₹504 crore, holding margin at 19.6%. Total PAT was ₹100 crore (+6% YoY); 76 net stores were added.", source: "https://nsearchives.nseindia.com/corporate/JUBLFOOD_13082026142813_2SELetter_to_Shareholders.pdf" },
+  { date: "13 Aug", dateKey: "2026-08-13", day: "13", symbol: "TMPV", name: "Tata Motors Passenger Vehicles", state: "Reported", portfolio: false, period: "Q1 FY27", reported: true, eventKind: "results", calendarEventId: "24F6A768-8D23-4FFE-906D-D22427C44009", kpis: [
+    { label: "Group revenue", value: "₹95,799 Cr", change: "+9.3% YoY", tone: "green" },
+    { label: "Group EBITDA", value: "₹7,128 Cr", change: "−6.4% YoY", tone: "red" },
+    { label: "EBITDA margin", value: "7.4%", change: "vs 8.7% YoY", tone: "red" },
+    { label: "PBT before exceptional", value: "₹1,606 Cr", change: "−59.3% YoY", tone: "red" },
+  ], summary: "NSE-filed investor presentation dated 13 Aug 2026: group revenue increased 9.3% to ₹95,799 crore, but EBITDA fell to ₹7,128 crore and margin compressed to 7.4%. PBT before exceptional items declined to ₹1,606 crore amid JLR volume and profitability headwinds.", source: "https://nsearchives.nseindia.com/corporate/TATAMOTORSSJS_13082026161711_NSEBSEInvestorPresentation.pdf" },
 ];
 
 export const analystCalls = [

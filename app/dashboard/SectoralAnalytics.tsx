@@ -5,7 +5,8 @@ import { Activity, Database, ExternalLink, Layers3 } from "lucide-react";
 import { CartesianGrid, Cell, LabelList, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { sectorComposite, sectorSourceNote, sectors } from "../sector-data";
 import { fundamentalMetricLabels, sectorCompanies, sectorUniverseLabels, type FundamentalMetricKey, type SectorCompany } from "../sector-company-data";
-import { type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
+import { isUsableSectorMarketStatus, type SectorMarketSnapshot, type SectorReturnHorizon } from "../sector-live-types";
+import { emptySectorNewsSnapshot, type SectorNewsSnapshot } from "../sector-news-types";
 import { lifeCyclePoints, marketStructurePoints, sectorImpactRows, type ImpactSignal } from "../sector-analytics-data";
 import type { LiveHolding } from "../live-types";
 import type { SectorRankingView } from "./types";
@@ -260,16 +261,20 @@ function BubbleTooltip({ active, payload }: { active?: boolean; payload?: Array<
 
 function SectorImpactMatrix({ selectedIds, onToggle }: { selectedIds: string[]; onToggle: (sectorId: string) => void }) {
   const headers = [["crude", "Crude"], ["inr", "USD/INR"], ["rates", "Rates"], ["monsoon", "Monsoon"], ["aiCapex", "AI capex"], ["earnings", "Q1 earnings"]] as const;
+  const [shockId, setShockId] = useState<string | null>(null);
   return <article className="panel impact-matrix-panel">
-    <div className="analytics-subhead"><div><b>A · Sector map + impact matrix (MECE)</b><span>One row per sector · ▲ tailwind · ▼ headwind · ● two-way</span></div><em>{currentIstDateLabel().toUpperCase()}</em></div>
-    <div className="impact-matrix-scroll"><div className="impact-matrix">
+    <div className="analytics-subhead"><div><b>A · Sector map + impact matrix (MECE)</b><span>One row per sector · ▲ tailwind · ▼ headwind · ● two-way · shockwave board</span></div><em>{currentIstDateLabel().toUpperCase()}</em></div>
+    <div className="impact-matrix-scroll"><div className="impact-matrix sector-impact-matrix shockwave-board">
       <div className="impact-row impact-head"><span>Sector &amp; stance</span><span>Sub-sectors</span>{headers.map(([, label]) => <span key={label}>{label}</span>)}<span>Current read</span></div>
       {sectorImpactRows.map((row) => {
         const selectable = sectors.some((sector) => sector.id === row.id);
         const selected = selectedIds.includes(row.id);
         const rowClass = selectedIds.length === 0 ? "" : selected ? "selected" : "sector-dimmed";
-        return <button type="button" onClick={() => selectable && onToggle(row.id)} aria-pressed={selected} aria-disabled={!selectable} className={`impact-row ${rowClass} ${selectable ? "selectable" : "reference-only"}`} style={{ "--sector": row.color } as CSSProperties} key={row.id}>
-          <span><b>{row.name}</b><small>{row.stance}</small></span><span className="subsector-chips">{row.subsectors.map((item) => <i key={item}>{item}</i>)}</span>
+        const stanceTone = row.stance.toLowerCase().includes("tailwind") || row.stance.toLowerCase().includes("constructive") ? 0.72
+          : row.stance.toLowerCase().includes("headwind") || row.stance.toLowerCase().includes("stress") ? 0.28
+          : 0.5;
+        return <button type="button" onClick={() => { if (!selectable) return; setShockId(row.id); window.setTimeout(() => setShockId(null), 700); onToggle(row.id); }} aria-pressed={selected} aria-disabled={!selectable} className={`impact-row ${rowClass} ${selectable ? "selectable" : "reference-only"}${shockId === row.id ? " shock-active" : ""}`} style={{ "--sector": row.color } as CSSProperties} key={row.id}>
+          <span className="impact-stance"><b>{row.name}</b><small>{row.stance}</small><i className="seismic-bar" style={{ transform: `scaleX(${stanceTone})` }} aria-hidden="true"/></span><span className="subsector-chips">{row.subsectors.map((item) => <i key={item}>{item}</i>)}</span>
           {headers.map(([key, label]) => <span className={`signal ${row[key]}`} data-label={label} key={key}>{impactGlyph[row[key]]}</span>)}<span className="impact-read">{row.read}</span>
         </button>;
       })}
@@ -318,10 +323,11 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
   const insightLife = (filterActive ? focusedCompaniesLife : companyLife).slice().sort((a, b) => b.size - a.size).slice(0, 8);
   const insightStructure = (filterActive ? focusedCompaniesStructure : companyStructure).slice().sort((a, b) => b.size - a.size).slice(0, 8);
   return <div className="sector-analytical-stack">
-    {page === "lifecycle" && <section className="analytics-band lifecycle-band">
+    {page === "lifecycle" && <section className="analytics-band lifecycle-band lifecycle-panel evolution-river">
       <div className="analytics-subhead"><div><b>C · Company life-cycle map</b><span>Companies plotted by mapped stage and growth · industry color · bubble size = universe weight</span></div></div>
       <div className="analytics-split bubble-split">
         <article className="panel bubble-panel">
+          <div className="chart-wrap" style={{ height: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 36, right: 28, bottom: 52, left: 36 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
@@ -345,9 +351,10 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
+          </div>
           <div className="bubble-axis-legend" aria-hidden="true">
             {industryLegend.map((sector) => <span key={sector.id} className={!filterActive || isFocused(selectedIds, sector.id) ? "" : "dimmed"}><i style={{ background: sector.color }}/><small>{sector.name}</small></span>)}
-            <em>Size = universe weight % · hollow rings = industry anchors · white stroke = focused / owned</em>
+            <em>Size = universe weight % · hollow rings = industry anchors · white stroke = focused / owned · evolution river</em>
           </div>
         </article>
         <aside className="panel linked-insight">
@@ -362,10 +369,11 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
       </div>
     </section>}
 
-    {page === "structure" && <section className="analytics-band structure-band">
+    {page === "structure" && <section className="analytics-band structure-band structure-panel profit-pool-terrain">
       <div className="analytics-subhead"><div><b>D · Company market-structure map</b><span>Operating margin vs concentration · industry color · bubble size = universe weight</span></div></div>
       <div className="analytics-split bubble-split">
         <article className="panel bubble-panel">
+          <div className="chart-wrap" style={{ height: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 36, right: 28, bottom: 52, left: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a333c"/>
@@ -390,9 +398,10 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
+          </div>
           <div className="bubble-axis-legend" aria-hidden="true">
             {industryLegend.map((sector) => <span key={`d-${sector.id}`} className={!filterActive || isFocused(selectedIds, sector.id) ? "" : "dimmed"}><i style={{ background: sector.color }}/><small>{sector.name}</small></span>)}
-            <em>Top-right = stronger margins in more concentrated profit pools · size = universe weight %</em>
+            <em>Top-right = stronger margins in more concentrated profit pools · size = universe weight % · profit-pool terrain</em>
           </div>
         </article>
         <aside className="panel linked-insight">
@@ -407,7 +416,7 @@ function SectorAnalyticalCharts({ selectedIds, holdings, page }: { selectedIds: 
   </div>;
 }
 
-export default function SectoralAnalytics({ selectedIds, onToggle, market, marketsBySector = {}, holdings, page }: { selectedIds: string[]; onToggle: (sectorId: string) => void; market: SectorMarketSnapshot; marketsBySector?: Record<string, SectorMarketSnapshot>; holdings: LiveHolding[]; page: SectorAnalyticsPage }) {
+export default function SectoralAnalytics({ selectedIds, onToggle, market, marketsBySector = {}, news = emptySectorNewsSnapshot(), holdings, page }: { selectedIds: string[]; onToggle: (sectorId: string) => void; market: SectorMarketSnapshot; marketsBySector?: Record<string, SectorMarketSnapshot>; news?: SectorNewsSnapshot; holdings: LiveHolding[]; page: SectorAnalyticsPage }) {
   const [rankingView, setRankingView] = useState<SectorRankingView>("market");
   const [returnHorizon, setReturnHorizon] = useState<SectorReturnHorizon>("month");
   const [fundamentalMetric, setFundamentalMetric] = useState<FundamentalMetricKey>("growth");
@@ -497,6 +506,39 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     ?? market.message
     ?? "Waiting for sector market refresh across all industries.";
   const avgComposite = Number((sectors.reduce((sum, sector) => sum + sectorComposite(sector), 0) / sectors.length).toFixed(1));
+  const newsItems = news.items.filter((item) => {
+    if (!filterActive) return true;
+    if (!item.sectorIds.length) return true;
+    return item.sectorIds.some((sectorId) => selectedIds.includes(sectorId));
+  });
+  const newsBySentiment = {
+    Positive: newsItems.filter((item) => item.sentiment === "Positive").slice(0, 3),
+    Neutral: newsItems.filter((item) => item.sentiment === "Neutral").slice(0, 3),
+    Negative: newsItems.filter((item) => item.sentiment === "Negative").slice(0, 3),
+  } as const;
+  const newsColumnTotal = newsBySentiment.Positive.length + newsBySentiment.Neutral.length + newsBySentiment.Negative.length;
+  const newsLiveSources = news.sources.filter((source) => source.status === "live");
+  const newsFailedSources = news.sources.filter((source) => source.status === "unavailable");
+  const newsStatusClass = news.status === "live" ? "green" : news.status === "partial" ? "amber" : "red";
+  const sentimentTone = (value: "Positive" | "Neutral" | "Negative") => {
+    switch (value) {
+      case "Positive":
+        return "positive";
+      case "Negative":
+        return "negative";
+      case "Neutral":
+        return "amber-text";
+      default: {
+        const _exhaustive: never = value;
+        return _exhaustive;
+      }
+    }
+  };
+  const newsSentimentColumns = [
+    { key: "Positive" as const, label: "Positive", tone: "positive" },
+    { key: "Neutral" as const, label: "Neutral", tone: "neutral" },
+    { key: "Negative" as const, label: "Negative", tone: "negative" },
+  ];
 
   const meceEmojis = ["📈", "💰", "⚖️", "⚠️"];
   const meceBullets = (driver: string) => {
@@ -528,7 +570,7 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
         ? `${selectedIds.length} selected · dimmed industries remain available as toggles · click a selected industry again to remove it`
         : "Select any industry to dim the others. Multiple industries can stay selected together."}</small>
     </div>}
-    <div className="sector-selector" role="toolbar" aria-label="Filter every Sectoral Analytics section by industry">
+    <div className="sector-selector sector-prism" role="toolbar" aria-label="Filter every Sectoral Analytics section by industry">
       {sectors.map((sector) => {
         const selected = selectedIds.includes(sector.id);
         const className = !filterActive ? "active" : selected ? "active" : "sector-dimmed";
@@ -539,9 +581,9 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     {page === "pulse" && <SectorImpactMatrix selectedIds={selectedIds} onToggle={(sectorId) => { if (sectors.some((sector) => sector.id === sectorId)) onToggle(sectorId); }}/>}
 
     {selected ? <>
-      {page === "pulse" && <div className="sector-kpi-grid">
-        {selected.kpis.map((kpi) => <article key={kpi.label} title={`${selected.sourceLabel} · ${kpi.context}`} style={{ "--sector": selected.color } as CSSProperties}><span>{kpi.label}</span><b>{kpi.value}</b><small>{kpi.context}</small></article>)}
-        <article className="sector-watch" style={{ "--sector": selected.color } as CSSProperties}><span>MONITOR NEXT</span><p>{selected.watch}</p></article>
+      {page === "pulse" && <div className="sector-kpi-grid pulse-orb-grid">
+        {selected.kpis.map((kpi) => <article className="pulse-orb" key={kpi.label} title={`${selected.sourceLabel} · ${kpi.context}`} style={{ "--sector": selected.color } as CSSProperties}><span>{kpi.label}</span><div className="orb-core">{kpi.value}</div><small>{kpi.context}</small></article>)}
+        <article className="sector-watch pulse-orb" style={{ "--sector": selected.color } as CSSProperties}><span>MONITOR NEXT</span><div className="orb-satellites"><span>watch</span></div><p>{selected.watch}</p></article>
       </div>}
 
       {(page === "companies" || page === "rankings") && <article className={`panel sector-company-workbench ${page}`} style={{ "--sector": selected.color } as CSSProperties}>
@@ -554,12 +596,12 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
         </div>
         {market.status === "public_delayed" && <div className="sector-market-source-note"><Activity size={16}/><span><b>Public delayed fallback active</b>{market.message}</span><a href="https://support.zerodha.com/category/trading-and-markets/general-kite/kite-api/articles/what-are-the-charges-for-kite-apis" target="_blank" rel="noreferrer">Kite data plans <ExternalLink size={12}/></a></div>}
         {page === "rankings" && <div className="sector-ranking-controls">
-          <div className="segmented" aria-label="Ranking model"><button type="button" className={rankingView === "market" ? "active" : ""} onClick={() => setRankingView("market")}>Market performance</button><button type="button" className={rankingView === "fundamentals" ? "active" : ""} onClick={() => setRankingView("fundamentals")}>Fundamentals</button></div>
+          <div className="segmented" aria-label="Ranking model"><button type="button" className={`vo-pop${rankingView === "market" ? " active" : ""}`} onClick={() => setRankingView("market")}>Market performance</button><button type="button" className={`vo-pop${rankingView === "fundamentals" ? " active" : ""}`} onClick={() => setRankingView("fundamentals")}>Fundamentals</button></div>
           {rankingView === "market" ? <label>Return horizon<select value={returnHorizon} onChange={(event) => setReturnHorizon(event.target.value as SectorReturnHorizon)}><option value="day">1 day</option><option value="week">1 week</option><option value="month">1 month</option><option value="quarter">3 months</option></select></label> : <label>Research metric<select value={fundamentalMetric} onChange={(event) => setFundamentalMetric(event.target.value as FundamentalMetricKey)}>{Object.entries(fundamentalMetricLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
         </div>}
-        {page === "rankings" && (ranked.length ? <div className="sector-rank-grid">
-          <section><div className="sector-rank-heading positive"><span>Top {leaders.length} leaders</span><small>{rankingView === "market" ? `${returnHorizon} price return` : fundamentalMetricLabels[fundamentalMetric]}</small></div>{leaders.map((company, index) => <div className="sector-rank-row" key={`leader-${company.symbol}`}><em>{index + 1}</em><div><b>{company.name}</b><small>{company.symbol} · {company.universeShare}% universe share</small></div><strong className={Number(company.rankValue) >= 0 ? "positive" : "negative"}>{formatRankValue(company.rankValue)}</strong></div>)}</section>
-          <section><div className="sector-rank-heading negative"><span>Top {laggards.length} laggards</span><small>{rankingView === "market" ? `${returnHorizon} price return` : fundamentalMetricLabels[fundamentalMetric]}</small></div>{laggards.map((company, index) => <div className="sector-rank-row" key={`laggard-${company.symbol}`}><em>{index + 1}</em><div><b>{company.name}</b><small>{company.symbol} · {company.universeShare}% universe share</small></div><strong className={rankingView === "market" && Number(company.rankValue) < 0 ? "negative" : "amber-text"}>{formatRankValue(company.rankValue)}</strong></div>)}</section>
+        {page === "rankings" && (ranked.length ? <div className="sector-rank-grid ladder-duel">
+          <section className="ladder leaders"><header><span>Top {leaders.length} leaders</span><small>{rankingView === "market" ? `${returnHorizon} price return` : fundamentalMetricLabels[fundamentalMetric]}</small></header><ol>{leaders.map((company, index) => <li key={`leader-${company.symbol}`}><b>{index + 1}</b><div><strong>{company.name}</strong><small>{company.symbol} · {company.universeShare}% universe share</small></div><em className={Number(company.rankValue) >= 0 ? "positive" : "negative"}>{formatRankValue(company.rankValue)}</em></li>)}</ol></section>
+          <section className="ladder laggards"><header><span>Top {laggards.length} laggards</span><small>{rankingView === "market" ? `${returnHorizon} price return` : fundamentalMetricLabels[fundamentalMetric]}</small></header><ol>{laggards.map((company, index) => <li key={`laggard-${company.symbol}`}><b>{index + 1}</b><div><strong>{company.name}</strong><small>{company.symbol} · {company.universeShare}% universe share</small></div><em className={rankingView === "market" && Number(company.rankValue) < 0 ? "negative" : "amber-text"}>{formatRankValue(company.rankValue)}</em></li>)}</ol></section>
         </div> : <div className="sector-market-empty"><Activity size={20}/><div><b>{market.status === "auth_required" ? "Authenticate Kite to load return rankings" : "Market return ranking is temporarily unavailable"}</b><p>{market.message}</p></div></div>)}
         {page === "rankings" && rankingView === "fundamentals" && <p className="sector-model-note">Fundamental values are transparent 1-5 research scores, not reported percentages. They rank relative growth, profitability, margin resilience and balance-sheet quality; company filing ingestion remains separately dated.</p>}
         {page === "companies" && <><div className="sector-company-table table-scroll"><table><thead><tr><th>Company</th><th>Universe share</th><th>Live price</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>Growth</th><th>Profitability</th><th>Margin</th><th>Quality</th><th>Portfolio</th></tr></thead><tbody>{visibleCompanies.map((company) => <tr key={company.symbol}><td><b>{company.name}</b><small>{company.symbol} · {company.filingPeriod}</small></td><td>{company.universeShare.toFixed(1)}%</td><td>{company.market?.price === null || company.market?.price === undefined ? "—" : inr.format(company.market.price)}</td>{(["day", "week", "month", "quarter"] as SectorReturnHorizon[]).map((horizon) => { const value = company.market?.returns[horizon]; return <td key={horizon} className={value === null || value === undefined ? "" : value >= 0 ? "positive" : "negative"}>{value === null || value === undefined ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`}</td>; })}<td>{company.scores.growth.toFixed(1)}</td><td>{company.scores.profitability.toFixed(1)}</td><td>{company.scores.margin.toFixed(1)}</td><td>{company.scores.quality.toFixed(1)}</td><td>{company.holding ? <span className="portfolio-company"><b>OWNED</b><small>U {company.holding.pnl >= 0 ? "+" : ""}{inr.format(company.holding.pnl)} · Day {company.holding.dayPnl >= 0 ? "+" : ""}{inr.format(company.holding.dayPnl)}</small></span> : "—"}</td></tr>)}</tbody></table></div><div className="sector-table-pager"><button type="button" disabled={safeCompanyPage === 0} onClick={() => setCompanyPage((value) => Math.max(0, value - 1))}>Previous</button><span>Page {safeCompanyPage + 1} / {companyPageCount}</span><button type="button" disabled={safeCompanyPage >= companyPageCount - 1} onClick={() => setCompanyPage((value) => Math.min(companyPageCount - 1, value + 1))}>Next</button></div></>}
@@ -567,10 +609,10 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     </> : <>
       {page === "pulse" && <div className="sector-kpi-grid">
         <article style={{ "--sector": accent } as CSSProperties}><span>Tracked companies</span><b>{crossIndustryCompanies.length}</b><small>Across {sectors.length} industries</small></article>
-        <article style={{ "--sector": "#42d98b" } as CSSProperties}><span>Advancers</span><b className="positive">{crossPriced.length ? crossAdvancers : "—"}</b><small>{crossPriced.length ? `${crossUnchanged} unchanged · ${crossPriced.length} priced` : "Awaiting market quotes"}</small></article>
-        <article style={{ "--sector": "#ff6b72" } as CSSProperties}><span>Decliners</span><b className="negative">{crossPriced.length ? crossDecliners : "—"}</b><small>{crossMarketStatus === "live" ? "Latest yfinance session" : crossMarketStatus === "public_delayed" ? "Public delayed session" : "Latest available session"}</small></article>
-        <article style={{ "--sector": accent } as CSSProperties}><span>Industries advancing</span><b className={industriesAdvancing >= industriesDeclining ? "positive" : "negative"}>{crossPriced.length ? `${industriesAdvancing} / ${sectors.length}` : "—"}</b><small>{industriesDeclining} industries declining on breadth</small></article>
-        <article style={{ "--sector": accent } as CSSProperties}><span>Median 1M return</span><b className={crossMedianMonth === null ? "" : crossMedianMonth >= 0 ? "positive" : "negative"}>{crossMedianMonth === null ? "—" : formatDay(crossMedianMonth)}</b><small>{crossMarketAsOf}</small></article>
+        <article style={{ "--sector": "#42d98b" } as CSSProperties}><span>Advancers</span><b className="positive">{crossPriced.length ? crossAdvancers : "—"}</b><small>{crossPriced.length ? `${crossUnchanged} unchanged · ${crossPriced.length} priced` : marketSnapshots.length ? "No day-move quotes in latest session" : "Loading yfinance quotes…"}</small></article>
+        <article style={{ "--sector": "#ff6b72" } as CSSProperties}><span>Decliners</span><b className="negative">{crossPriced.length ? crossDecliners : "—"}</b><small>{crossMarketStatus === "live" ? "Latest yfinance session" : crossMarketStatus === "public_delayed" ? "Public delayed session" : marketSnapshots.length ? "Latest available session" : "Loading yfinance quotes…"}</small></article>
+        <article style={{ "--sector": accent } as CSSProperties}><span>Industries advancing</span><b className={industriesAdvancing >= industriesDeclining ? "positive" : "negative"}>{crossPriced.length ? `${industriesAdvancing} / ${sectors.length}` : "—"}</b><small>{crossPriced.length ? `${industriesDeclining} industries declining on breadth` : "Breadth updates with priced industries"}</small></article>
+        <article style={{ "--sector": accent } as CSSProperties}><span>Median 1M return</span><b className={crossMedianMonth === null ? "" : crossMedianMonth >= 0 ? "positive" : "negative"}>{crossMedianMonth === null ? "—" : formatDay(crossMedianMonth)}</b><small>{crossPriced.length || marketSnapshots.some((item) => isUsableSectorMarketStatus(item.status)) ? crossMarketAsOf : "Waiting for yfinance"}</small></article>
         <article className="sector-watch" style={{ "--sector": accent } as CSSProperties}><span>ALL-INDUSTRY READ</span><p>Average composite {avgComposite} / 5. Select an industry for company composition, KPI cards and framework detail.</p></article>
       </div>}
 
@@ -604,9 +646,9 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
             </tbody>
           </table>
         </div>}
-        {page === "rankings" && (crossRanked.length ? <div className="sector-rank-grid">
-          <section><div className="sector-rank-heading positive"><span>Top {crossLeaders.length} leaders</span><small>{returnHorizon} price return · all industries</small></div>{crossLeaders.map((company, index) => <div className="sector-rank-row" key={`cross-leader-${company.symbol}`}><em>{index + 1}</em><div><b>{company.name}</b><small>{company.symbol} · {company.sectorName}</small></div><strong className={Number(company.rankValue) >= 0 ? "positive" : "negative"}>{formatDay(company.rankValue)}</strong></div>)}</section>
-          <section><div className="sector-rank-heading negative"><span>Top {crossLaggards.length} laggards</span><small>{returnHorizon} price return · all industries</small></div>{crossLaggards.map((company, index) => <div className="sector-rank-row" key={`cross-laggard-${company.symbol}`}><em>{index + 1}</em><div><b>{company.name}</b><small>{company.symbol} · {company.sectorName}</small></div><strong className={Number(company.rankValue) < 0 ? "negative" : "amber-text"}>{formatDay(company.rankValue)}</strong></div>)}</section>
+        {page === "rankings" && (crossRanked.length ? <div className="sector-rank-grid ladder-duel">
+          <section className="ladder leaders"><header><span>Top {crossLeaders.length} leaders</span><small>{returnHorizon} price return · all industries</small></header><ol>{crossLeaders.map((company, index) => <li key={`cross-leader-${company.symbol}`}><b>{index + 1}</b><div><strong>{company.name}</strong><small>{company.symbol} · {company.sectorName}</small></div><em className={Number(company.rankValue) >= 0 ? "positive" : "negative"}>{formatDay(company.rankValue)}</em></li>)}</ol></section>
+          <section className="ladder laggards"><header><span>Top {crossLaggards.length} laggards</span><small>{returnHorizon} price return · all industries</small></header><ol>{crossLaggards.map((company, index) => <li key={`cross-laggard-${company.symbol}`}><b>{index + 1}</b><div><strong>{company.name}</strong><small>{company.symbol} · {company.sectorName}</small></div><em className={Number(company.rankValue) < 0 ? "negative" : "amber-text"}>{formatDay(company.rankValue)}</em></li>)}</ol></section>
         </div> : <div className="sector-market-empty"><Activity size={20}/><div><b>{crossMarketStatus === "auth_required" ? "Authenticate Kite to load cross-industry rankings" : "Cross-industry return ranking is loading or unavailable"}</b><p>{crossMarketMessage}</p></div></div>)}
       </article>}
     </>}
@@ -614,7 +656,17 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
     {(page === "lifecycle" || page === "structure") && <SectorAnalyticalCharts selectedIds={selectedIds} holdings={holdings} page={page}/>}
 
     {page === "mece" && <article className="panel mece-panel">
-      <div className="panel-title"><div><h3>MECE sector driver map</h3><p>Every sector is decomposed into non-overlapping demand, earnings, policy and market-pricing lenses</p></div><Layers3 size={18}/></div>
+      <div className="panel-title"><div><h3>MECE sector driver map</h3><p>Every sector is decomposed into non-overlapping demand, earnings, policy and market-pricing lenses · MECE loom</p></div><Layers3 size={18}/></div>
+      {selected ? <div className="mece-loom" aria-label={`${selected.name} MECE loom`}>
+        {["Demand engines", "Profit pool", "Policy / structure", "Valuation / risk"].map((title, index) => {
+          const driver = selected.mece[index] ?? "";
+          const beads = meceBullets(driver);
+          return <section className="loom-thread" key={title}>
+            <header>{title}</header>
+            {beads.map((bullet) => <button type="button" className="loom-bead" key={`${title}-${bullet}`}>{bullet}</button>)}
+          </section>;
+        })}
+      </div> : null}
       <div className="mece-matrix"><div className="mece-head"><span>Sector</span><span>Demand engines</span><span>Profit pool</span><span>Policy / structure</span><span>Valuation / risk</span></div>{sectors.map((sector) => {
         const selectedRow = selectedIds.includes(sector.id);
         const rowClass = !filterActive ? "" : selectedRow ? "selected" : "sector-dimmed";
@@ -622,6 +674,50 @@ export default function SectoralAnalytics({ selectedIds, onToggle, market, marke
       })}</div>
     </article>}
 
-    <div className="sector-source-note"><Database size={16}/><span>{sectorSourceNote}{selected ? ` Company universe: ${sectorUniverseLabels[selected.id]}. ${market.message}` : ` Cross-industry breadth uses every tracked sector universe. ${crossMarketMessage}`}</span>{selected && <a href={selected.sourceUrl} target="_blank" rel="noreferrer">{selected.sourceLabel} <ExternalLink size={12}/></a>}</div>
+    {page === "pulse" && <article className="panel sector-news-panel" style={{ "--sector": accent } as CSSProperties}>
+      <div className="panel-title sector-news-title">
+        <div>
+          <h3>News + sentiment</h3>
+          <p>
+            {newsLiveSources.length ? `${newsLiveSources.map((source) => source.label).join(" · ")}` : "No live publishers"}
+            {newsFailedSources.length ? ` · unavailable: ${newsFailedSources.map((source) => source.label).join(", ")}` : ""}
+            {" · "}{news.asOf}
+          </p>
+        </div>
+        <span className={`pill ${newsStatusClass}`}>{news.status}</span>
+      </div>
+      <div className="sector-news-source-strip" aria-label="Sector news source states">
+        {(news.sources.length ? news.sources : [
+          { id: "economic_times", label: "Economic Times", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+          { id: "financial_times", label: "Financial Times", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+          { id: "bloomberg", label: "Bloomberg", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+          { id: "zerodha", label: "Zerodha", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+          { id: "moneycontrol", label: "Moneycontrol", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+          { id: "ndtv_profit", label: "NDTV Profit", status: "unavailable" as const, asOf: null, message: "pending", itemCount: 0 },
+        ]).map((source) => <span key={source.id} className={`sector-news-source ${source.status}`}>{source.label}<small>{source.status === "live" ? `${source.itemCount}` : "unavailable"}</small></span>)}
+      </div>
+      {newsColumnTotal ? <div className="sector-news-sentiment-grid" role="group" aria-label="News sorted by sentiment">
+        {newsSentimentColumns.map((column) => {
+          const items = newsBySentiment[column.key];
+          return <section className={`sector-news-sentiment-column ${column.tone}`} key={column.key} aria-label={`${column.label} news`}>
+            <header>
+              <h4>{column.label}</h4>
+              <b>{items.length}</b>
+            </header>
+            {items.length ? <ul className="sector-news-list">
+              {items.map((item) => <li key={item.id}>
+                <div>
+                  <a href={item.url} target="_blank" rel="noreferrer">{item.title} <ExternalLink size={12}/></a>
+                  <small>{item.sourceLabel}{item.publishedAt ? ` · ${item.publishedAt}` : ""}{item.sectorIds.length ? ` · ${item.sectorIds.join(", ")}` : ""}</small>
+                </div>
+                <em className={sentimentTone(item.sentiment)}>{item.sentiment}</em>
+              </li>)}
+            </ul> : <p className="sector-news-column-empty">No {column.label.toLowerCase()} headlines</p>}
+          </section>;
+        })}
+      </div> : <div className="sector-market-empty"><Activity size={20}/><div><b>{news.status === "unavailable" ? "Sector news aggregation unavailable" : "No matching headlines yet"}</b><p>{news.message}</p></div></div>}
+    </article>}
+
+    <div className="sector-source-note"><Database size={16}/><span>{sectorSourceNote}{selected ? ` Company universe: ${sectorUniverseLabels[selected.id]}. ${market.message}` : ` Cross-industry breadth uses every tracked sector universe. ${crossMarketMessage}`}{news.message ? ` News: ${news.message}` : ""}</span>{selected && <a href={selected.sourceUrl} target="_blank" rel="noreferrer">{selected.sourceLabel} <ExternalLink size={12}/></a>}</div>
   </section>;
 }

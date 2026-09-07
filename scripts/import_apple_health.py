@@ -34,6 +34,17 @@ SUM_TYPES = {
     "DietarySodium", "DietaryPotassium", "DietaryCholesterol", "DietaryWater", "DietaryCaffeine",
 }
 
+# Apple Health exports a record for every contributing source. Summing those
+# rows directly double-counts cumulative device metrics when an Apple Watch and
+# iPhone both observe the same activity. HealthKit resolves that overlap by
+# source priority; the XML export does not include the user's source-order
+# metadata, so reproduce the normal device precedence deterministically at
+# one-minute resolution while retaining lower-priority source-only gaps.
+SOURCE_RECONCILED_SUM_TYPES = {
+    "ActiveEnergyBurned", "BasalEnergyBurned", "AppleExerciseTime", "AppleStandTime",
+    "StepCount", "DistanceWalkingRunning", "FlightsClimbed",
+}
+
 METRICS = [
     ("Activity", "Active energy", "ActiveEnergyBurned", "sum", "kcal", "green"),
     ("Activity", "Exercise minutes", "AppleExerciseTime", "sum", "min", "green"),
@@ -149,8 +160,73 @@ def import_xml(xml_path: Path, db: sqlite3.Connection, force: bool = False) -> t
     return export_date, relevant, True
 
 
+def source_priority(source: str) -> tuple[int, str]:
+    """Approximate Apple Health's device priority when XML omits source order."""
+    normalized = source.replace("\u00a0", " ").strip().casefold()
+    if normalized in {"health", "apple health"}:
+        return 0, normalized
+    if "apple watch" in normalized or "watch" in normalized or "timepiece" in normalized:
+        return 1, normalized
+    if "iphone" in normalized or "ipad" in normalized or "ipod" in normalized:
+        return 2, normalized
+    return 3, normalized
+
+
+def source_reconciled_sum(db: sqlite3.Connection, metric_type: str, day: str) -> Optional[float]:
+    """Merge overlapping cumulative records using source priority per minute.
+
+    Each record is distributed across the minute buckets it covers. Values from
+    the highest-priority source present in a bucket are retained; lower-priority
+    values in that same bucket are excluded as overlapping observations. This
+    preserves iPhone-only gaps instead of discarding an entire lower-priority
+    daily stream.
+    """
+    rows = db.execute(
+        "SELECT source, start_at, end_at, value FROM records "
+        "WHERE type=? AND day=? AND value IS NOT NULL",
+        (metric_type, day),
+    ).fetchall()
+    if not rows:
+        return None
+    if len({row[0] for row in rows}) == 1:
+        return float(sum(row[3] for row in rows))
+
+    buckets: Dict[datetime, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for source, start_raw, end_raw, raw_value in rows:
+        start = parse_dt(start_raw)
+        end = parse_dt(end_raw)
+        value = float(raw_value)
+        duration = (end - start).total_seconds()
+        if duration <= 0:
+            buckets[start.replace(second=0, microsecond=0)][source] += value
+            continue
+        minute = start.replace(second=0, microsecond=0)
+        while minute < end:
+            minute_end = minute + timedelta(minutes=1)
+            overlap = max(0.0, (min(end, minute_end) - max(start, minute)).total_seconds())
+            if overlap:
+                buckets[minute][source] += value * overlap / duration
+            minute = minute_end
+
+    total = 0.0
+    for source_values in buckets.values():
+        selected_source = min(source_values, key=source_priority)
+        total += source_values[selected_source]
+    return total
+
+
+def has_multiple_sources(db: sqlite3.Connection, metric_type: str, day: str) -> bool:
+    rows = db.execute(
+        "SELECT DISTINCT source FROM records WHERE type=? AND day=? LIMIT 2",
+        (metric_type, day),
+    ).fetchall()
+    return len(rows) > 1
+
+
 def aggregate(db: sqlite3.Connection, metric_type: str, day: str, mode: str) -> Optional[Union[float, Tuple[float, float]]]:
     if mode == "sum":
+        if metric_type in SOURCE_RECONCILED_SUM_TYPES:
+            return source_reconciled_sum(db, metric_type, day)
         row = db.execute("SELECT SUM(value) FROM records WHERE type=? AND day=?", (metric_type, day)).fetchone()
     elif mode == "range":
         row = db.execute("SELECT MIN(value), MAX(value) FROM records WHERE type=? AND day=?", (metric_type, day)).fetchone()
@@ -169,6 +245,56 @@ def daily_series(db: sqlite3.Connection, metric_type: str, end: date, days: int,
         elif result is not None:
             values.append(result)
     return values
+
+
+def daily_history(
+    db: sqlite3.Connection,
+    metric_type: str,
+    end: date,
+    days: int,
+    mode: str,
+) -> List[dict]:
+    """Chronological (oldest→newest) measured daily points; omit days with no records."""
+    points: List[dict] = []
+    for offset in range(days - 1, -1, -1):
+        day = (end - timedelta(days=offset)).isoformat()
+        result = aggregate(db, metric_type, day, mode)
+        if result is None:
+            continue
+        value = adjusted(metric_type, result)
+        if isinstance(value, tuple):
+            value = sum(value) / 2
+        points.append({"date": day, "value": float(value)})
+    return points
+
+
+def sleep_history(db: sqlite3.Connection, end: date, days: int, pattern: str) -> List[dict]:
+    points: List[dict] = []
+    for offset in range(days - 1, -1, -1):
+        day = (end - timedelta(days=offset)).isoformat()
+        value = sleep_hours(db, day, pattern)
+        if value is None:
+            continue
+        points.append({"date": day, "value": float(value)})
+    return points
+
+
+def apply_history_override(
+    points: List[dict],
+    current: Union[float, Tuple[float, float]],
+    _prior: Optional[Union[float, Tuple[float, float]]],
+    target_day: str,
+) -> List[dict]:
+    """Replace or insert the target-day override without inventing other missing days."""
+    current_point = sum(current) / 2 if isinstance(current, tuple) else float(current)
+    updated = [{**point} for point in points]
+    for point in updated:
+        if point["date"] == target_day:
+            point["value"] = current_point
+            return updated
+    updated.append({"date": target_day, "value": current_point})
+    updated.sort(key=lambda point: point["date"])
+    return updated
 
 
 def sleep_hours(db: sqlite3.Connection, day: str, category_pattern: str = "Asleep") -> Optional[float]:
@@ -384,6 +510,36 @@ def build_snapshot(
 
     for category, label, metric_type, mode, unit, tone in METRICS:
         prior_current = aggregate(db, metric_type, completed.isoformat(), mode)
+        first, last, count = db.execute(
+            "SELECT MIN(day), MAX(day), COUNT(*) FROM records WHERE type=? AND day BETWEEN '2010-01-01' AND ?",
+            (metric_type, export_captured_at.date().isoformat()),
+        ).fetchone()
+        metric_days = {
+            row[0] for row in db.execute(
+                "SELECT DISTINCT day FROM records WHERE type=? AND day BETWEEN ? AND ?",
+                (metric_type, (completed - timedelta(days=29)).isoformat(), completed.isoformat()),
+            )
+        }
+        missing_week = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(7)
+            if (completed - timedelta(days=offset)).isoformat() not in metric_days
+        ]
+        missing_month = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(30)
+            if (completed - timedelta(days=offset)).isoformat() not in metric_days
+        ]
+        coverage[label] = {
+            "firstDate": first or "",
+            "lastDate": last or "",
+            "records": count,
+            "status": "available" if completed.isoformat() in metric_days else "missing_target",
+            "weekly": len(missing_week) <= 3,
+            "monthly": len(missing_month) <= 10,
+            "missingDates7": missing_week,
+            "missingDates30": missing_month,
+        }
         metric_override = override_value(overrides, completed, "metrics", metric_type)
         current = metric_override if metric_override is not None else prior_current
         if current is None:
@@ -391,25 +547,64 @@ def build_snapshot(
         current = adjusted(metric_type, current)
         week_values = [float(adjusted(metric_type, value)) for value in daily_series(db, metric_type, completed, 7, mode) if not isinstance(adjusted(metric_type, value), tuple)]
         month_values = [float(adjusted(metric_type, value)) for value in daily_series(db, metric_type, completed, 30, mode) if not isinstance(adjusted(metric_type, value), tuple)]
+        weekly_history = daily_history(db, metric_type, completed, 7, mode)
+        monthly_history = daily_history(db, metric_type, completed, 30, mode)
         if metric_override is not None:
             adjusted_prior = adjusted(metric_type, prior_current) if prior_current is not None else None
             week_values = replace_current(week_values, current, adjusted_prior)
             month_values = replace_current(month_values, current, adjusted_prior)
+            target_day = completed.isoformat()
+            weekly_history = apply_history_override(weekly_history, current, adjusted_prior, target_day)
+            monthly_history = apply_history_override(monthly_history, current, adjusted_prior, target_day)
         averages = {}
         weekly = comparison(current, week_values, unit)
         monthly = comparison(current, month_values, unit)
         if weekly: averages["weekly"] = weekly
         if monthly: averages["monthly"] = monthly
-        metric_source = "iPhone Mirroring" if metric_override is not None else "Apple Health export"
-        categories[category].append({"label": label, "value": fmt(current, unit), "context": f"{metric_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": averages})
-        first, last, count = db.execute(
-            "SELECT MIN(day), MAX(day), COUNT(*) FROM records WHERE type=? AND day BETWEEN '2010-01-01' AND ?",
-            (metric_type, export_captured_at.date().isoformat()),
-        ).fetchone()
-        coverage[label] = {"firstDate": first or "", "lastDate": last or "", "records": count, "weekly": len(week_values) >= 4, "monthly": len(month_values) >= 20}
-
+        history = {}
+        if weekly_history: history["weekly"] = weekly_history
+        if monthly_history: history["monthly"] = monthly_history
+        if metric_override is not None:
+            metric_source = "iPhone Mirroring"
+        elif metric_type in SOURCE_RECONCILED_SUM_TYPES and has_multiple_sources(db, metric_type, completed.isoformat()):
+            metric_source = "Apple Health XML · source-reconciled"
+        else:
+            metric_source = "Apple Health export"
+        categories[category].append({
+            "label": label,
+            "value": fmt(current, unit),
+            "context": f"{metric_source} · {completed.strftime('%d %b %Y')}",
+            "tone": tone,
+            "averages": averages,
+            "history": history,
+        })
     sleep_metrics = []
     for label, pattern, tone in (("Time asleep", "Asleep", "blue"), ("Deep sleep", "AsleepDeep", "blue"), ("REM sleep", "AsleepREM", "blue"), ("Core sleep", "AsleepCore", "blue"), ("Awake", "Awake", "amber")):
+        sleep_days = {
+            day
+            for offset in range(30)
+            if sleep_hours(db, day := (completed - timedelta(days=offset)).isoformat(), pattern) is not None
+        }
+        missing_week = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(7)
+            if (completed - timedelta(days=offset)).isoformat() not in sleep_days
+        ]
+        missing_month = [
+            (completed - timedelta(days=offset)).isoformat()
+            for offset in range(30)
+            if (completed - timedelta(days=offset)).isoformat() not in sleep_days
+        ]
+        coverage[label] = {
+            "firstDate": min(sleep_days) if sleep_days else "",
+            "lastDate": max(sleep_days) if sleep_days else "",
+            "records": len(sleep_days),
+            "status": "available" if completed.isoformat() in sleep_days else "missing_target",
+            "weekly": len(missing_week) <= 3,
+            "monthly": len(missing_month) <= 10,
+            "missingDates7": missing_week,
+            "missingDates30": missing_month,
+        }
         prior_value = sleep_hours(db, completed.isoformat(), pattern)
         sleep_override = override_value(overrides, completed, "sleep", pattern)
         value = sleep_override if sleep_override is not None else prior_value
@@ -417,11 +612,26 @@ def build_snapshot(
         if isinstance(value, tuple): continue
         weekly_values = [v for offset in range(7) if (v := sleep_hours(db, (completed - timedelta(days=offset)).isoformat(), pattern)) is not None]
         monthly_values = [v for offset in range(30) if (v := sleep_hours(db, (completed - timedelta(days=offset)).isoformat(), pattern)) is not None]
+        weekly_history = sleep_history(db, completed, 7, pattern)
+        monthly_history = sleep_history(db, completed, 30, pattern)
         if sleep_override is not None:
             weekly_values = replace_current(weekly_values, value, prior_value)
             monthly_values = replace_current(monthly_values, value, prior_value)
+            target_day = completed.isoformat()
+            weekly_history = apply_history_override(weekly_history, value, prior_value, target_day)
+            monthly_history = apply_history_override(monthly_history, value, prior_value, target_day)
         sleep_source = "iPhone Mirroring" if sleep_override is not None else "Apple Health export"
-        sleep_metrics.append({"label": label, "value": f"{int(value)}h {round((value % 1) * 60):02d}m", "context": f"{sleep_source} · {completed.strftime('%d %b %Y')}", "tone": tone, "averages": {"weekly": comparison(value, weekly_values, "hr"), "monthly": comparison(value, monthly_values, "hr")}})
+        history = {}
+        if weekly_history: history["weekly"] = weekly_history
+        if monthly_history: history["monthly"] = monthly_history
+        sleep_metrics.append({
+            "label": label,
+            "value": f"{int(value)}h {round((value % 1) * 60):02d}m",
+            "context": f"{sleep_source} · {completed.strftime('%d %b %Y')}",
+            "tone": tone,
+            "averages": {"weekly": comparison(value, weekly_values, "hr"), "monthly": comparison(value, monthly_values, "hr")},
+            "history": history,
+        })
     categories["Sleep"] = sleep_metrics
 
     ordered = []
@@ -436,8 +646,19 @@ def build_snapshot(
         partial_export_day
         and db.execute("SELECT 1 FROM records WHERE day=? LIMIT 1", (partial_export_day,)).fetchone()
     )
-    present_days = {row[0] for row in db.execute("SELECT DISTINCT day FROM records WHERE day BETWEEN ? AND ?", ((completed - timedelta(days=29)).isoformat(), completed.isoformat()))}
-    missing = [(completed - timedelta(days=offset)).isoformat() for offset in range(7) if (completed - timedelta(days=offset)).isoformat() not in present_days]
+    operational_end = target.target_date
+    present_days = {
+        row[0]
+        for row in db.execute(
+            "SELECT DISTINCT day FROM records WHERE day BETWEEN ? AND ?",
+            ((operational_end - timedelta(days=29)).isoformat(), completed.isoformat()),
+        )
+    }
+    missing = [
+        (operational_end - timedelta(days=offset)).isoformat()
+        for offset in range(7)
+        if (operational_end - timedelta(days=offset)).isoformat() not in present_days
+    ]
     category_coverage: Dict[str, dict] = {}
     for name in ("Activity", "Sleep", "Heart", "Respiratory", "Mobility", "Nutrition"):
         metric_types = sorted(CATEGORY_TYPES[name])
@@ -500,26 +721,26 @@ def build_snapshot(
         *([{"source": "iPhone Mirroring", "status": "Verified", "detail": override_meta.get("detail", f"Final operational-day values verified for {completed.isoformat()}"), "tone": "green"}] if override_meta else [{
             "source": "iPhone Mirroring",
             "status": "Unavailable",
-            "detail": f"No iPhone Mirroring overrides for operational target {completed.isoformat()}; export values stand alone.",
+            "detail": f"No iPhone Mirroring overrides for operational target {target.target_date.isoformat()}; export values stand alone.",
             "tone": "amber",
         }]),
         *([{"source": " Health Daily Note", "status": "Read", "detail": override_meta.get("noteDetail", f"Exact note contains a {completed.isoformat()} shortcut snapshot; direct Health values take precedence"), "tone": "amber"}] if override_meta else []),
         {
             "source": "Livity",
             "status": "Unavailable" if not override_meta.get("livity") else "Verified",
-            "detail": override_meta.get("livityDetail", f"Livity was not mirrored for {completed.isoformat()}; do not invent Livity values."),
+            "detail": override_meta.get("livityDetail", f"Livity was not mirrored for {target.target_date.isoformat()}; do not invent Livity values."),
             "tone": "amber" if not override_meta.get("livity") else "green",
         },
         {
             "source": "Lifesum",
             "status": "Unavailable" if not override_meta.get("lifesum") else "Verified",
-            "detail": override_meta.get("lifesumDetail", f"Lifesum was not mirrored for {completed.isoformat()}."),
+            "detail": override_meta.get("lifesumDetail", f"Lifesum was not mirrored for {target.target_date.isoformat()}."),
             "tone": "amber" if not override_meta.get("lifesum") else "green",
         },
         {
             "source": "Guava",
             "status": "Unavailable" if not override_meta.get("guava") else "Verified",
-            "detail": override_meta.get("guavaDetail", f"Guava was not mirrored for {completed.isoformat()}."),
+            "detail": override_meta.get("guavaDetail", f"Guava was not mirrored for {target.target_date.isoformat()}."),
             "tone": "amber" if not override_meta.get("guava") else "green",
         },
     ]

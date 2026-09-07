@@ -39,6 +39,7 @@ export type LiveOrder = {
   type: string;
   price: number;
   status: string;
+  statusMessage?: string;
 };
 
 export type LivePosition = {
@@ -65,7 +66,23 @@ export type LiveGtt = {
   kind?: "gtt" | "tsl";
 };
 
-/** Session/token state — independent of data freshness (`status`). */
+export type LiveAlert = {
+  id: string;
+  name: string;
+  symbol: string;
+  exchange: string;
+  direction: "above" | "below" | "other";
+  operator: string;
+  trigger: number;
+  status: string;
+  note: string;
+};
+
+/**
+ * Session/token state — independent of data freshness (`status`).
+ * `partial` is retained only for compatibility with older cached payloads;
+ * new partial snapshots report an authenticated session.
+ */
 export type KiteAuthStatus = "authenticated" | "partial" | "unauthenticated" | "expired" | "unknown" | "unavailable";
 
 export type KiteSnapshot = {
@@ -97,6 +114,7 @@ export type KiteSnapshot = {
   positions: LivePosition[];
   orders: LiveOrder[];
   gtts: LiveGtt[];
+  alerts?: LiveAlert[];
   marketCapAllocation: AllocationSlice[];
   sectorAllocation: AllocationSlice[];
   subSectorAllocation: AllocationSlice[];
@@ -120,6 +138,7 @@ export const emptySnapshot: KiteSnapshot = {
   positions: [],
   orders: [],
   gtts: [],
+  alerts: [],
   marketCapAllocation: [],
   sectorAllocation: [],
   subSectorAllocation: [],

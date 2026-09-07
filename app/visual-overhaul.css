@@ -1,0 +1,1962 @@
+/* Visual Overhaul — specialized instruments, motion, and interaction language */
+
+:root {
+  --vo-desk: #1d4ed8;
+  --vo-map: #0d9488;
+  --vo-news: #a855f7;
+  --vo-body: #f43f5e;
+  --vo-canvas: #d97706;
+  --vo-strategies: #65a30d;
+  --vo-pulse-live: #22c55e;
+  --vo-pulse-cached: #eab308;
+  --vo-pulse-fail: #ef4444;
+  --vo-orbit-1: #22c55e;
+  --vo-orbit-2: #13a08f;
+  --vo-orbit-3: #2563a6;
+  --vo-orbit-4: #8aa4bd;
+  --vo-motion: 220ms;
+  --vo-motion-slow: 480ms;
+  --vo-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes vo-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.55; }
+}
+@keyframes vo-radar-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes vo-tide {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes vo-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes vo-filament {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes vo-filament-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes vo-filament-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); opacity: 1; }
+  50% { filter: drop-shadow(0 0 2.5px currentColor); opacity: 0.9; }
+}
+@keyframes vo-shockwave {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
+  100% { box-shadow: 0 0 0 18px rgba(37, 99, 235, 0); }
+}
+@keyframes vo-magnetic {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  60% { transform: translateY(8px) scale(0.96); opacity: 0.85; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes vo-pop-press {
+  0% { transform: scale(1); box-shadow: var(--brutalist-shadow-sm); }
+  35% { transform: scale(1.03); box-shadow: var(--brutalist-shadow-lg); }
+  100% { transform: translate(1px, 1px) scale(1); box-shadow: var(--brutalist-shadow-sm); }
+}
+@keyframes vo-dawn {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+@keyframes vo-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+/* ——— Pulse constellation (source freshness) ——— */
+.source-freshness-region {
+  min-width: 0;
+}
+.source-freshness-strip.pulse-constellation {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 0 14px;
+  scrollbar-width: thin;
+  font-family: var(--font-mono);
+}
+.pulse-constellation .pulse-node {
+  position: relative;
+  min-width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px 8px 10px;
+  border: 2px solid var(--line);
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color var(--vo-motion) var(--vo-ease), transform var(--vo-motion) var(--vo-ease), box-shadow var(--vo-motion) var(--vo-ease);
+}
+.pulse-constellation .pulse-node:hover,
+.pulse-constellation .pulse-node:focus-visible {
+  border-color: #3b82f6;
+  outline: none;
+  transform: translateY(-1px);
+}
+.pulse-constellation .pulse-node.failed {
+  animation: vo-shake 360ms var(--vo-ease);
+}
+.pulse-constellation .pulse-core {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: #71717a;
+}
+.pulse-constellation .pulse-core::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid currentColor;
+  opacity: 0.35;
+  animation: vo-pulse 2.4s var(--vo-ease) infinite;
+}
+.pulse-constellation .pulse-core.live,
+.pulse-constellation .pulse-core.verified { background: var(--vo-pulse-live); color: var(--vo-pulse-live); }
+.pulse-constellation .pulse-core.partial,
+.pulse-constellation .pulse-core.cached { background: var(--vo-pulse-cached); color: var(--vo-pulse-cached); }
+.pulse-constellation .pulse-core.unavailable,
+.pulse-constellation .pulse-core.permission_required,
+.pulse-constellation .pulse-core.stale { background: var(--vo-pulse-fail); color: var(--vo-pulse-fail); }
+.pulse-constellation .pulse-node span { display: grid; gap: 1px; }
+.pulse-constellation .pulse-node b { font-size: 10px; color: var(--ink); font-weight: 900; text-transform: uppercase; }
+.pulse-constellation .pulse-node small { font-size: 10px; color: var(--muted); text-transform: capitalize; }
+.pulse-detail-lane {
+  margin: -6px 0 12px;
+  padding: 10px 12px;
+  border: 2px solid #3b82f6;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow);
+  color: #d4d4d8;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* ——— Mode dial (workspace tabs) ——— */
+.workspace-navigation.mode-dial .workspace-tabs button {
+  border-top-width: 4px;
+}
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="investment"] { border-top-color: var(--vo-desk); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
+.workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
+  background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="sectors"] {
+  background: #134e4a; border-color: var(--vo-map); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #2dd4bf;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="intelligence"] {
+  background: #3b0764; border-color: var(--vo-news); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #c084fc;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
+  background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
+  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
+}
+.workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
+  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
+}
+.workspace-tabs button .mode-silhouette {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+.workspace-tabs em.orbital-badge {
+  position: relative;
+}
+.workspace-tabs em.orbital-badge::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 1px dashed currentColor;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ——— Button / control pop-up press ——— */
+.vo-pop,
+.workspace-tabs button,
+.segmented button,
+.appearance-toggle button,
+.digest-show-more,
+.digest-show-all,
+.incognito-toggle,
+.pill,
+.kanban-board[data-visual="mission-chips"] .kanban-card {
+  transition:
+    box-shadow var(--vo-motion) var(--vo-ease),
+    transform var(--vo-motion) var(--vo-ease),
+    border-color var(--vo-motion) var(--vo-ease),
+    background-color var(--vo-motion) var(--vo-ease),
+    color var(--vo-motion) var(--vo-ease);
+}
+.vo-pop:hover,
+.vo-pop:focus-visible,
+.workspace-tabs button:hover,
+.workspace-tabs button:focus-visible,
+.segmented button:hover,
+.segmented button:focus-visible,
+.appearance-toggle button:hover,
+.appearance-toggle button:focus-visible,
+.digest-show-more:hover,
+.digest-show-more:focus-visible,
+.digest-show-all:hover,
+.digest-show-all:focus-visible,
+.incognito-toggle:hover,
+.incognito-toggle:focus-within,
+.kanban-board[data-visual="mission-chips"] .kanban-card:hover {
+  box-shadow: var(--brutalist-shadow-lg);
+}
+.vo-pop:active,
+.workspace-tabs button:active,
+.segmented button:active,
+.appearance-toggle button:active,
+.digest-show-more:active,
+.digest-show-all:active,
+.incognito-toggle:active,
+.kanban-board[data-visual="mission-chips"] .kanban-card:active {
+  animation: vo-pop-press 180ms var(--vo-ease);
+  transform: translate(1px, 1px);
+  box-shadow: var(--brutalist-shadow-sm);
+}
+
+/* ——— Drawer shutters (collapsible) ——— */
+.collapsible-section.drawer-shutter {
+  position: relative;
+}
+.collapsible-section.drawer-shutter.collapsed .collapsible-heading {
+  background: linear-gradient(90deg, var(--bg-panel) 0%, var(--bg-elevated) 100%);
+}
+.collapsible-section .shutter-preview {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: #71717a;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.collapsible-section.collapsed .shutter-preview {
+  display: inline-flex;
+}
+.collapsible-section .shutter-preview i {
+  width: 14px;
+  height: 8px;
+  border: 1px solid #52525b;
+  background: linear-gradient(90deg, #2563eb, #22c55e, #eab308);
+  opacity: 0.7;
+}
+.collapsible-content {
+  animation: vo-magnetic var(--vo-motion-slow) var(--vo-ease);
+  box-shadow: var(--brutalist-shadow);
+  transform-origin: top center;
+}
+
+/* ——— Mission chips (Kanban) ——— */
+.kanban-board.mission-chips .kanban-card,
+.kanban-board[data-visual="mission-chips"] .kanban-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--vo-motion) var(--vo-ease), box-shadow var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
+}
+.kanban-board.mission-chips .kanban-card:hover,
+.kanban-board[data-visual="mission-chips"] .kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--brutalist-shadow-lg);
+}
+.kanban-board.mission-chips .kanban-card.completing,
+.kanban-board[data-visual="mission-chips"] .kanban-card.completing {
+  animation: vo-magnetic 320ms var(--vo-ease);
+}
+/* Full action cards: lane accent + shared radar-sweep beam (To Do blue, Monitor amber).
+   Completed compact rows keep a static green accent only — no sweep animation. */
+.kanban-board.mission-chips .kanban-lane.today .kanban-card,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.today .kanban-card {
+  border-left: 4px solid #60a5fa;
+}
+.kanban-board.mission-chips .kanban-lane.monitor .kanban-card,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.monitor .kanban-card {
+  border-left: 4px solid #eab308;
+}
+.kanban-board.mission-chips .kanban-lane.today .kanban-card::before,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.today .kanban-card::before,
+.kanban-board.mission-chips .kanban-lane.monitor .kanban-card::before,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.monitor .kanban-card::before {
+  content: "";
+  position: absolute;
+  inset: -40% auto -40% -40%;
+  width: 80%;
+  animation: vo-radar-sweep 4.5s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.kanban-board.mission-chips .kanban-lane.today .kanban-card::before,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.today .kanban-card::before {
+  background: conic-gradient(from 0deg, transparent 0 75%, rgba(96, 165, 250, 0.18) 75% 100%);
+}
+.kanban-board.mission-chips .kanban-lane.monitor .kanban-card::before,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.monitor .kanban-card::before {
+  background: conic-gradient(from 0deg, transparent 0 75%, rgba(234, 179, 8, 0.18) 75% 100%);
+}
+.kanban-board.mission-chips .kanban-card > *,
+.kanban-board[data-visual="mission-chips"] .kanban-card > * {
+  position: relative;
+  z-index: 1;
+}
+.kanban-board.mission-chips .kanban-card.completed,
+.kanban-board[data-visual="mission-chips"] .kanban-card.completed {
+  opacity: 1;
+  border-left-color: #22c55e;
+  color: var(--ink);
+}
+.kanban-board.mission-chips .kanban-lane.done .kanban-card,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.done .kanban-card {
+  border-left: 4px solid #22c55e;
+}
+.kanban-board.mission-chips .kanban-lane.done .kanban-card::before,
+.kanban-board[data-visual="mission-chips"] .kanban-lane.done .kanban-card::before,
+.kanban-board.mission-chips .kanban-card.completed::before,
+.kanban-board[data-visual="mission-chips"] .kanban-card.completed::before {
+  content: none;
+  animation: none;
+}
+
+/* ——— Instrument cluster (I-2 KPIs) ——— */
+.instrument-cluster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.instrument-gauge {
+  position: relative;
+  min-height: 148px;
+  padding: 12px 14px 14px;
+  border: 2px solid #27272a;
+  border-top: 4px solid #2563eb;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.instrument-gauge.warning { border-top-color: #eab308; }
+.instrument-gauge.danger { border-top-color: #ef4444; }
+.instrument-gauge.positive { border-top-color: #22c55e; }
+.instrument-gauge .gauge-ring {
+  position: relative;
+  width: 88px;
+  height: 88px;
+}
+.instrument-gauge .gauge-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.instrument-gauge .gauge-ring circle.track {
+  fill: none;
+  stroke: #27272a;
+  stroke-width: 8;
+}
+.instrument-gauge .gauge-ring circle.value {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 8;
+  stroke-linecap: butt;
+  transition: stroke-dashoffset var(--vo-motion-slow) var(--vo-ease);
+}
+.instrument-gauge.warning .gauge-ring circle.value { stroke: #eab308; }
+.instrument-gauge.danger .gauge-ring circle.value { stroke: #ef4444; }
+.instrument-gauge.positive .gauge-ring circle.value { stroke: #22c55e; }
+.instrument-gauge .gauge-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.instrument-gauge .gauge-center b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+.instrument-gauge > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.instrument-gauge > small {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.instrument-gauge .redline {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 5px;
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+/* ——— Orbital allocation planet ——— */
+.nested-chart-panel.orbital-planet,
+.orbital-planet .nested-chart-panel {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(37, 99, 235, 0.12), transparent 42%),
+    #0a0a0a;
+}
+.nested-chart-panel.orbital-planet .nested-center,
+.orbital-planet .nested-chart-panel .nested-center {
+  width: 136px;
+  padding: 8px;
+  border: 1px dashed #3b82f6;
+  background: rgba(5, 5, 5, 0.72);
+}
+.nested-chart-panel.orbital-planet .ring-key i,
+.orbital-planet .nested-chart-panel .ring-key i {
+  border-radius: 0 !important;
+}
+.orbital-planet::before {
+  content: "Orbital allocation planet · dock a holding via the gravity well or holdings sheet";
+  display: block;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin: 0 0 4px;
+  color: #93c5fd;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* ——— Gravity well map ——— */
+.portfolio-map-panel.gravity-well .portfolio-map {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.55), transparent 55%),
+    #050505;
+}
+.portfolio-map-panel.gravity-well .portfolio-map-tile {
+  transition: filter var(--vo-motion) var(--vo-ease), opacity var(--vo-motion) var(--vo-ease), transform var(--vo-motion) var(--vo-ease);
+}
+.portfolio-map-panel.gravity-well .portfolio-map-tile.selected {
+  outline: 2px solid #fff;
+  z-index: 2;
+  transform: scale(1.02);
+}
+.portfolio-map-panel.gravity-well .portfolio-map-tile.dimmed {
+  filter: saturate(0.25) brightness(0.55);
+  opacity: 0.55;
+}
+.portfolio-map-panel.gravity-well .portfolio-map-heading h3::after {
+  content: " · gravity well";
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: lowercase;
+}
+
+/* ——— Spectrum sheet holdings ——— */
+.portfolio-activity.spectrum-sheet .holdings-matrix td {
+  transition: background var(--vo-motion) var(--vo-ease);
+}
+.portfolio-activity.spectrum-sheet .holdings-matrix td.heat-gain { background: rgba(34, 197, 94, 0.12); }
+.portfolio-activity.spectrum-sheet .holdings-matrix td.heat-loss { background: rgba(239, 68, 68, 0.14); }
+.portfolio-activity.spectrum-sheet .holdings-matrix th.stock-flag {
+  border-bottom: 3px solid #3b82f6;
+}
+
+/* ——— Scenario weather globe ——— */
+.macro-workbench.scenario-weather {
+  position: relative;
+}
+.macro-workbench.scenario-weather .macro-event-tabs button {
+  border-top: 3px solid transparent;
+  transition: border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease);
+}
+.macro-workbench.scenario-weather .macro-event-tabs button.active {
+  border-top-color: #60a5fa;
+  background: #0f172a;
+}
+.macro-workbench.scenario-weather .scenario-body {
+  position: relative;
+  overflow: hidden;
+}
+.macro-workbench.scenario-weather .scenario-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 40%, rgba(255, 255, 255, 0.04) 50%, transparent 60%);
+  pointer-events: none;
+}
+.macro-workbench.scenario-weather .scenario-body.green { box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35); }
+.macro-workbench.scenario-weather .scenario-body.amber { box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.35); }
+.macro-workbench.scenario-weather .scenario-body.red { box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.4); }
+.macro-regime-card .macro-ai-evidence {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.macro-regime-card .macro-ai-evidence > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.macro-regime-card .macro-ai-evidence > header svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--blue);
+}
+.macro-regime-card .macro-ai-evidence > header div {
+  display: grid;
+  gap: 1px;
+}
+.macro-regime-card .macro-ai-evidence > header b {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.macro-regime-card .macro-ai-evidence > header span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.macro-regime-card .macro-ai-evidence ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.macro-regime-card .macro-ai-evidence li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.macro-regime-card .macro-ai-evidence li.outcome-positive {
+  background: rgba(34, 197, 94, 0.30);
+  border-color: rgba(34, 197, 94, 0.55);
+}
+.macro-regime-card .macro-ai-evidence li.outcome-negative {
+  background: rgba(239, 68, 68, 0.30);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+.macro-regime-card .macro-ai-evidence li.outcome-neutral {
+  background: rgba(217, 160, 28, 0.30);
+  border-color: rgba(217, 160, 28, 0.58);
+}
+.macro-regime-card .macro-ai-evidence .macro-ai-bullet {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+.macro-regime-card .macro-ai-evidence li > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.macro-regime-card .macro-ai-evidence li small {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.macro-regime-card .macro-ai-evidence li p,
+.macro-regime-card .macro-ai-evidence .macro-ai-empty {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.macro-regime-card .macro-ai-evidence .macro-ai-empty {
+  padding: 8px 9px;
+  border: 1px solid rgba(217, 160, 28, 0.58);
+  border-radius: 5px;
+  background: rgba(217, 160, 28, 0.30);
+}
+.weather-altitude {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #71717a;
+}
+.weather-altitude span {
+  padding: 3px 7px;
+  border: 1px solid #3f3f46;
+}
+.weather-altitude span.active {
+  border-color: #3b82f6;
+  color: #93c5fd;
+  background: #172554;
+}
+
+/* ——— Tide clock (FII/DII) ——— */
+.flows-regime-panel.tide-clock .flows-donut-wrap {
+  position: relative;
+}
+.flows-regime-panel.tide-clock .flows-donut-center {
+  animation: vo-tide 2.8s var(--vo-ease) infinite;
+}
+.flows-regime-panel.tide-clock .flows-donut-center::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 52%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #60a5fa, transparent);
+  opacity: 0.7;
+}
+
+/* ——— Exposure spine ——— */
+.exposure-spine-panel .recharts-bar-rectangle {
+  transition: opacity var(--vo-motion) var(--vo-ease);
+}
+.exposure-spine-panel:hover .recharts-bar-rectangle {
+  opacity: 0.85;
+}
+.exposure-spine-panel .panel-title h3::after {
+  content: " · exposure spine";
+  color: #71717a;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ——— Threat flower (radar) ——— */
+.risk-panel.threat-flower {
+  background:
+    radial-gradient(circle at 72% 48%, rgba(239, 68, 68, 0.08), transparent 48%),
+    #0a0a0a;
+}
+.risk-panel.threat-flower .risk-radar-layout {
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: stretch;
+  min-height: 0;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .axis-risk-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  align-content: start;
+}
+.risk-panel.threat-flower.holdings-stack .risk-radar-layout {
+  grid-template-columns: 1fr;
+  gap: 14px;
+  align-items: stretch;
+  min-height: 0;
+}
+.risk-panel.threat-flower.holdings-stack {
+  display: flex;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-radar-workbench,
+.risk-panel.threat-flower.holdings-stack .holdings-risk-stack {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  align-content: start;
+}
+/* Axis recommended list: compact hex strip above full-width radar */
+.risk-panel.threat-flower:not(.holdings-stack) .risk-selector {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 5px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  align-content: flex-start;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  margin-inline: 0;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-selector button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 78px;
+  min-height: 38px;
+  border-radius: 0 !important;
+  clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);
+  padding: 9px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+.risk-panel.threat-flower:not(.holdings-stack) > .panel-title {
+  margin-bottom: 8px;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-radar-chart-col {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-chart {
+  min-height: 620px;
+  margin: 0;
+  padding: 0;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-scale {
+  margin-top: 4px;
+  padding-top: 8px;
+}
+/* Portfolio holdings: full-width name chips → radar → deep-dive. */
+.risk-panel.threat-flower.holdings-stack .risk-radar-visual-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-selector,
+.risk-panel.threat-flower.holdings-stack .risk-selector-names {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  margin-bottom: 0;
+  padding: 2px 0 4px;
+  align-content: flex-start;
+  justify-content: flex-start;
+}
+.risk-panel.threat-flower.holdings-stack .risk-selector button,
+.risk-panel.threat-flower.holdings-stack .risk-selector-names button {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  min-height: 40px;
+  border-radius: 6px !important;
+  clip-path: none;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.25;
+  white-space: normal;
+}
+.risk-panel.threat-flower .risk-chart {
+  min-height: 560px;
+  flex: 1 1 auto;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-radar-chart-col {
+  min-height: 620px;
+}
+.risk-panel.threat-flower:not(.holdings-stack) .risk-chart {
+  min-height: 620px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-chart {
+  min-height: 480px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-radar-chart-col {
+  width: 100%;
+  min-width: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 12px;
+  min-height: 24px;
+  color: #d9e0e7;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key i {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.risk-panel.threat-flower.holdings-stack .risk-series-key i.average {
+  background: #8f98a2;
+}
+.risk-panel.threat-flower.holdings-stack .risk-explanation {
+  min-width: 0;
+  width: 100%;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.risk-panel.threat-flower.holdings-stack .risk-axis-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dl {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 10px 16px;
+  margin: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence div {
+  min-width: 0;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dt {
+  color: #8fb9e2;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence dd {
+  margin: 3px 0 0;
+  color: #d9e0e7;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.risk-panel.threat-flower.holdings-stack .risk-evidence a {
+  color: #72aaff;
+  font-weight: 800;
+}
+.risk-panel.threat-flower.holdings-stack .risk-overview-list li,
+.risk-panel.threat-flower.holdings-stack .risk-axis-list li,
+.risk-panel.threat-flower.holdings-stack .risk-axis-list p {
+  font-size: 13px;
+  line-height: 1.45;
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-series-key,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence dd {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence dt,
+html[data-appearance="sepia"] .risk-panel.threat-flower.holdings-stack .risk-evidence a {
+  color: var(--blue);
+}
+.risk-panel.threat-flower .panel-title h3::after {
+  content: " · threat flower";
+  color: #71717a;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .risk-panel.threat-flower .risk-radar-layout {
+    grid-template-columns: 1fr;
+  }
+  .risk-panel.threat-flower:not(.holdings-stack) .risk-selector {
+    justify-content: center;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-selector {
+    max-width: none;
+    margin-inline: 0;
+  }
+}
+@media (max-width: 520px) {
+  .risk-panel.threat-flower.holdings-stack .risk-radar-layout {
+    grid-template-columns: 1fr;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-explanation {
+    display: block;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-radar-visual-column {
+    justify-content: flex-start;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-axis-list {
+    grid-template-columns: 1fr;
+  }
+  .risk-panel.threat-flower.holdings-stack .risk-evidence dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ——— Axis call constellation + target HUD ——— */
+.axis-call-constellation,
+.analyst-matrix[data-visual="axis-call-constellation"] {
+  position: relative;
+}
+.axis-call-constellation .analyst-matrix,
+.analyst-matrix[data-visual="axis-call-constellation"] {
+  background:
+    radial-gradient(circle at 12% 20%, rgba(168, 85, 247, 0.12), transparent 30%),
+    radial-gradient(circle at 80% 60%, rgba(37, 99, 235, 0.1), transparent 28%),
+    #0a0a0a;
+}
+.axis-workbench.target-hud .axis-pick-list button.active {
+  border-color: #22c55e;
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+.axis-workbench.target-hud .axis-cmp-progress {
+  position: relative;
+  overflow: visible;
+}
+.axis-workbench.target-hud .axis-cmp-progress::after {
+  content: "approach";
+  position: absolute;
+  right: 0;
+  top: -14px;
+  color: #86efac;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+/* ——— Sector prism + shockwave ——— */
+.sector-selector.sector-prism button {
+  transition: filter var(--vo-motion) var(--vo-ease), opacity var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
+}
+.sector-selector.sector-prism button:not(.active):not([aria-pressed="true"]) {
+  filter: saturate(0.35);
+  opacity: 0.72;
+}
+.sector-impact-matrix.shockwave-board tr.shock-active td {
+  animation: vo-shockwave 700ms var(--vo-ease);
+}
+.sector-impact-matrix.shockwave-board .impact-stance {
+  position: relative;
+}
+.sector-impact-matrix.shockwave-board .seismic-bar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+  transform-origin: left center;
+}
+
+/* ——— Pulse orbs ——— */
+.pulse-orb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.pulse-orb {
+  min-height: 120px;
+  padding: 14px;
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.pulse-orb .orb-core {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #3b82f6;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.35), #0a0a0a 70%);
+  animation: vo-breathe 3.2s var(--vo-ease) infinite;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  color: #fff;
+}
+.pulse-orb .orb-satellites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+.pulse-orb .orb-satellites span {
+  padding: 2px 6px;
+  border: 1px solid #3f3f46;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: #a1a1aa;
+  text-transform: uppercase;
+}
+
+/* ——— Ladder duel ——— */
+.ladder-duel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ladder-duel .ladder {
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+}
+.ladder-duel .ladder.leaders { border-top: 4px solid #22c55e; }
+.ladder-duel .ladder.laggards { border-top: 4px solid #ef4444; }
+.ladder-duel .ladder header {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 2px solid #27272a;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.ladder-duel .ladder ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ladder-duel .ladder li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid #1f1f23;
+  transition: background var(--vo-motion) var(--vo-ease), transform var(--vo-motion) var(--vo-ease);
+}
+.ladder-duel .ladder li:hover {
+  background: #111827;
+  transform: translateX(2px);
+}
+.ladder-duel .ladder li b {
+  font-family: var(--font-mono);
+  color: #71717a;
+}
+.ladder-duel .ladder li strong { color: #fff; font-size: 12px; }
+.ladder-duel .ladder li em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+}
+.ladder-duel .ladder.leaders li em { color: #86efac; }
+.ladder-duel .ladder.laggards li em { color: #fca5a5; }
+
+/* ——— Evolution river + profit-pool terrain ——— */
+.lifecycle-panel.evolution-river .chart-wrap,
+.structure-panel.profit-pool-terrain .chart-wrap {
+  background:
+    linear-gradient(180deg, rgba(13, 148, 136, 0.08), transparent 40%),
+    #0a0a0a;
+}
+.lifecycle-panel.evolution-river .panel-title h3::after {
+  content: " · evolution river";
+  color: #71717a;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.structure-panel.profit-pool-terrain .panel-title h3::after {
+  content: " · profit-pool terrain";
+  color: #71717a;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ——— MECE loom ——— */
+.mece-loom {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.mece-loom .loom-thread {
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  min-width: 0;
+}
+.mece-loom .loom-thread header {
+  padding: 10px 12px;
+  border-bottom: 2px solid #27272a;
+  border-top: 3px solid #0d9488;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.mece-loom .loom-bead {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #1f1f23;
+  background: transparent;
+  color: #d4d4d8;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.mece-loom .loom-bead:hover,
+.mece-loom .loom-bead:focus-visible,
+.mece-loom .loom-bead.expanded {
+  background: #111827;
+  color: #fff;
+  outline: none;
+}
+
+/* ——— Index race tape + decision hex + dials ——— */
+.benchmark-panel.index-race-tape .chart-wrap {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), transparent 30%, rgba(34, 197, 94, 0.06));
+}
+.decision-hex-shield .risk-chart,
+.decision-lab-panel.decision-hex-shield {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(168, 85, 247, 0.1), transparent 50%),
+    #0a0a0a;
+}
+.trigger-dials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.trigger-dial {
+  padding: 12px;
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  text-align: center;
+}
+.trigger-dial .dial-face {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 8px;
+}
+.trigger-dial .dial-face svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.trigger-dial .dial-face circle.track { fill: none; stroke: #27272a; stroke-width: 8; }
+.trigger-dial .dial-face circle.value { fill: none; stroke: #3b82f6; stroke-width: 8; }
+.trigger-dial .dial-face .trigger-tick {
+  position: absolute;
+  width: 2px;
+  height: 10px;
+  background: #ef4444;
+  left: 50%;
+  top: 4px;
+  transform-origin: 50% 38px;
+}
+.trigger-dial b { display: block; color: #fff; font-family: var(--font-mono); font-size: 12px; }
+.trigger-dial small { color: #a1a1aa; font-size: 10px; font-family: var(--font-mono); }
+.band-accordion {
+  display: grid;
+  gap: 8px;
+}
+.band-accordion button {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.band-accordion .band-width {
+  height: 10px;
+  background: var(--bg-app);
+  border: 1px solid var(--line);
+}
+.band-accordion .band-width i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #eab308);
+}
+.band-accordion .band-detail {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ——— Briefing rail + waveform dossiers ——— */
+.digest-panel.briefing-rail .digest-item {
+  position: relative;
+  border-left: 3px solid var(--line);
+  opacity: 1;
+  transition: border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease);
+}
+.digest-panel.briefing-rail .digest-item.sentiment-positive { border-left-color: var(--green); }
+.digest-panel.briefing-rail .digest-item.sentiment-negative { border-left-color: var(--red); }
+.digest-panel.briefing-rail .digest-item.sentiment-neutral { border-left-color: var(--amber); }
+.digest-panel.briefing-rail .digest-item:hover {
+  background: var(--bg-hover);
+}
+.digest-panel.briefing-rail .evidence-chip {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 5px 8px;
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 1;
+  transition: border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease), color var(--vo-motion) var(--vo-ease);
+}
+.digest-panel.briefing-rail .evidence-chip:not(.focused) {
+  opacity: 1;
+}
+.digest-panel.briefing-rail .evidence-chip.focused {
+  border-color: var(--blue);
+  opacity: 1;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--blue) 16%, var(--bg-panel));
+}
+.digest-panel-podcasts.waveform-dossiers details {
+  border: 2px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+}
+.digest-panel-podcasts.waveform-dossiers .waveform-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+  margin: 6px 0;
+}
+.digest-panel-podcasts.waveform-dossiers .waveform-strip i {
+  width: 3px;
+  background: #a855f7;
+  opacity: 0.85;
+}
+.digest-panel-podcasts.waveform-dossiers .chapter-marker {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, #a855f7 55%, var(--line));
+  color: var(--ink);
+  background: color-mix(in srgb, #a855f7 12%, var(--bg-panel));
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+/* ——— Earnings observatory ——— */
+.earnings-month-calendar.earnings-observatory {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(99, 102, 241, 0.16), transparent 35%),
+    radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.1), transparent 30%),
+    #050505;
+}
+.earnings-month-calendar.earnings-observatory .earnings-month-cell {
+  transition: transform var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease), background var(--vo-motion) var(--vo-ease);
+}
+.earnings-month-calendar.earnings-observatory .earnings-month-cell:not(.empty):hover,
+.earnings-month-calendar.earnings-observatory .earnings-month-cell.selected {
+  transform: scale(1.03);
+  border-color: #a855f7;
+  background: #111827;
+  z-index: 1;
+}
+.earnings-month-calendar.earnings-observatory .earnings-holding-star {
+  color: #fde047;
+}
+.earnings-result-telemetry td.sealed {
+  position: relative;
+  color: transparent;
+}
+.earnings-result-telemetry td.sealed::after {
+  content: "sealed";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #71717a;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  background: repeating-linear-gradient(-45deg, #0a0a0a, #0a0a0a 4px, #18181b 4px, #18181b 8px);
+}
+.earnings-result-telemetry td.pending-lock {
+  animation: vo-pulse 1.8s var(--vo-ease) infinite;
+  color: #fde68a;
+}
+.schedule-evidence {
+  opacity: 0.72;
+  border-style: dashed !important;
+}
+
+/* ——— Agenda ribbon + triptych (M-4 full-width stack) ——— */
+.intelligence-feed-stack.agenda-ribbon,
+.topic-feed.agenda-ribbon {
+  gap: 12px;
+  width: 100%;
+}
+.intelligence-feed-stack.triptych-command .topic-feed-completed,
+.topic-feed.triptych-command .topic-feed-completed {
+  background: rgba(72, 160, 120, 0.28) !important;
+  filter: saturate(0.7);
+}
+.intelligence-feed-stack.triptych-command .topic-feed-scheduled,
+.topic-feed.triptych-command .topic-feed-scheduled {
+  border-left: 4px solid #eab308 !important;
+}
+.intelligence-feed-stack.triptych-command .topic-feed-work,
+.topic-feed.triptych-command .topic-feed-work {
+  border-left: 4px solid #2563eb !important;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+}
+
+/* ——— Health: morning light, crystals, coach, quadrant stage ——— */
+.health-optimism-panel.morning-light {
+  background: linear-gradient(120deg, #422006, #0a0a0a 40%, #172554 90%);
+  background-size: 200% 200%;
+  animation: vo-dawn 12s ease infinite alternate;
+}
+.health-insight-crystal {
+  border: 2px solid #27272a;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 50%), #0a0a0a;
+  box-shadow: var(--brutalist-shadow-sm);
+  clip-path: polygon(4% 0, 100% 0, 100% 92%, 96% 100%, 0 100%, 0 8%);
+}
+.health-coach-lane {
+  display: grid;
+  gap: 8px;
+}
+.health-coach-lane .coach-item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.health-coach-lane .coach-item i {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  background: #3b82f6;
+}
+.health-coach-lane .coach-item.green i { background: #22c55e; }
+.health-coach-lane .coach-item.amber i { background: #eab308; }
+.health-coach-lane .coach-item.red i { background: #ef4444; }
+.health-coach-lane .coach-item.blue i { background: #3b82f6; }
+.health-guardrail-slab {
+  padding: 14px;
+  border: 2px dashed #71717a;
+  background: rgba(24, 24, 27, 0.85);
+  backdrop-filter: blur(6px);
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.health-direction-grid.quadrant-vitals-stage {
+  gap: 0;
+}
+.health-direction-grid.quadrant-vitals-stage .health-direction-row {
+  position: relative;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile {
+  position: relative;
+  overflow: visible;
+  transition: transform var(--vo-motion) var(--vo-ease), box-shadow var(--vo-motion) var(--vo-ease);
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile:hover,
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile:focus-within {
+  transform: translateY(-2px);
+  box-shadow: var(--brutalist-shadow);
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 6px 0 4px;
+  touch-action: none;
+  cursor: crosshair;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-line,
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-trace {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-trace {
+  stroke-width: 3.2;
+  opacity: 0.18;
+  animation: vo-filament-draw 820ms var(--vo-ease) both;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-line {
+  stroke-width: 1.7;
+  animation:
+    vo-filament-draw 820ms var(--vo-ease) both,
+    vo-filament-glow 2.8s ease-in-out 820ms infinite;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-guide {
+  stroke: currentColor;
+  stroke-width: 0.6;
+  stroke-dasharray: 1.2 1.2;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot {
+  fill: #0a0a0a;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label {
+  position: absolute;
+  top: -2px;
+  z-index: 3;
+  display: grid;
+  gap: 1px;
+  min-width: 72px;
+  max-width: 140px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 55%, #27272a);
+  background: rgba(9, 9, 11, 0.96);
+  color: #f4f4f5;
+  font-style: normal;
+  font-family: var(--font-mono);
+  line-height: 1.2;
+  pointer-events: none;
+  transform: translateX(-50%);
+  box-shadow: var(--brutalist-shadow-sm);
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label b {
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 800;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label span {
+  color: #a1a1aa;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament:empty {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-line,
+  .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-trace {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
+.health-missing-socket {
+  border: 2px dashed #52525b;
+  padding: 12px;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.health-missing-ribbon {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 2px solid #7f1d1d;
+  background: #450a0a;
+  color: #fecaca;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.health-organ-portals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.health-organ-portal {
+  min-height: 140px;
+  padding: 14px;
+  border: 2px solid #27272a;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: transform var(--vo-motion) var(--vo-ease), border-color var(--vo-motion) var(--vo-ease);
+}
+.health-organ-portal:hover,
+.health-organ-portal:focus-visible {
+  transform: scale(1.02);
+  border-color: #f43f5e;
+  outline: none;
+}
+.health-organ-portal .portal-core {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed #3f3f46;
+  background: radial-gradient(circle, rgba(244, 63, 94, 0.12), transparent 70%);
+}
+.health-organ-portal .portal-core b {
+  display: block;
+  color: #fff;
+  font-size: 18px;
+  font-family: var(--font-mono);
+}
+.nutrition-lab-tray {
+  border: 2px solid #14532d;
+  padding: 8px;
+  background: rgba(2, 44, 34, 0.35);
+}
+
+/* ——— Focus spotlight utility ——— */
+.focus-spotlight-host.is-focused .focus-spotlight-item:not(.is-active) {
+  opacity: 0.42;
+  filter: saturate(0.5);
+}
+.focus-spotlight-host .focus-spotlight-item {
+  transition: opacity var(--vo-motion) var(--vo-ease), filter var(--vo-motion) var(--vo-ease);
+}
+
+/* ——— Explain-on-dwell ——— */
+.explain-dwell {
+  position: relative;
+}
+.explain-dwell .explain-pop {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 2px solid #3b82f6;
+  background: var(--bg-panel);
+  box-shadow: var(--brutalist-shadow-sm);
+  color: #d4d4d8;
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .ladder-duel,
+  .mece-loom,
+  .health-organ-portals {
+    grid-template-columns: 1fr;
+  }
+  .mece-loom {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Sepia: paperize visual-overhaul dark islands (Black/Dark unchanged) */
+html[data-appearance="sepia"] .nested-chart-panel.orbital-planet,
+html[data-appearance="sepia"] .orbital-planet .nested-chart-panel {
+  background:
+    radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--blue) 10%, transparent), transparent 42%),
+    var(--bg-panel) !important;
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .nested-chart-panel.orbital-planet .nested-center,
+html[data-appearance="sepia"] .orbital-planet .nested-chart-panel .nested-center {
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+}
+html[data-appearance="sepia"] .orbital-planet::before {
+  color: color-mix(in srgb, var(--blue) 55%, var(--ink));
+}
+html[data-appearance="sepia"] .portfolio-map-panel.gravity-well .portfolio-map {
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ink) 6%, transparent), transparent 55%),
+    var(--bg-app) !important;
+}
+html[data-appearance="sepia"] .portfolio-map-panel.gravity-well .portfolio-map-heading h3::after,
+html[data-appearance="sepia"] .exposure-spine-panel .panel-title h3::after,
+html[data-appearance="sepia"] .risk-panel.threat-flower .panel-title h3::after,
+html[data-appearance="sepia"] .lifecycle-panel.evolution-river .panel-title h3::after,
+html[data-appearance="sepia"] .structure-panel.profit-pool-terrain .panel-title h3::after {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .macro-workbench.scenario-weather .macro-event-tabs button.active {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+}
+html[data-appearance="sepia"] .weather-altitude { color: var(--muted); }
+html[data-appearance="sepia"] .weather-altitude span {
+  border-color: var(--line);
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .weather-altitude span.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-elevated));
+}
+html[data-appearance="sepia"] .risk-panel.threat-flower {
+  background:
+    radial-gradient(circle at 72% 48%, color-mix(in srgb, var(--red) 8%, transparent), transparent 48%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .axis-call-constellation .analyst-matrix,
+html[data-appearance="sepia"] .analyst-matrix[data-visual="axis-call-constellation"] {
+  background:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, #a855f7 10%, transparent), transparent 30%),
+    radial-gradient(circle at 80% 60%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 28%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .axis-workbench.target-hud .axis-cmp-progress::after {
+  color: color-mix(in srgb, var(--green) 45%, var(--ink));
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li {
+  border-bottom-color: var(--line);
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li:hover {
+  background: var(--bg-hover);
+}
+html[data-appearance="sepia"] .ladder-duel .ladder li b { color: var(--muted); }
+html[data-appearance="sepia"] .ladder-duel .ladder li strong { color: var(--ink); }
+html[data-appearance="sepia"] .lifecycle-panel.evolution-river .chart-wrap,
+html[data-appearance="sepia"] .structure-panel.profit-pool-terrain .chart-wrap {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #0d9488 10%, transparent), transparent 40%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .mece-loom .loom-thread { border-color: var(--line); }
+html[data-appearance="sepia"] .mece-loom .loom-thread header { border-color: var(--line); color: var(--ink); }
+html[data-appearance="sepia"] .mece-loom .loom-bead {
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+html[data-appearance="sepia"] .mece-loom .loom-bead:hover,
+html[data-appearance="sepia"] .mece-loom .loom-bead:focus-visible,
+html[data-appearance="sepia"] .mece-loom .loom-bead.expanded {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .decision-hex-shield .risk-chart,
+html[data-appearance="sepia"] .decision-lab-panel.decision-hex-shield {
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, #a855f7 8%, transparent), transparent 50%),
+    var(--bg-panel) !important;
+}
+html[data-appearance="sepia"] .trigger-dial {
+  background: var(--bg-panel);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: var(--brutalist-shadow-sm);
+}
+html[data-appearance="sepia"] .trigger-dial b,
+html[data-appearance="sepia"] .trigger-dial small {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .trigger-dial .dial-face circle.track {
+  stroke: var(--line);
+}
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory {
+  background:
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, #6366f1 12%, transparent), transparent 35%),
+    radial-gradient(circle at 80% 70%, color-mix(in srgb, #a855f7 8%, transparent), transparent 30%),
+    var(--bg-app) !important;
+}
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory .earnings-month-cell:not(.empty):hover,
+html[data-appearance="sepia"] .earnings-month-calendar.earnings-observatory .earnings-month-cell.selected {
+  background: var(--bg-hover);
+}
+html[data-appearance="sepia"] .earnings-result-telemetry td.sealed::after {
+  color: var(--muted);
+  background: repeating-linear-gradient(-45deg, var(--bg-panel), var(--bg-panel) 4px, var(--bg-elevated) 4px, var(--bg-elevated) 8px);
+}
+html[data-appearance="sepia"] .earnings-result-telemetry td.pending-lock {
+  color: color-mix(in srgb, var(--amber) 45%, var(--ink));
+}
+html[data-appearance="sepia"] .health-optimism-panel.morning-light {
+  background: linear-gradient(120deg, var(--amber-bg), var(--bg-panel) 40%, color-mix(in srgb, var(--blue) 12%, var(--bg-panel)) 90%);
+  animation: none;
+}
+html[data-appearance="sepia"] .health-insight-crystal {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ink) 4%, transparent), transparent 50%), var(--bg-panel);
+  border-color: var(--line);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-dot {
+  fill: var(--bg-panel);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .health-direction-grid.quadrant-vitals-stage .health-kpi-tile.biometric-capsule .spark-filament-label span {
+  color: var(--muted);
+}
+html[data-appearance="sepia"] .health-missing-ribbon {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+  color: color-mix(in srgb, var(--red) 50%, var(--ink));
+}
+html[data-appearance="sepia"] .health-organ-portal .portal-core b { color: var(--ink); }
+html[data-appearance="sepia"] .nutrition-lab-tray {
+  background: color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+}
+html[data-appearance="sepia"] .explain-dwell .explain-pop {
+  color: var(--ink);
+}
+html[data-appearance="sepia"] .instrument-gauge .redline {
+  color: color-mix(in srgb, var(--red) 50%, var(--ink));
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+}
+
+/* Hardcoded dark-theme grays → black on paper surfaces */
+html[data-appearance="sepia"] .shutter-preview,
+html[data-appearance="sepia"] .pulse-orb .orb-satellites span,
+html[data-appearance="sepia"] .pulse-detail-lane,
+html[data-appearance="sepia"] .health-guardrail-slab,
+html[data-appearance="sepia"] .explain-dwell .explain-pop {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .health-guardrail-slab {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+}
+html[data-appearance="sepia"] .pulse-orb .orb-satellites span {
+  border-color: var(--line);
+}
+
+/* Sepia contrast enforcement
+ *
+ * globals.css intentionally paperizes the dashboard in Sepia, but a handful of
+ * component-level dark-theme rules still win on leaf text (most visibly the
+ * S-2 sector-prism labels). Keep this final layer theme-scoped and distinguish
+ * paper text from the few controls that deliberately retain dark chrome.
+ */
+html[data-appearance="sepia"] {
+  --sepia-positive-ink: #075b32;
+  --sepia-warning-ink: #704600;
+  --sepia-negative-ink: #8f1d2c;
+  --sepia-blue-ink: #174b9a;
+}
+
+/* Paper cards, tabs, tables, feeds and visualisation labels use dark ink. */
+html[data-appearance="sepia"] .sector-selector.sector-prism button,
+html[data-appearance="sepia"] .sector-selector.sector-prism button span,
+html[data-appearance="sepia"] .sector-selector.sector-prism button small,
+html[data-appearance="sepia"] .pulse-orb,
+html[data-appearance="sepia"] .pulse-orb span,
+html[data-appearance="sepia"] .pulse-orb small,
+html[data-appearance="sepia"] .pulse-orb p,
+html[data-appearance="sepia"] .ladder-duel .ladder li,
+html[data-appearance="sepia"] .mece-loom .loom-thread,
+html[data-appearance="sepia"] .mece-loom .loom-thread header,
+html[data-appearance="sepia"] .mece-loom .loom-bead,
+html[data-appearance="sepia"] .health-organ-portal,
+html[data-appearance="sepia"] .health-organ-portal small,
+html[data-appearance="sepia"] .health-organ-portal span,
+html[data-appearance="sepia"] .health-organ-portal b,
+html[data-appearance="sepia"] .health-organ-portal strong {
+  color: var(--ink) !important;
+}
+
+/* Semantic meaning remains color-coded, using sepia-safe dark variants. */
+html[data-appearance="sepia"] .positive,
+html[data-appearance="sepia"] .good,
+html[data-appearance="sepia"] .pill.green,
+html[data-appearance="sepia"] .sector-news-source.live,
+html[data-appearance="sepia"] .status-panel div b.live,
+html[data-appearance="sepia"] .flows-donut-center.positive b {
+  color: var(--sepia-positive-ink) !important;
+}
+html[data-appearance="sepia"] .warning,
+html[data-appearance="sepia"] .amber-text,
+html[data-appearance="sepia"] .moderate,
+html[data-appearance="sepia"] .pill.amber,
+html[data-appearance="sepia"] .sector-news-source.unavailable,
+html[data-appearance="sepia"] .status-panel div b.snapshot,
+html[data-appearance="sepia"] .status-panel div b.partial,
+html[data-appearance="sepia"] .status-panel div b.auth_required,
+html[data-appearance="sepia"] .flows-donut-center.neutral b {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .negative,
+html[data-appearance="sepia"] .bad,
+html[data-appearance="sepia"] .pill.red,
+html[data-appearance="sepia"] .status-panel div b.unavailable,
+html[data-appearance="sepia"] .flows-donut-center.negative b {
+  color: var(--sepia-negative-ink) !important;
+}
+html[data-appearance="sepia"] .pill.blue {
+  color: var(--sepia-blue-ink) !important;
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-panel));
+}
+
+/* Matrix signals are text glyphs, so their dark variants must meet text
+   contrast instead of relying on the brighter chart-mark palette. */
+html[data-appearance="sepia"] .signal.tailwind { color: var(--sepia-positive-ink) !important; }
+html[data-appearance="sepia"] .signal.two-way { color: var(--sepia-warning-ink) !important; }
+html[data-appearance="sepia"] .signal.headwind { color: var(--sepia-negative-ink) !important; }
+html[data-appearance="sepia"] .signal.na { color: var(--ink) !important; }
+
+/* Colored badges on light paper need dark ink; dark control chrome keeps its
+   cream foreground. */
+html[data-appearance="sepia"] .sector-lead-score em { color: var(--ink) !important; }
+html[data-appearance="sepia"] .section-heading > .shutter-preview,
+html[data-appearance="sepia"] .section-heading > .shutter-preview em,
+html[data-appearance="sepia"] .appearance-toggle button.active,
+html[data-appearance="sepia"] .incognito-toggle,
+html[data-appearance="sepia"] .incognito-toggle small,
+html[data-appearance="sepia"] .collapse-button,
+html[data-appearance="sepia"] .workspace-tabs button.active,
+html[data-appearance="sepia"] .workspace-tabs button.active small,
+html[data-appearance="sepia"] .workspace-tabs button.active em {
+  color: var(--btn-fg) !important;
+}
+
+/* Cream tiles keep unique workspace top accents + active frames. */
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="investment"] { border-top-color: var(--vo-desk); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="sectors"] { border-top-color: var(--vo-map); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="intelligence"] { border-top-color: var(--vo-news); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="health"] { border-top-color: var(--vo-body); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="builder"] { border-top-color: var(--vo-canvas); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button[data-mode="strategies"] { border-top-color: var(--vo-strategies); }
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="investment"] {
+  background: #172554; border-color: var(--vo-desk); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #60a5fa;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="sectors"] {
+  background: #134e4a; border-color: var(--vo-map); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #2dd4bf;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="intelligence"] {
+  background: #3b0764; border-color: var(--vo-news); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #c084fc;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="health"] {
+  background: #4c0519; border-color: var(--vo-body); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fb7185;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="builder"] {
+  background: #451a03; border-color: var(--vo-canvas); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #fbbf24;
+}
+html[data-appearance="sepia"] .workspace-navigation.mode-dial .workspace-tabs button.active[data-mode="strategies"] {
+  background: #1a2e05; border-color: var(--vo-strategies); box-shadow: var(--brutalist-shadow), inset 0 0 0 1px #a3e635;
+}
+
+/* Investment visualisation legends and macro evidence are paper surfaces. */
+html[data-appearance="sepia"] .portfolio-map-legend,
+html[data-appearance="sepia"] .portfolio-map-legend span,
+html[data-appearance="sepia"] .scenario-body b,
+html[data-appearance="sepia"] .scenario-body .scenario-range,
+html[data-appearance="sepia"] .scenario-body p,
+html[data-appearance="sepia"] .scenario-body small,
+html[data-appearance="sepia"] .scenario-copy span,
+html[data-appearance="sepia"] .macro-no-evidence b,
+html[data-appearance="sepia"] .macro-no-evidence p,
+html[data-appearance="sepia"] .macro-dial-chips b,
+html[data-appearance="sepia"] .macro-dial-chips span,
+html[data-appearance="sepia"] .macro-dial-chips small,
+html[data-appearance="sepia"] .framework-interpretation > p,
+html[data-appearance="sepia"] .framework-interpretation > small,
+html[data-appearance="sepia"] .framework-pressure-list span,
+html[data-appearance="sepia"] .framework-pressure-list b {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button:not(.active) small {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .macro-event-tabs button.active small {
+  color: var(--btn-fg) !important;
+}
+
+/* S-2 linked chart narratives and legends must not retain dark-theme grays. */
+html[data-appearance="sepia"] .bubble-axis-legend em,
+html[data-appearance="sepia"] .linked-insight h4,
+html[data-appearance="sepia"] .linked-insight b,
+html[data-appearance="sepia"] .linked-insight span,
+html[data-appearance="sepia"] .linked-insight p,
+html[data-appearance="sepia"] .linked-insight-note {
+  color: var(--ink) !important;
+}
+html[data-appearance="sepia"] .linked-insight-scroll > div {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+}
+
+/* Market Intelligence evidence and calendar glyphs use dark semantic ink. */
+html[data-appearance="sepia"] .podcast-summary-unavailable,
+html[data-appearance="sepia"] .earnings-holding-star {
+  color: var(--sepia-warning-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-month-cell.today .earnings-month-daynum {
+  color: var(--sepia-blue-ink) !important;
+}
+html[data-appearance="sepia"] .earnings-day-summary-item h5,
+html[data-appearance="sepia"] .earnings-day-summary-item h5 small {
+  color: var(--ink) !important;
+}
+
+/* Recharts and custom SVG text inherit the sepia chart tokens. Slice labels
+   remain light because they sit directly on dark/coloured arcs. */
+html[data-appearance="sepia"] .recharts-cartesian-axis-tick-value,
+html[data-appearance="sepia"] .recharts-label,
+html[data-appearance="sepia"] .recharts-legend-item-text,
+html[data-appearance="sepia"] .bubble-label,
+html[data-appearance="sepia"] .sector-total-label,
+html[data-appearance="sepia"] .exposure-total-label,
+html[data-appearance="sepia"] .spark-filament-label {
+  color: var(--chart-label) !important;
+  fill: var(--chart-label) !important;
+}

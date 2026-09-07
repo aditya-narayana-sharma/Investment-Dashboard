@@ -9,12 +9,20 @@ export type HealthMetricAverage = {
   delta?: string;
 };
 
+/** One measured daily point for a KPI sparkline — never invent missing days. */
+export type HealthMetricHistoryPoint = {
+  date: string;
+  value: number;
+};
+
 export type HealthMetric = {
   label: string;
   value: string;
   context?: string;
   tone?: HealthTone;
   averages?: Partial<Record<HealthAveragePeriod, HealthMetricAverage>>;
+  /** Chronological daily series ending on the health target date (gaps omitted). */
+  history?: Partial<Record<HealthAveragePeriod, HealthMetricHistoryPoint[]>>;
 };
 
 export const healthAsOf = "16 Jul 2026 · Apple Health verified directly through iPhone screenshots on 17 Jul at 03:10 IST";

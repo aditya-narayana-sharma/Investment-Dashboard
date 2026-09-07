@@ -1,6 +1,12 @@
-import { CircleDollarSign, HeartPulse, Layers3, Newspaper } from "lucide-react";
+import { CircleDollarSign, GitBranch, HeartPulse, Layers3, Library, Newspaper } from "lucide-react";
 import { axisResearchDigest, earningsCalendar, newsletterDigest, podcastNotes, type EarningsEvent } from "../portfolio-data";
-import { healthActions, healthCategories, healthSources, type HealthMetric } from "../health-data";
+import {
+  healthActions,
+  healthCategories,
+  healthSources,
+  type HealthAveragePeriod,
+  type HealthMetric,
+} from "../health-data";
 import { healthTargetDateKey } from "../health-date-policy";
 import type { HealthLiveSnapshot } from "../health-live-types";
 import type { ContentDigestSnapshot } from "../content-types";
@@ -8,6 +14,7 @@ import type { EarningsSnapshot } from "../earnings-live-types";
 import type { LiveHolding } from "../live-types";
 import { sectorCompanies } from "../sector-company-data";
 import { earningsEventDateKey } from "../earnings-verify";
+import { calendarSchedulingMetadata, exactEarningsCalendarItems } from "../calendar-earnings";
 import type { MacroBandKey, MacroEventKey, KanbanItem, KanbanWorkspace, WorkspaceKey, DonutLabelProps } from "./types";
 
 export const DIGEST_PAGE_SIZE = 40;
@@ -77,6 +84,7 @@ export const fallbackContent: ContentDigestSnapshot = {
     latestAxisAt: "Unavailable",
     latestNewsletterAt: "Unavailable",
     axisRecommendations: [],
+    axisTargetAchievements: [],
     macroEvidence: ["oilWar", "flows", "rates", "breadth", "earnings"].map((key) => ({ key: key as MacroEventKey, count: 0, latestTitle: "Mail unavailable", latestAt: "—", items: [] })),
   },
   sources: {
@@ -190,16 +198,17 @@ export function earningsEventMonthLabel(dateLabel: string) {
   return (match?.[1] ?? "Jul").slice(0, 3).toUpperCase();
 }
 
-function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
-  const knownSymbols = new Set(existing.map((event) => event.symbol.toLowerCase()));
-  return content.calendar.filter((item) => item.topic === "Earnings").flatMap((item) => {
+/** Convert every row from the exact Earnings calendar into pending scheduling evidence. */
+export function calendarEarningsEvents(content: ContentDigestSnapshot, existing: EarningsEvent[]): EarningsEvent[] {
+  const events: EarningsEvent[] = [];
+  for (const item of exactEarningsCalendarItems(content.calendar)) {
     const identity = resolveEarningsIdentity(item.title, existing);
-    if (knownSymbols.has(identity.symbol.toLowerCase())) return [];
-    const parsed = new Date(item.startsAt);
-    if (Number.isNaN(parsed.getTime())) return [];
-    knownSymbols.add(identity.symbol.toLowerCase());
-    const day = new Intl.DateTimeFormat("en-IN", { day: "2-digit", timeZone: "Asia/Kolkata" }).format(parsed);
-    const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(parsed);
+    const schedule = calendarSchedulingMetadata(item);
+    const dateKey = schedule.dateKey;
+    if (!dateKey) continue;
+    const dateAtNoon = new Date(`${dateKey}T12:00:00+05:30`);
+    const day = dateKey.slice(8, 10);
+    const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(dateAtNoon);
     const banking = /bank|finance|nbfc|insurance/i.test(`${identity.name} ${item.title}`);
     const technology = /tech|software|digital|infosys|tcs|wipro/i.test(`${identity.name} ${item.title}`);
     const kpiLabels = banking
@@ -207,19 +216,23 @@ function calendarEarningsEvents(content: ContentDigestSnapshot, existing: Earnin
       : technology
         ? ["Revenue / CC growth", "Operating margin", "Deal wins", "Guidance"]
         : ["Revenue", "Profit", "Operating margin", "Management guidance"];
-    return [{
+    events.push({
       date,
+      dateKey,
       day,
       symbol: identity.symbol,
       name: identity.name,
       state: "Pending · Apple Calendar",
       portfolio: false,
-      period: "Latest quarter",
-      reported: false,
+      period: schedule.period,
+      reported: schedule.reported,
       kpis: kpiLabels.map((label) => ({ label, value: "", change: "" })),
       summary: item.notes || "Calendar event imported from Apple Calendar. KPI fields remain blank until a cited company or exchange result is available.",
-    }];
-  });
+      calendarEventId: schedule.calendarEventId,
+      eventKind: schedule.eventKind,
+    });
+  }
+  return events;
 }
 
 export function canonicalEarningsSymbol(raw: string) {
@@ -231,24 +244,68 @@ export function mergeEarningsCalendarEvents(snapshot: EarningsSnapshot, content:
   const held = new Set(holdings.map((holding) => canonicalEarningsSymbol(holding.symbol)));
   const hasLiveHoldingIdentity = holdings.length > 0;
   const analysisDate = snapshot.analysisDate || currentIstDateKey();
-  const deduplicated = new Map<string, EarningsEvent>();
+  const deduplicated = new Map<string, EarningsEvent[]>();
 
   for (const event of [...baseEvents, ...calendarEarningsEvents(content, baseEvents)]) {
     const symbol = canonicalEarningsSymbol(event.symbol);
     const dateKey = earningsEventDateKey(event, analysisDate) ?? event.date;
-    const key = `${symbol}|${event.period.trim().toLowerCase()}|${dateKey}`;
-    const normalized = { ...event, symbol, portfolio: hasLiveHoldingIdentity ? held.has(symbol) : event.portfolio };
-    const previous = deduplicated.get(key);
-    if (!previous || (!previous.reported && normalized.reported) || (!previous.source && normalized.source)) {
-      deduplicated.set(key, normalized);
+    const eventKind = event.eventKind ?? "results";
+    const key = `${symbol}|${eventKind}|${dateKey}`;
+    const normalized = { ...event, symbol, eventKind, portfolio: hasLiveHoldingIdentity ? held.has(symbol) : event.portfolio };
+    const candidates = deduplicated.get(key) ?? [];
+    const period = normalized.period.trim().toLowerCase();
+    const duplicateIndex = candidates.findIndex((candidate) => {
+      const candidatePeriod = candidate.period.trim().toLowerCase();
+      return candidatePeriod === period || candidatePeriod === "latest quarter" || period === "latest quarter";
+    });
+    if (duplicateIndex < 0) {
+      deduplicated.set(key, [...candidates, normalized]);
+      continue;
     }
+    const previous = candidates[duplicateIndex]!;
+    const preferred = (!previous.reported && normalized.reported) || (!previous.source && normalized.source)
+      ? normalized
+      : previous;
+    candidates[duplicateIndex] = {
+      ...preferred,
+      dateKey: preferred.dateKey ?? normalized.dateKey ?? previous.dateKey,
+      calendarEventId: preferred.calendarEventId ?? normalized.calendarEventId ?? previous.calendarEventId,
+    };
+    deduplicated.set(key, candidates);
   }
 
-  return [...deduplicated.values()].sort((left, right) => {
+  return [...deduplicated.values()].flat().sort((left, right) => {
     const leftDate = earningsEventDateKey(left, analysisDate) ?? left.date;
     const rightDate = earningsEventDateKey(right, analysisDate) ?? right.date;
     return leftDate.localeCompare(rightDate) || left.symbol.localeCompare(right.symbol);
   });
+}
+
+export function earningsReconciliationStats(
+  snapshot: EarningsSnapshot,
+  content: ContentDigestSnapshot,
+  holdings: LiveHolding[] = [],
+  mergedEvents = mergeEarningsCalendarEvents(snapshot, content, holdings),
+) {
+  const calendarEvents = calendarEarningsEvents(content, snapshot.events.length ? snapshot.events : earningsCalendar);
+  const baseEvents = mergeEarningsCalendarEvents(snapshot, { ...content, calendar: [] }, holdings);
+  const analysisDate = snapshot.analysisDate || currentIstDateKey();
+  const baseKeys = new Set(baseEvents.map((event) => (
+    `${canonicalEarningsSymbol(event.symbol)}|${event.eventKind ?? "results"}|${earningsEventDateKey(event, analysisDate) ?? event.date}`
+  )));
+  const reconciledCalendarEvents = mergedEvents.filter((event) => event.calendarEventId);
+  const updated = reconciledCalendarEvents.filter((event) => baseKeys.has(
+    `${canonicalEarningsSymbol(event.symbol)}|${event.eventKind ?? "results"}|${earningsEventDateKey(event, analysisDate) ?? event.date}`,
+  )).length;
+  const rawCalendarRows = content.calendar.filter((item) => item.calendar.trim().toLowerCase() === "earnings").length;
+  return {
+    discovered: rawCalendarRows,
+    newlyAdded: reconciledCalendarEvents.length - updated,
+    updated,
+    deduplicated: Math.max(rawCalendarRows - calendarEvents.length, 0) + Math.max(baseEvents.length + calendarEvents.length - mergedEvents.length, 0),
+    verifiedReported: mergedEvents.filter((event) => event.reported).length,
+    pendingUpcoming: mergedEvents.filter((event) => !event.reported).length,
+  };
 }
 
 export const fallbackHealth: HealthLiveSnapshot = {
@@ -271,16 +328,168 @@ export const exposureFactors = [
   { key: "leverage", label: "Leverage / execution", group: "KPI", color: "#3fa36c" },
 ] as const;
 
-export const exposureContext: Record<string, { event: string; kpis: string }> = {
-  ICICIBANK: { event: "Oil inflation, INR, yields and FII selling", kpis: "NIM, deposits, credit costs, asset quality" },
-  ETERNAL: { event: "Fuel/logistics costs, index flows and risk-off", kpis: "Quick-commerce margin, order growth, valuation" },
-  BHARTIARTL: { event: "Tariff cycle and institutional risk appetite", kpis: "ARPU, subscriber mix, capex and leverage" },
-  AETHER: { event: "Crude feedstock, freight, FX and geopolitical supply", kpis: "Gross margin, utilisation and working capital" },
-  JSWENERGY: { event: "Rates, power demand and project commissioning", kpis: "Net debt, capacity additions and interest cost" },
-  ADANIGREEN: { event: "Rates, grid demand and renewable policy execution", kpis: "Net debt, commissioning, CUF and cash conversion" },
-  AXISBANK: { event: "Oil inflation, INR, yields and FII selling", kpis: "NIM, deposits, credit costs, asset quality" },
-  LTF: { event: "Rates, credit cycle and retail AUM growth", kpis: "NIM + fees, RoE, credit cost and disbursements" },
+export type ExposureFactorKey = (typeof exposureFactors)[number]["key"];
+export type ExposureDriverTone = "positive" | "neutral" | "negative";
+
+export type ExposureDriverBullet = {
+  key: ExposureFactorKey;
+  label: string;
+  detail: string;
+  score: number;
+  value: string;
+  tone: ExposureDriverTone;
 };
+
+type ExposureContextSpec = {
+  events: Array<{ key: "oilWar" | "fiiFlow"; label: string; detail: string }>;
+  kpis: Array<{ key: "valuation" | "liquidity" | "volatility" | "leverage"; label: string; detail: string }>;
+};
+
+/** Higher monitoring score = more pressure to watch (negative); lower = supportive. */
+export function exposureDriverTone(score: number): ExposureDriverTone {
+  if (score <= 2) return "positive";
+  if (score >= 4) return "negative";
+  return "neutral";
+}
+
+export const exposureContext: Record<string, ExposureContextSpec> = {
+  ICICIBANK: {
+    events: [
+      { key: "oilWar", label: "Oil / inflation", detail: "INR, imported inflation and yield spillover" },
+      { key: "fiiFlow", label: "FII selling", detail: "Foreign selling into liquid private banks" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM", detail: "Net interest margin vs deposit cost" },
+      { key: "liquidity", label: "Deposits", detail: "CASA mix and franchise stickiness" },
+      { key: "volatility", label: "Credit cost", detail: "Provisions and slippage risk" },
+      { key: "leverage", label: "Asset quality", detail: "GNPA / restructured book" },
+    ],
+  },
+  ETERNAL: {
+    events: [
+      { key: "oilWar", label: "Fuel / logistics", detail: "Delivery cost and discretionary demand" },
+      { key: "fiiFlow", label: "Index / risk-off", detail: "Growth multiple under foreign selling" },
+    ],
+    kpis: [
+      { key: "valuation", label: "QC margin", detail: "Quick-commerce unit economics" },
+      { key: "liquidity", label: "Order growth", detail: "Order frequency and AOV" },
+      { key: "volatility", label: "Valuation", detail: "Duration multiple vs cash burn" },
+      { key: "leverage", label: "Cash runway", detail: "Working capital and burn" },
+    ],
+  },
+  BHARTIARTL: {
+    events: [
+      { key: "oilWar", label: "Tariff cycle", detail: "ARPU resets and competitive intensity" },
+      { key: "fiiFlow", label: "Institutional appetite", detail: "Foreign ownership and index weight" },
+    ],
+    kpis: [
+      { key: "valuation", label: "ARPU", detail: "Blended ARPU trajectory" },
+      { key: "liquidity", label: "Subscribers", detail: "Postpaid mix and churn" },
+      { key: "volatility", label: "Capex", detail: "Spectrum and 5G spend cadence" },
+      { key: "leverage", label: "Net debt", detail: "Leverage vs cash conversion" },
+    ],
+  },
+  AETHER: {
+    events: [
+      { key: "oilWar", label: "Crude feedstock", detail: "Input cost and freight shock" },
+      { key: "fiiFlow", label: "FX / geopolitics", detail: "Export demand and supply-chain risk" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Gross margin", detail: "Pass-through of feedstock costs" },
+      { key: "liquidity", label: "Utilisation", detail: "Plant load and order book" },
+      { key: "volatility", label: "Working capital", detail: "Inventory and receivable days" },
+      { key: "leverage", label: "Balance sheet", detail: "Debt service under margin squeeze" },
+    ],
+  },
+  JSWENERGY: {
+    events: [
+      { key: "oilWar", label: "Rates / power demand", detail: "Discount rate and merchant tariffs" },
+      { key: "fiiFlow", label: "Project flow", detail: "Institutional risk appetite for capex" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Net debt", detail: "Project leverage vs contracted cash" },
+      { key: "liquidity", label: "Capacity adds", detail: "Commissioning and COD milestones" },
+      { key: "volatility", label: "Interest cost", detail: "Rate sensitivity of project debt" },
+      { key: "leverage", label: "Execution", detail: "Build-out vs guidance" },
+    ],
+  },
+  ADANIGREEN: {
+    events: [
+      { key: "oilWar", label: "Rates / grid demand", detail: "Funding cost and offtake policy" },
+      { key: "fiiFlow", label: "Policy execution", detail: "Renewable allocation and FII risk tone" },
+    ],
+    kpis: [
+      { key: "valuation", label: "Net debt", detail: "Project gearing vs cash conversion" },
+      { key: "liquidity", label: "Commissioning", detail: "MW COD vs guidance" },
+      { key: "volatility", label: "CUF", detail: "Plant load factor delivery" },
+      { key: "leverage", label: "Cash conversion", detail: "Collections and interest cover" },
+    ],
+  },
+  AXISBANK: {
+    events: [
+      { key: "oilWar", label: "Oil / inflation", detail: "INR, imported inflation and yield spillover" },
+      { key: "fiiFlow", label: "FII selling", detail: "Foreign selling into liquid private banks" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM", detail: "Net interest margin vs deposit cost" },
+      { key: "liquidity", label: "Deposits", detail: "CASA mix and franchise stickiness" },
+      { key: "volatility", label: "Credit cost", detail: "Provisions and slippage risk" },
+      { key: "leverage", label: "Asset quality", detail: "GNPA / restructured book" },
+    ],
+  },
+  LTF: {
+    events: [
+      { key: "oilWar", label: "Rates / credit cycle", detail: "Funding cost and retail credit demand" },
+      { key: "fiiFlow", label: "AUM growth", detail: "Retail AUM under flow / risk-off" },
+    ],
+    kpis: [
+      { key: "valuation", label: "NIM + fees", detail: "Spread and fee income mix" },
+      { key: "liquidity", label: "RoE", detail: "Return on equity vs leverage" },
+      { key: "volatility", label: "Credit cost", detail: "Stage-2/3 and write-offs" },
+      { key: "leverage", label: "Disbursements", detail: "Origination vs collection quality" },
+    ],
+  },
+};
+
+const defaultExposureContext: ExposureContextSpec = {
+  events: [
+    { key: "oilWar", label: "Oil / war", detail: "Company and macro event transmission" },
+    { key: "fiiFlow", label: "FII / flow", detail: "Institutional flow and risk appetite" },
+  ],
+  kpis: [
+    { key: "valuation", label: "Valuation", detail: "Earnings multiple and durability" },
+    { key: "liquidity", label: "Liquidity", detail: "Trading depth and balance-sheet liquidity" },
+    { key: "volatility", label: "Volatility", detail: "Price and earnings volatility" },
+    { key: "leverage", label: "Leverage", detail: "Balance-sheet and execution risk" },
+  ],
+};
+
+function toExposureBullet(
+  spec: { key: ExposureFactorKey; label: string; detail: string },
+  rawScores: Record<string, number>,
+): ExposureDriverBullet {
+  const score = Math.max(1, Math.min(5, Number(rawScores[spec.key] ?? 3)));
+  return {
+    key: spec.key,
+    label: spec.label,
+    detail: spec.detail,
+    score,
+    value: `${score.toFixed(0)}/5`,
+    tone: exposureDriverTone(score),
+  };
+}
+
+export function buildExposureDrivers(symbol: string, rawScores: Record<string, number>) {
+  const spec = exposureContext[symbol] ?? defaultExposureContext;
+  const eventBullets = spec.events.map((item) => toExposureBullet(item, rawScores));
+  const kpiBullets = spec.kpis.map((item) => toExposureBullet(item, rawScores));
+  return {
+    event: eventBullets.map((item) => item.detail).join("; "),
+    kpis: kpiBullets.map((item) => item.label).join(", "),
+    eventBullets,
+    kpiBullets,
+  };
+}
 
 export const macroEvents: Record<MacroEventKey, {
   label: string;
@@ -357,6 +566,18 @@ export const kanbanItems: Record<KanbanWorkspace, KanbanItem[]> = {
     { id: "health-sleep", title: "Resolve cross-app sleep variance", detail: "Keep Apple Health primary and retain Guava as a separate comparison.", numericAdvantage: "2-source reconciliation", strategicAdvantage: "Prevents incompatible totals being merged", lane: "monitor", tone: "amber" },
     { id: "health-diary", title: "Complete nutrition diary", detail: "Treat logged intake as incomplete until all meals and portions are entered.", numericAdvantage: "100% meal coverage target", strategicAdvantage: "Improves nutrition signal quality", lane: "monitor", tone: "red" },
   ],
+  builder: [
+    { id: "builder-validate", title: "Validate the strategy tree", detail: "Confirm Weight percents, If/Else operands and compiled StrategyGraphV2 before paper or broker preview.", numericAdvantage: "0 invalid trees", strategicAdvantage: "Blocks broken logic from leaving the canvas", lane: "today", tone: "blue" },
+    { id: "builder-asset", title: "Add Indian assets on the tree", detail: "Use Add a Block → Asset. Resolve symbols against live Kite holdings and watchlist, not a static US list.", numericAdvantage: "Holdings ∪ watchlist", strategicAdvantage: "Keeps the sleeve on real NSE instruments", lane: "today", tone: "green" },
+    { id: "builder-export", title: "Export the tree plus compiled graph", detail: "Save StrategyTreeV1 with compiled schemaVersion 2 before switching machines or sessions.", numericAdvantage: "Round-trip identical tree", strategicAdvantage: "Protects canvas work from session loss", lane: "monitor", tone: "amber" },
+    { id: "builder-else", title: "Fill or accept an empty ELSE", detail: "If/Else THEN can hold assets; empty ELSE is allowed and warned. Do not draw wires.", numericAdvantage: "THEN / ELSE wells", strategicAdvantage: "Completes the condition without a flowchart", lane: "monitor", tone: "red" },
+  ],
+  strategies: [
+    { id: "strat-review", title: "Review the nine NSE library trees", detail: "Open a card to read the full vertical tree before sending it to Algorithm Canvas.", numericAdvantage: "9 NSE ETF trees", strategicAdvantage: "Keeps research scoped to Indian-listed sleeves", lane: "today", tone: "blue" },
+    { id: "strat-stats", title: "Do not treat empty OOS tiles as live alpha", detail: "Library KPIs stay em dash until an Indian-market engine run exists. Composer US figures are not copied.", numericAdvantage: "— until ran", strategicAdvantage: "Prevents fabricated performance", lane: "today", tone: "green" },
+    { id: "strat-market", title: "Confirm every leaf is a Nifty 500 name", detail: "Sleeves use RELIANCE, TCS, HDFCBANK, INFY, ITC and other official NSE constituent names. No SPY/TQQQ/SOXL.", numericAdvantage: "NSE only", strategicAdvantage: "Keeps Stratji on Indian markets", lane: "monitor", tone: "amber" },
+    { id: "strat-open", title: "Open one tree in Algorithm Canvas", detail: "Deep-link a reconstruction into the tree editor when you want to edit. The library stays read-only.", numericAdvantage: "?view=builder&section=canvas&tree=", strategicAdvantage: "Edits stay on the canvas, not in Health or Sectors", lane: "monitor", tone: "red" },
+  ],
 };
 
 export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string; icon: typeof CircleDollarSign }> = [
@@ -364,6 +585,8 @@ export const workspaces: Array<{ key: WorkspaceKey; label: string; note: string;
   { key: "sectors", label: "Sectoral Analytics", note: "Sectors, frameworks and earnings", icon: Layers3 },
   { key: "intelligence", label: "Market Intelligence", note: "Mail, calendar and podcasts", icon: Newspaper },
   { key: "health", label: "Health & Wellness", note: "Private local wellness", icon: HeartPulse },
+  { key: "builder", label: "Algorithm Canvas", note: "Nested tree and JSON", icon: GitBranch },
+  { key: "strategies", label: "Strategies", note: "NSE strategy library", icon: Library },
 ];
 
 export function number(value: number | string | undefined) {
@@ -383,9 +606,9 @@ export function labelPoint({ cx, cy, midAngle, innerRadius, outerRadius }: Donut
 export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" | "same") {
   if (direction === "same") return "moderate";
   const higherIsGenerallyFavourable = new Set([
-    "Active energy", "Exercise minutes", "Stand", "Steps", "Walking + running", "Stairs climbed",
+    "Active energy", "Exercise minutes", "Stand", "Stand time", "Steps", "Walking + running", "Stairs climbed",
     "Time asleep", "Deep sleep", "REM sleep", "Core sleep", "Cardio recovery", "Cardio fitness",
-    "Walking speed", "Step length", "Protein", "Fibre", "Potassium",
+    "Walking speed", "Step length", "Protein", "Fibre", "Potassium", "Water", "HRV",
   ]);
   const lowerIsGenerallyFavourable = new Set([
     "Resting heart rate", "Walking asymmetry", "Double support", "Awake", "Sodium", "Sugar", "Saturated fat",
@@ -393,6 +616,110 @@ export function healthTrendTone(metric: HealthMetric, direction: "up" | "down" |
   if (higherIsGenerallyFavourable.has(metric.label)) return direction === "up" ? "good" : "bad";
   if (lowerIsGenerallyFavourable.has(metric.label)) return direction === "down" ? "good" : "bad";
   return "moderate";
+}
+
+/** Direction-row bucket for Vital Metrics — reuses healthTrendTone; unavailable when the selected average is missing. */
+export type HealthDirectionBucket = "good" | "moderate" | "bad" | "unavailable";
+
+/** Visible H-3 rows only — unavailable averages render inside Context dependent, not a fourth group. */
+export const HEALTH_DIRECTION_COLUMNS: Array<{
+  id: Exclude<HealthDirectionBucket, "unavailable">;
+  title: string;
+  shortLabel: string;
+  className: string;
+}> = [
+  { id: "good", title: "Favourable direction", shortLabel: "Favourable", className: "direction-good" },
+  { id: "moderate", title: "Context dependent", shortLabel: "Context", className: "direction-moderate" },
+  { id: "bad", title: "Unfavourable direction", shortLabel: "Unfavourable", className: "direction-bad" },
+];
+
+export function healthMetricDirectionBucket(
+  metric: HealthMetric,
+  averagePeriod: HealthAveragePeriod,
+): HealthDirectionBucket {
+  const average = metric.averages?.[averagePeriod];
+  if (!average) return "unavailable";
+  return healthTrendTone(metric, average.direction);
+}
+
+/** Stable Health category order for deterministic row packing (Body Measurements / Hearing excluded). */
+export const HEALTH_CATEGORY_ORDER = [
+  "Activity",
+  "Sleep",
+  "Heart",
+  "Respiratory",
+  "Mindfulness",
+  "Mobility",
+  "Nutrition",
+] as const;
+
+const EXCLUDED_HEALTH_CATEGORIES = new Set(["Body Measurements", "Hearing", "Body measurements", "Medications", "Medication"]);
+
+export function healthCategoryAccentClass(categoryName: string): string {
+  switch (categoryName) {
+    case "Heart":
+      return "health-cat-heart";
+    case "Activity":
+      return "health-cat-activity";
+    case "Nutrition":
+      return "health-cat-nutrition";
+    case "Respiratory":
+    case "Mindfulness":
+      return "health-cat-respiratory";
+    case "Sleep":
+      return "health-cat-sleep";
+    case "Mobility":
+      return "health-cat-mobility";
+    default:
+      return "health-cat-other";
+  }
+}
+
+export type HealthDirectionMetricEntry = {
+  categoryName: string;
+  categoryAccent: string;
+  metric: HealthMetric;
+  categoryIndex: number;
+  metricIndex: number;
+};
+
+/** Flatten enabled Health categories into direction rows with stable category→metric order. */
+export function groupHealthMetricsByDirection(
+  categories: Array<{ name: string; metrics: HealthMetric[] }>,
+  averagePeriod: HealthAveragePeriod,
+): Record<HealthDirectionBucket, HealthDirectionMetricEntry[]> {
+  const columns: Record<HealthDirectionBucket, HealthDirectionMetricEntry[]> = {
+    good: [],
+    moderate: [],
+    bad: [],
+    unavailable: [],
+  };
+  const ranked = categories
+    .filter((category) => !EXCLUDED_HEALTH_CATEGORIES.has(category.name))
+    .map((category, fallbackIndex) => {
+      const orderIndex = HEALTH_CATEGORY_ORDER.indexOf(category.name as typeof HEALTH_CATEGORY_ORDER[number]);
+      return { category, categoryIndex: orderIndex < 0 ? HEALTH_CATEGORY_ORDER.length + fallbackIndex : orderIndex };
+    })
+    .sort((left, right) => left.categoryIndex - right.categoryIndex || left.category.name.localeCompare(right.category.name));
+
+  const seen = new Set<string>();
+  for (const { category, categoryIndex } of ranked) {
+    const accent = healthCategoryAccentClass(category.name);
+    category.metrics.forEach((metric, metricIndex) => {
+      const identity = `${category.name}::${metric.label.trim().toLowerCase()}`;
+      if (seen.has(identity)) return;
+      seen.add(identity);
+      const bucket = healthMetricDirectionBucket(metric, averagePeriod);
+      columns[bucket].push({
+        categoryName: category.name,
+        categoryAccent: accent,
+        metric,
+        categoryIndex,
+        metricIndex,
+      });
+    });
+  }
+  return columns;
 }
 
 export function localDateKey(date = new Date()) {
